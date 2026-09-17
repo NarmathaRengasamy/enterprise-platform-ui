@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Enterprise Teams Calendar</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script data-purpose="tailwind-config">
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            teams: {
+              brand: '#5b5fc7',
+              brandDark: '#4f52b2',
+              brandLight: '#ebeaf9',
+              brandPill: '#e0e0f5',
+              grayBg: '#f8f9fa',
+              border: '#e5e7eb',
+              textPrimary: '#242424',
+              textSecondary: '#616161',
+              eventBg: '#e8eafb',
+              eventBorder: '#5b5fc7',
+              timeLine: '#5b5fc7'
+            }
+          },
+          fontFamily: {
+            sans: ['Segoe UI', '-apple-system', 'BlinkMacSystemFont', 'Roboto', 'Helvetica Neue', 'sans-serif']
+          },
+          fontSize: {
+            '2xs': '10px'
+          }
+        }
+      }
+    }
+  </script>
+<!-- Styles: Layout and Custom Utilities -->
+<style data-purpose="custom-layout">
+    /* Custom thin scrollbar for enterprise dense look */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #9ca3af;
+    }
+
+    /* Grid row exact heights for consistent hourly layout */
+    .time-slot-height {
+      height: 64px;
+    }
+    .half-hour-line {
+      border-top: 1px dashed #f1f3f5;
+    }
+    .hour-line {
+      border-top: 1px solid #e5e7eb;
+    }
+  </style>
+<style data-purpose="component-effects">
+    /* Subtle hover transitions */
+    .dropdown-shadow {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .canceled-stripes {
+      background: repeating-linear-gradient(
+        -45deg,
+        #f8fafc,
+        #f8fafc 6px,
+        #f1f5f9 6px,
+        #f1f5f9 12px
+      );
+    }
+  </style>
+</head>
+<body class="h-full bg-white text-teams-textPrimary font-sans antialiased overflow-hidden flex flex-col select-none">
+<!-- BEGIN: MainCalendarApplication -->
+<div class="flex h-screen w-screen overflow-hidden">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-[218px] flex-shrink-0 bg-teams-grayBg border-r border-teams-border flex flex-col h-full z-20" data-purpose="calendar-sidebar">
+<!-- App Header Title in Sidebar -->
+<div class="h-[52px] flex items-center px-4 border-b border-transparent">
+<h1 class="font-semibold text-[15px] text-[#242424] tracking-tight">Calendar</h1>
+</div>
+<!-- Mini Calendar Navigation -->
+<div class="px-3.5 py-1">
+<div class="flex items-center justify-between mb-2">
+<button class="flex items-center space-x-1 text-xs font-semibold text-gray-800 hover:text-teams-brand focus:outline-none" type="button">
+<span>September 2026</span>
+<svg class="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+</button>
+<div class="flex items-center space-x-1 text-gray-400">
+<button class="p-1 hover:text-gray-700 hover:bg-gray-200 rounded" type="button">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M5 15l7-7 7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="p-1 hover:text-gray-700 hover:bg-gray-200 rounded" type="button">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</div>
+<!-- Mini Calendar Grid Days Header -->
+<div class="grid grid-cols-7 text-center text-[11px] font-medium text-gray-500 mb-1">
+<span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+</div>
+<!-- Mini Calendar 6-week matrix -->
+<div class="grid grid-cols-7 text-center text-[11px] font-normal leading-6 gap-y-0.5 relative">
+<!-- Week 1 -->
+<span class="text-gray-400">31</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">1</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">2</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">3</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">4</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">5</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">6</span>
+<!-- Week 2 -->
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">7</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">8</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">9</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">10</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">11</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">12</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">13</span>
+<!-- Week 3 (Current Active Range) with selected row overlay & today badge -->
+<div class="absolute top-[50px] left-0 right-0 h-[24px] bg-[#ebeafc] rounded-md pointer-events-none -z-0"></div>
+<span class="z-10 text-teams-brand font-medium cursor-pointer">14</span>
+<span class="z-10 text-teams-brand font-medium cursor-pointer">15</span>
+<span class="z-10 text-teams-brand font-medium cursor-pointer">16</span>
+<span class="z-10 flex items-center justify-center font-semibold text-white cursor-pointer">
+<span class="w-5 h-5 rounded-full bg-teams-brand flex items-center justify-center shadow-xs">17</span>
+</span>
+<span class="z-10 text-teams-brand font-medium cursor-pointer">18</span>
+<span class="z-10 text-teams-brand font-medium cursor-pointer">19</span>
+<span class="z-10 text-teams-brand font-medium cursor-pointer">20</span>
+<!-- Week 4 -->
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">21</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">22</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">23</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">24</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">25</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">26</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer mt-1">27</span>
+<!-- Week 5 -->
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">28</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">29</span>
+<span class="hover:bg-gray-200 rounded-full cursor-pointer">30</span>
+<span class="text-gray-400">1</span>
+<span class="text-gray-400">2</span>
+<span class="text-gray-400">3</span>
+<span class="text-gray-400">4</span>
+</div>
+</div>
+<!-- Action Items & Calendars List -->
+<div class="mt-4 pt-3 border-t border-teams-border flex-1 px-3 space-y-3">
+<!-- Add calendar link -->
+<button class="flex items-center space-x-2 text-xs font-medium text-teams-brand hover:text-teams-brandDark w-full px-1 py-1 rounded transition-colors" type="button">
+<svg class="w-4 h-4 text-teams-brand" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM12 11v6m3-3H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Add calendar</span>
+</button>
+<!-- My Calendars Section -->
+<div class="space-y-1.5 pt-1">
+<div class="flex items-center justify-between text-xs font-semibold text-gray-700 px-1 py-0.5 cursor-pointer">
+<div class="flex items-center space-x-1.5">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>My calendars</span>
+</div>
+</div>
+<!-- Calendar checkbox item -->
+<label class="flex items-center space-x-2 px-1 py-1 rounded hover:bg-gray-200/60 cursor-pointer text-xs text-gray-700">
+<input checked="" class="w-3.5 h-3.5 text-teams-brand rounded border-gray-300 focus:ring-teams-brand" type="checkbox"/>
+<span class="font-normal text-[13px] text-gray-800">Calendar</span>
+</label>
+<!-- Show all action -->
+<button class="text-xs text-teams-brand hover:underline px-1 pt-1 block font-normal" type="button">
+            Show all
+          </button>
+</div>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContentArea -->
+<main class="flex-1 flex flex-col min-w-0 bg-white overflow-hidden">
+<!-- BEGIN: TopBar -->
+<header class="h-[52px] bg-white border-b border-teams-border flex items-center justify-between px-3 z-30 shrink-0" data-purpose="calendar-topbar">
+<!-- Left Controls: Sidebar toggle, Today, Chevrons, Date Range -->
+<div class="flex items-center space-x-2">
+<!-- Sidebar Toggle Icon -->
+<button class="p-1.5 rounded hover:bg-gray-100 text-gray-600 focus:outline-none" title="Toggle Sidebar" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 6h16M4 12h16M4 18h7" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+</button>
+<!-- Today Button -->
+<button class="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 focus:outline-none active:bg-gray-100" type="button">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Today</span>
+</button>
+<!-- Prev/Next Navigation Chevrons -->
+<div class="flex items-center space-x-0.5">
+<button class="p-1.5 rounded-full hover:bg-gray-100 text-gray-600" title="Previous week" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="p-1.5 rounded-full hover:bg-gray-100 text-gray-600" title="Next week" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<!-- Current Range Label with Popover Dropdown -->
+<div class="relative">
+<button class="flex items-center space-x-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-100 px-2 py-1 rounded" id="dateRangeBtn" type="button">
+<span>14–18 September, 2026</span>
+<svg class="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</div>
+<!-- Right Controls: View mode, Filter, Options, Meet Now, New Event -->
+<div class="flex items-center space-x-2">
+<!-- View Mode Selector Dropdown -->
+<div class="relative">
+<button class="flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 focus:outline-none" id="viewSelectorBtn" type="button">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span id="currentViewLabel">Work week</span>
+<svg class="w-3 h-3 text-gray-500 ml-0.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<!-- View Dropdown Popover -->
+<div class="hidden absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-md dropdown-shadow py-1 z-50 text-xs text-gray-700" id="viewSelectorMenu">
+<a class="flex items-center justify-between px-3 py-1.5 hover:bg-gray-100" href="#">
+<span>Day</span>
+</a>
+<a class="flex items-center justify-between px-3 py-1.5 hover:bg-gray-100 bg-gray-50 font-medium text-teams-brand" href="#">
+<span>Work week</span>
+<svg class="w-3.5 h-3.5 text-teams-brand" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg>
+</a>
+<a class="flex items-center justify-between px-3 py-1.5 hover:bg-gray-100" href="#">
+<span>Week</span>
+</a>
+<a class="flex items-center justify-between px-3 py-1.5 hover:bg-gray-100" href="#">
+<span>Month</span>
+</a>
+</div>
+</div>
+<!-- Date-Range Filter Dropdown -->
+<div class="relative">
+<button class="flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 focus:outline-none" id="filterBtn" type="button">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Filter</span>
+<svg class="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<!-- Filter Options Menu with requested items -->
+<div class="hidden absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-md dropdown-shadow py-1 z-50 text-xs text-gray-700" id="filterMenu">
+<div class="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Date Ranges</div>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center justify-between">Today</button>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center justify-between">Tomorrow</button>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 bg-gray-50 font-medium text-teams-brand flex items-center justify-between">
+<span>This week</span>
+<span class="w-1.5 h-1.5 bg-teams-brand rounded-full"></span>
+</button>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100">Next week</button>
+<div class="my-1 border-t border-gray-100"></div>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100">This month</button>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100">Next month</button>
+<div class="my-1 border-t border-gray-100"></div>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 text-teams-brand font-medium flex items-center space-x-2">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Custom date range</span>
+</button>
+</div>
+</div>
+<!-- More Options Ellipsis -->
+<button class="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded focus:outline-none" title="More options" type="button">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 24 24">
+<circle cx="5" cy="12" r="1.75"></circle>
+<circle cx="12" cy="12" r="1.75"></circle>
+<circle cx="19" cy="12" r="1.75"></circle>
+</svg>
+</button>
+<!-- Meet Now Button -->
+<div class="relative">
+<button class="flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 focus:outline-none" id="meetNowBtn" type="button">
+<svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Meet now</span>
+<svg class="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<!-- Primary "+ New" Action Button -->
+<div class="relative">
+<div class="inline-flex rounded shadow-xs">
+<button class="inline-flex items-center px-3 py-1 bg-teams-brand hover:bg-teams-brandDark text-white text-xs font-semibold rounded-l transition-colors focus:outline-none" onclick="openCreateModal()" type="button">
+<svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<span>New</span>
+</button>
+<button class="inline-flex items-center px-1.5 py-1 bg-teams-brand hover:bg-teams-brandDark border-l border-indigo-400 text-white rounded-r transition-colors focus:outline-none" id="newSplitBtn" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<!-- New Menu dropdown -->
+<div class="hidden absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-md dropdown-shadow py-1 z-50 text-xs text-gray-700" id="newMenu">
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center space-x-2" onclick="openCreateModal('New event')">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span>New event</span>
+</button>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center space-x-2" onclick="openCreateModal('New meeting')">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span>New meeting</span>
+</button>
+<button class="w-full text-left px-3 py-1.5 hover:bg-gray-100 flex items-center space-x-2" onclick="openCreateModal('New appointment')">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span>New appointment</span>
+</button>
+</div>
+</div>
+</div>
+</header>
+<!-- END: TopBar -->
+<!-- BEGIN: CalendarWorkWeekView -->
+<div class="flex-1 flex flex-col overflow-hidden">
+<!-- Header Row: 5 Days (Monday - Friday) -->
+<div class="flex border-b border-teams-border bg-white pr-[6px]" data-purpose="days-header">
+<!-- Time Gutter Spacer -->
+<div class="w-14 flex-shrink-0 border-r border-teams-border"></div>
+<!-- 5 Work Week Columns Headers -->
+<div class="flex-1 grid grid-cols-5 divide-x divide-teams-border text-center">
+<!-- Mon 14 -->
+<div class="py-2.5 px-3 flex flex-col items-start justify-center">
+<span class="text-xl font-normal text-teams-brand">14</span>
+<span class="text-xs text-teams-textSecondary">Mon</span>
+</div>
+<!-- Tue 15 -->
+<div class="py-2.5 px-3 flex flex-col items-start justify-center">
+<span class="text-xl font-normal text-teams-brand">15</span>
+<span class="text-xs text-teams-textSecondary">Tue</span>
+</div>
+<!-- Wed 16 -->
+<div class="py-2.5 px-3 flex flex-col items-start justify-center">
+<span class="text-xl font-normal text-teams-brand">16</span>
+<span class="text-xs text-teams-textSecondary">Wed</span>
+</div>
+<!-- Thu 17 (Today Highlight) -->
+<div class="py-2 px-3 flex items-center justify-between border-t-2 border-t-teams-brand bg-[#fafbff]">
+<div class="flex flex-col items-start">
+<span class="text-xl font-semibold text-teams-brand">17</span>
+<span class="text-xs font-semibold text-teams-brand">Thu</span>
+</div>
+<!-- Participant Avatars matching screenshot -->
+<div class="flex items-center -space-x-1.5">
+<div class="w-5 h-5 rounded-full bg-emerald-500 text-white text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">A</div>
+<div class="w-5 h-5 rounded-full bg-sky-500 text-white text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">N</div>
+<div class="w-5 h-5 rounded-full bg-indigo-500 text-white text-[9px] font-semibold flex items-center justify-center ring-2 ring-white">K</div>
+<div class="w-5 h-5 rounded-full bg-indigo-700 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white">+</div>
+</div>
+</div>
+<!-- Fri 18 -->
+<div class="py-2.5 px-3 flex flex-col items-start justify-center">
+<span class="text-xl font-normal text-teams-brand">18</span>
+<span class="text-xs text-teams-textSecondary">Fri</span>
+</div>
+</div>
+</div>
+<!-- Sticky Top All-Day / Recurring Banner Event Row -->
+<div class="flex border-b border-teams-border bg-white pr-[6px]" data-purpose="banner-event-row">
+<!-- Left empty gutter space -->
+<div class="w-14 flex-shrink-0 border-r border-teams-border flex items-center justify-center text-[10px] text-gray-400">
+<span class="border-t border-dotted border-gray-300 w-full"></span>
+</div>
+<!-- 5 Columns Container with Persistent Recurring Meeting -->
+<div class="flex-1 grid grid-cols-5 divide-x divide-teams-border py-1.5 bg-gray-50/20">
+<!-- Mon 14 Daily Standup -->
+<div class="px-1.5">
+<div class="cursor-pointer bg-teams-eventBg hover:bg-[#dfe2f9] text-gray-800 text-xs px-2 py-1.5 rounded flex items-center justify-between border-l-2 border-teams-eventBorder" onclick="showMeetingDetails('Daily Forward deployment engineering standup', 'Mon 14 Sept', '11:00 AM - 11:30 AM')">
+<span class="truncate font-normal text-[11px]">Daily Forward deployment engineeri...</span>
+<span class="text-gray-500 ml-1 text-xs" title="Recurring event">🔄</span>
+</div>
+</div>
+<!-- Tue 15 Daily Standup -->
+<div class="px-1.5">
+<div class="cursor-pointer bg-teams-eventBg hover:bg-[#dfe2f9] text-gray-800 text-xs px-2 py-1.5 rounded flex items-center justify-between border-l-2 border-teams-eventBorder" onclick="showMeetingDetails('Daily Forward deployment engineering standup', 'Tue 15 Sept', '11:00 AM - 11:30 AM')">
+<span class="truncate font-normal text-[11px]">Daily Forward deployment engineeri...</span>
+<span class="text-gray-500 ml-1 text-xs" title="Recurring event">🔄</span>
+</div>
+</div>
+<!-- Wed 16 Daily Standup -->
+<div class="px-1.5">
+<div class="cursor-pointer bg-teams-eventBg hover:bg-[#dfe2f9] text-gray-800 text-xs px-2 py-1.5 rounded flex items-center justify-between border-l-2 border-teams-eventBorder" onclick="showMeetingDetails('Daily Forward deployment engineering standup', 'Wed 16 Sept', '11:00 AM - 11:30 AM')">
+<span class="truncate font-normal text-[11px]">Daily Forward deployment engineeri...</span>
+<span class="text-gray-500 ml-1 text-xs" title="Recurring event">🔄</span>
+</div>
+</div>
+<!-- Thu 17 Daily Standup (Active Day with Join button!) -->
+<div class="px-1.5 relative">
+<div class="cursor-pointer bg-teams-eventBg hover:bg-[#dfe2f9] text-gray-800 text-xs px-2 py-1 rounded flex items-center justify-between border-l-3 border-teams-brand shadow-2xs" onclick="showMeetingDetails('Daily Forward deployment engineering standup', 'Thu 17 Sept (Today)', '11:00 AM - 11:30 AM')">
+<span class="truncate font-medium text-[11px] mr-1">Daily Forward deployment engi...</span>
+<button class="px-2 py-0.5 bg-white hover:bg-gray-100 text-teams-brand font-semibold text-[11px] rounded border border-gray-300 shadow-2xs shrink-0" onclick="event.stopPropagation(); alert('Joining Microsoft Teams meeting...');" type="button">
+                  Join
+                </button>
+</div>
+</div>
+<!-- Fri 18 Daily Standup -->
+<div class="px-1.5">
+<div class="cursor-pointer bg-teams-eventBg hover:bg-[#dfe2f9] text-gray-800 text-xs px-2 py-1.5 rounded flex items-center justify-between border-l-2 border-teams-eventBorder" onclick="showMeetingDetails('Daily Forward deployment engineering standup', 'Fri 18 Sept', '11:00 AM - 11:30 AM')">
+<span class="truncate font-normal text-[11px]">Daily Forward deployment engineeri...</span>
+<span class="text-gray-500 ml-1 text-xs" title="Recurring event">🔄</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Scrollable Hourly Grid Area -->
+<div class="flex-1 overflow-y-auto relative bg-white" data-purpose="calendar-scroll-grid">
+<div class="flex min-h-[640px] relative">
+<!-- Hourly Time Gutter -->
+<div class="w-14 flex-shrink-0 border-r border-teams-border bg-white text-[11px] text-gray-500 font-normal text-right select-none">
+<div class="time-slot-height relative pr-2 pt-0.5">11</div>
+<div class="time-slot-height relative pr-2 pt-0.5">12</div>
+<div class="time-slot-height relative pr-2 pt-0.5">13</div>
+<div class="time-slot-height relative pr-2 pt-0.5">14</div>
+<div class="time-slot-height relative pr-2 pt-0.5">15</div>
+<div class="time-slot-height relative pr-2 pt-0.5">16</div>
+<div class="time-slot-height relative pr-2 pt-0.5">17</div>
+<div class="time-slot-height relative pr-2 pt-0.5">18</div>
+<div class="time-slot-height relative pr-2 pt-0.5">19</div>
+</div>
+<!-- 5 Columns Day Grid -->
+<div class="flex-1 grid grid-cols-5 divide-x divide-teams-border relative">
+<!-- Current Time Red/Purple Indicator (approx 11:00 am on Thu 17) -->
+<div class="absolute left-0 right-0 top-[2px] pointer-events-none z-20 flex items-center">
+<div class="w-3/5"></div> <!-- offset for Mon, Tue, Wed -->
+<div class="w-1/5 relative">
+<div class="absolute -left-1.5 -top-[5px] w-2.5 h-2.5 rounded-full bg-teams-timeLine ring-2 ring-white"></div>
+<div class="h-[1.5px] bg-teams-timeLine w-full"></div>
+</div>
+</div>
+<!-- Column 1: Monday 14 -->
+<div class="relative flex flex-col" data-day="Mon">
+<!-- 11:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '11:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+<!-- 12:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '12:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+<!-- 13:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '13:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+<!-- 14:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '14:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+<!-- 15:00 - Canceled: Version Update Event matching screenshot -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '15:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<!-- Event Box -->
+<div class="absolute top-1 inset-x-1 bottom-1 canceled-stripes border border-gray-300 rounded p-1.5 flex flex-col justify-between cursor-pointer hover:border-gray-400" onclick="event.stopPropagation(); showMeetingDetails('Canceled: Version Update', 'Mon 14 Sept', '3:00 PM - 3:45 PM')">
+<div class="text-[11px] text-gray-500 line-through truncate font-medium">
+                      Canceled: Version Update
+                    </div>
+<div class="flex items-center justify-end text-gray-400 text-xs">
+<span title="Recurring event">🔄</span>
+</div>
+</div>
+</div>
+<!-- 16:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '16:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+<!-- 17:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '17:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+<!-- 18:00 - Auth Catchup Call Giridharan S -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '18:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<!-- Event Box -->
+<div class="absolute top-1 inset-x-1 bottom-1 bg-teams-eventBg border-l-2 border-teams-brand rounded p-1.5 flex items-center justify-between cursor-pointer hover:bg-[#dfe2f9]" onclick="event.stopPropagation(); showMeetingDetails('Auth Catchup Call Giridharan S', 'Mon 14 Sept', '6:00 PM - 6:30 PM')">
+<span class="text-[11px] text-gray-800 truncate">Auth Catchup Call Giridharan S</span>
+<span class="text-gray-500 text-xs ml-1">🔄</span>
+</div>
+</div>
+<!-- 19:00 -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Mon 14', '19:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+</div>
+</div>
+<!-- Column 2: Tuesday 15 -->
+<div class="relative flex flex-col" data-day="Tue">
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '11:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '12:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '13:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '14:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '15:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '16:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '17:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<!-- 18:00 - Auth Catchup Call -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '18:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<div class="absolute top-1 inset-x-1 bottom-1 bg-teams-eventBg border-l-2 border-teams-brand rounded p-1.5 flex items-center justify-between cursor-pointer hover:bg-[#dfe2f9]" onclick="event.stopPropagation(); showMeetingDetails('Auth Catchup Call Giridharan S', 'Tue 15 Sept', '6:00 PM - 6:30 PM')">
+<span class="text-[11px] text-gray-800 truncate">Auth Catchup Call Giridharan S</span>
+<span class="text-gray-500 text-xs ml-1">🔄</span>
+</div>
+</div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Tue 15', '19:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+</div>
+<!-- Column 3: Wednesday 16 -->
+<div class="relative flex flex-col" data-day="Wed">
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '11:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '12:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '13:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '14:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '15:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '16:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<!-- 17:00 - Discussion With <HR> Kavitha Sri Bhuva... -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '17:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<!-- Event box matching screenshot -->
+<div class="absolute top-1 inset-x-1 bottom-1 bg-white border border-gray-200 border-l-2 border-l-teams-brand rounded p-1.5 flex items-center justify-between cursor-pointer hover:bg-gray-50 shadow-2xs" onclick="event.stopPropagation(); showMeetingDetails('Discussion With &lt;HR&gt; Kavitha Sri Bhuvanesh', 'Wed 16 Sept', '5:00 PM - 5:30 PM')">
+<span class="text-[11px] text-gray-800 truncate font-normal">Discussion With &lt;HR&gt; Kavitha Sri Bhuva...</span>
+</div>
+</div>
+<!-- 18:00 - Auth Catchup Call -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '18:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<div class="absolute top-1 inset-x-1 bottom-1 bg-teams-eventBg border-l-2 border-teams-brand rounded p-1.5 flex items-center justify-between cursor-pointer hover:bg-[#dfe2f9]" onclick="event.stopPropagation(); showMeetingDetails('Auth Catchup Call Giridharan S', 'Wed 16 Sept', '6:00 PM - 6:30 PM')">
+<span class="text-[11px] text-gray-800 truncate">Auth Catchup Call Giridharan S</span>
+<span class="text-gray-500 text-xs ml-1">🔄</span>
+</div>
+</div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Wed 16', '19:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+</div>
+<!-- Column 4: Thursday 17 (Today) -->
+<div class="relative flex flex-col bg-[#fafbff]/40" data-day="Thu">
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '11:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '12:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '13:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '14:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '15:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '16:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '17:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<!-- 18:00 - Auth Catchup Call Microsoft Teams -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '18:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<!-- Event Box -->
+<div class="absolute top-1 inset-x-1 bottom-1 bg-teams-eventBg border-l-3 border-teams-brand rounded p-1.5 flex items-center justify-between cursor-pointer hover:bg-[#dfe2f9]" onclick="event.stopPropagation(); showMeetingDetails('Auth Catchup Call Microsoft Teams', 'Thu 17 Sept', '6:00 PM - 6:30 PM')">
+<span class="text-[11px] text-gray-800 truncate font-normal">Auth Catchup Call <span class="text-gray-500">Microsoft Teams</span></span>
+<span class="text-gray-500 text-xs ml-1">🔄</span>
+</div>
+</div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-100/50" onclick="cellClicked('Thu 17', '19:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+</div>
+<!-- Column 5: Friday 18 -->
+<div class="relative flex flex-col" data-day="Fri">
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '11:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '12:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '13:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '14:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '15:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '16:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '17:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+<!-- 18:00 - Auth Catchup Call Microsoft Teams -->
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '18:00')">
+<div class="half-hour-line absolute inset-x-0 top-1/2"></div>
+<div class="absolute top-1 inset-x-1 bottom-1 bg-teams-eventBg border-l-2 border-teams-brand rounded p-1.5 flex items-center justify-between cursor-pointer hover:bg-[#dfe2f9]" onclick="event.stopPropagation(); showMeetingDetails('Auth Catchup Call Microsoft Teams', 'Fri 18 Sept', '6:00 PM - 6:30 PM')">
+<span class="text-[11px] text-gray-800 truncate font-normal">Auth Catchup Call <span class="text-gray-500">Microsoft Teams</span></span>
+<span class="text-gray-500 text-xs ml-1">🔄</span>
+</div>
+</div>
+<div class="time-slot-height hour-line relative group hover:bg-gray-50/60" onclick="cellClicked('Fri 18', '19:00')"><div class="half-hour-line absolute inset-x-0 top-1/2"></div></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- END: CalendarWorkWeekView -->
+</main>
+<!-- END: MainContentArea -->
+</div>
+<!-- END: MainCalendarApplication -->
+<!-- BEGIN: ModalsAndPopovers -->
+<!-- Event Details Popover Modal -->
+<div class="fixed inset-0 bg-black/30 backdrop-blur-[1px] hidden z-50 flex items-center justify-center p-4" id="eventDetailsModal" onclick="closeMeetingDetails()">
+<div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden border border-gray-200" onclick="event.stopPropagation()">
+<!-- Modal Header Color Bar -->
+<div class="h-2 bg-teams-brand w-full"></div>
+<div class="p-5">
+<div class="flex items-start justify-between">
+<div class="space-y-1">
+<h3 class="text-base font-semibold text-gray-900 leading-snug" id="modalEventTitle">Meeting Title</h3>
+<p class="text-xs text-gray-500" id="modalEventTime">Thursday, Sep 17 · 11:00 AM – 11:30 AM</p>
+</div>
+<button class="text-gray-400 hover:text-gray-600 p-1 rounded-full" onclick="closeMeetingDetails()">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<div class="mt-4 space-y-3 text-xs text-gray-600">
+<div class="flex items-center space-x-2.5">
+<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="text-gray-700 font-medium">Microsoft Teams Meeting</span>
+</div>
+<div class="flex items-center space-x-2.5">
+<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span>Occurs every weekday Monday to Friday</span>
+</div>
+<div class="flex items-start space-x-2.5">
+<svg class="w-4 h-4 text-gray-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<div>
+<span class="font-medium text-gray-700">Organizer:</span> Vishwa Kiran &lt;vkiran@enterprise.com&gt;
+            </div>
+</div>
+</div>
+<div class="mt-6 flex items-center justify-end space-x-2 border-t border-gray-100 pt-4">
+<button class="px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 hover:bg-gray-50" onclick="closeMeetingDetails()" type="button">Dismiss</button>
+<button class="px-3.5 py-1.5 bg-teams-brand text-white text-xs font-semibold rounded hover:bg-teams-brandDark flex items-center space-x-1.5" onclick="alert('Launching Teams call...'); closeMeetingDetails();" type="button">
+<svg class="w-3.5 h-3.5" fill="currentColor" viewbox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"></path></svg>
+<span>Join Meeting</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Create New Event Quick Modal -->
+<div class="fixed inset-0 bg-black/30 backdrop-blur-[1px] hidden z-50 flex items-center justify-center p-4" id="createEventModal">
+<div class="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden border border-gray-200">
+<div class="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+<h3 class="text-sm font-semibold text-gray-900" id="createModalTitle">New meeting</h3>
+<button class="text-gray-400 hover:text-gray-600" onclick="closeCreateModal()">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<form class="p-5 space-y-4" onsubmit="handleEventSubmit(event)">
+<div>
+<label class="block text-xs font-semibold text-gray-700 mb-1">Title</label>
+<input class="w-full text-xs rounded border-gray-300 focus:border-teams-brand focus:ring-teams-brand" id="formEventTitle" placeholder="Add a title" required="" type="text"/>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div>
+<label class="block text-xs font-semibold text-gray-700 mb-1">Date</label>
+<input class="w-full text-xs rounded border-gray-300 focus:border-teams-brand focus:ring-teams-brand" id="formEventDate" type="text" value="Thu 17 September, 2026"/>
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-700 mb-1">Time</label>
+<input class="w-full text-xs rounded border-gray-300 focus:border-teams-brand focus:ring-teams-brand" id="formEventTime" type="text" value="11:00 AM - 12:00 PM"/>
+</div>
+</div>
+<div>
+<label class="block text-xs font-semibold text-gray-700 mb-1">Required attendees</label>
+<input class="w-full text-xs rounded border-gray-300 focus:border-teams-brand focus:ring-teams-brand" placeholder="Add required attendees" type="text"/>
+</div>
+<div class="flex items-center space-x-2 pt-1">
+<input checked="" class="w-3.5 h-3.5 text-teams-brand rounded border-gray-300 focus:ring-teams-brand" id="teamsMeetingCheck" type="checkbox"/>
+<label class="text-xs text-gray-700" for="teamsMeetingCheck">Online Teams meeting</label>
+</div>
+<div class="pt-3 border-t border-gray-200 flex items-center justify-end space-x-2">
+<button class="px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 hover:bg-gray-50" onclick="closeCreateModal()" type="button">Cancel</button>
+<button class="px-4 py-1.5 bg-teams-brand text-white text-xs font-semibold rounded hover:bg-teams-brandDark" type="submit">Save</button>
+</div>
+</form>
+</div>
+</div>
+<!-- END: ModalsAndPopovers -->
+<!-- BEGIN: InteractiveScripts -->
+<script data-purpose="dropdown-and-modal-interactions">
+    // Helper to toggle visibility
+    function toggleMenu(elementId) {
+      const el = document.getElementById(elementId);
+      if (el.classList.contains('hidden')) {
+        closeAllMenus();
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+
+    function closeAllMenus() {
+      ['viewSelectorMenu', 'filterMenu', 'newMenu'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+    }
+
+    // Bind Dropdown Toggles
+    document.getElementById('viewSelectorBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMenu('viewSelectorMenu');
+    });
+
+    document.getElementById('filterBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMenu('filterMenu');
+    });
+
+    document.getElementById('newSplitBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMenu('newMenu');
+    });
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+      closeAllMenus();
+    });
+
+    // Meeting Details Modal handling
+    function showMeetingDetails(title, day, time) {
+      document.getElementById('modalEventTitle').textContent = title;
+      document.getElementById('modalEventTime').textContent = `${day} · ${time}`;
+      document.getElementById('eventDetailsModal').classList.remove('hidden');
+    }
+
+    function closeMeetingDetails() {
+      document.getElementById('eventDetailsModal').classList.add('hidden');
+    }
+
+    // Quick Creation Modal Handling
+    function openCreateModal(modalType = 'New meeting', dayStr = 'Thu 17 September, 2026', timeStr = '11:00 AM - 12:00 PM') {
+      closeAllMenus();
+      document.getElementById('createModalTitle').textContent = modalType;
+      document.getElementById('formEventDate').value = dayStr;
+      document.getElementById('formEventTime').value = timeStr;
+      document.getElementById('formEventTitle').value = '';
+      document.getElementById('createEventModal').classList.remove('hidden');
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createEventModal').classList.add('hidden');
+    }
+
+    function handleEventSubmit(e) {
+      e.preventDefault();
+      const title = document.getElementById('formEventTitle').value;
+      alert(`Event "${title}" successfully scheduled on Microsoft Teams calendar.`);
+      closeCreateModal();
+    }
+
+    // Trigger create from empty grid cell click
+    function cellClicked(dayLabel, hourStr) {
+      openCreateModal('New meeting', `${dayLabel} September, 2026`, `${hourStr}:00 - ${parseInt(hourStr)+1}:00`);
+    }
+  </script>
+<!-- END: InteractiveScripts -->
+</body></html>

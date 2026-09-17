@@ -1,0 +1,575 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-primary-fixed":"#00174b","surface-container-low":"#eff4ff","primary-fixed":"#dbe1ff","secondary-fixed-dim":"#4edea3","primary":"#004ac6","surface-bright":"#f8f9ff","secondary-fixed":"#6ffbbe","on-error-container":"#93000a","inverse-on-surface":"#eaf1ff","surface-container-high":"#dce9ff","on-background":"#0b1c30","on-tertiary":"#ffffff","secondary-container":"#6cf8bb","inverse-surface":"#213145","on-secondary-container":"#00714d","background":"#f8f9ff","error-container":"#ffdad6","on-surface":"#0b1c30","tertiary":"#784b00","primary-fixed-dim":"#b4c5ff","on-primary-fixed-variant":"#003ea8","tertiary-fixed-dim":"#ffb95f","on-secondary":"#ffffff","secondary":"#006c49","surface-container-lowest":"#ffffff","tertiary-container":"#996100","outline":"#737686","on-primary-container":"#eeefff","error":"#ba1a1a","surface":"#f8f9ff","surface-tint":"#0053db","on-surface-variant":"#434655","on-secondary-fixed":"#002113","surface-container":"#e5eeff","surface-dim":"#cbdbf5","outline-variant":"#c3c6d7","on-tertiary-fixed":"#2a1700","on-error":"#ffffff","tertiary-fixed":"#ffddb8","on-secondary-fixed-variant":"#005236","surface-variant":"#d3e4fe","on-tertiary-container":"#ffeedd","surface-container-highest":"#d3e4fe","on-tertiary-fixed-variant":"#653e00","inverse-primary":"#b4c5ff","on-primary":"#ffffff","primary-container":"#2563eb"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{gutter:"1.5rem",margin:"2rem","space-lg":"1.5rem","space-2xs":"0.25rem","space-2xl":"3rem","space-sm":"0.75rem","space-xs":"0.5rem","space-md":"1rem","space-xl":"2rem","margin-mobile":"1rem","gutter-mobile":"1rem"},fontFamily:{"title-sm":["Plus Jakarta Sans"],"display-lg-mobile":["Plus Jakarta Sans"],"headline-md":["Plus Jakarta Sans"],caption:["Plus Jakarta Sans"],"body-lg":["Plus Jakarta Sans"],"title-md":["Plus Jakarta Sans"],"label-sm":["Plus Jakarta Sans"],"body-md":["Plus Jakarta Sans"],"display-lg":["Plus Jakarta Sans"],"headline-lg":["Plus Jakarta Sans"],"label-md":["Plus Jakarta Sans"],"headline-sm":["Plus Jakarta Sans"],"body-sm":["Plus Jakarta Sans"]},fontSize:{"title-sm":["14px",{lineHeight:"20px",fontWeight:"600"}],"display-lg-mobile":["26px",{lineHeight:"34px",fontWeight:"700"}],"headline-md":["20px",{lineHeight:"28px",fontWeight:"600"}],caption:["11px",{lineHeight:"14px",fontWeight:"500"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"title-md":["16px",{lineHeight:"24px",fontWeight:"600"}],"label-sm":["12px",{lineHeight:"16px",fontWeight:"500"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"display-lg":["32px",{lineHeight:"40px",fontWeight:"700"}],"headline-lg":["24px",{lineHeight:"32px",fontWeight:"600"}],"label-md":["13px",{lineHeight:"16px",fontWeight:"500"}],"headline-sm":["18px",{lineHeight:"26px",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-space-md flex items-center gap-space-xs"><img alt="OmniFlow Brand Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1X6laTvUO_KReS_ys7J_3XzBFxMdAtL5ltgmz-gGvdsjSlAvIkWBgqPzyCU-nIHRo93RBGd86E-5qL6GbsT3gfC12_6sDaZrznf6cpAq0Y58_cAcmnLVTbTfTB-SAMVhXIcsRq92FXX492qZWmNqa588PqkDkULZ84GhtxS_mpMknpA6FzxrPtTrAds8v1G10snh7akx_6vFPk8rNhxTEXQ5M1DDi6B-1nQ6NVT8xV6nsUL8ui-GM_5yA"><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">OmniFlow</span></div><div class="px-space-md pt-space-xs"><span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider px-space-xs block mb-space-2xs">Main Menu</span><nav class="flex flex-col gap-1" data-active-classes="bg-primary-container text-on-primary-container font-semibold shadow-sm"><a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span class="">Dashboard</span></a><a href="#" class="flex items-center justify-between px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="conversations"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-lg">chat</span><span class="">Conversations</span></div><span class="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary">6</span></a><div class="flex flex-col"><div class="flex items-center justify-between px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high cursor-pointer"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-lg">inventory_2</span><span class="">Products</span></div><span class="material-symbols-outlined text-base">expand_more</span></div><div class="pl-6 flex flex-col gap-1 mt-0.5"><a href="#" class="px-space-xs py-1 rounded-lg font-caption text-caption text-on-surface-variant hover:text-primary">All Products</a><a href="#" class="px-space-xs py-1 rounded-lg font-caption text-caption text-on-surface-variant hover:text-primary">Categories</a></div></div><a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="appointments"><span class="material-symbols-outlined text-lg">event</span><span class="">Appointments / Calendly</span></a><a aria-current="page" href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm bg-primary-container text-on-primary-container font-semibold shadow-sm transition-all" data-path="developer"><span class="material-symbols-outlined text-lg">terminal</span><span class="">Developer</span></a><a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="knowledge-base"><span class="material-symbols-outlined text-lg">menu_book</span><span class="">Knowledge Base</span></a><a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="teams"><span class="material-symbols-outlined text-lg">groups</span><span class="">Teams</span></a></nav></div></div><div class="p-space-md flex flex-col gap-1"><span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider px-space-xs block mb-space-2xs">Support</span><a class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="settings" href="#"><span class="material-symbols-outlined text-lg">settings</span><span class="">Settings</span></a><a class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="help" href="#"><span class="material-symbols-outlined text-lg">help</span><span class="">Help &amp; Support</span></a></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-lg"><div class="flex items-center flex-1 max-w-md"><div class="w-full flex items-center bg-surface-container-low px-space-sm py-space-2xs rounded-xl text-on-surface-variant shadow-inner"><span class="material-symbols-outlined text-lg mr-space-xs text-outline">search</span><span class="font-body-sm text-body-sm text-outline flex-1">Search anything...</span><span class="font-caption text-caption bg-surface-container-highest text-on-surface-variant px-1.5 py-0.5 rounded-lg font-semibold">⌘K</span></div></div><div class="flex items-center gap-space-md"><button aria-label="Notifications" class="relative p-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" type="button"><span class="material-symbols-outlined text-xl">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error ring-2 ring-surface-container-lowest"></span></button><div class="flex items-center gap-space-xs cursor-pointer rounded-xl p-space-2xs hover:bg-surface-container-low transition-colors"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7jQpTkjpDlbNPq9nvpZ3iYgDgqEpa_xjaklhelrSv8ESxKdHzFUjn6SIEWNvT7MP_GjI2NuRZaeSR33hrF6iCSxXxxKNl0yHrljwhxyuVacMJ0q8gdR1xWlhySKWFnDTR0hXshrG_slCgqC2KQBX5pDJlnfRdcy_PYFBQbXzD-yR11XH0ZM-DeeYOGeqnlg69hYiPZ53JgD3o-ztOX15QCsdVjUZqes4XraFkw-z1Scr_lRWhmyUt"><div class="flex flex-col text-left"><span class="font-title-sm text-title-sm text-on-surface leading-tight">Sarah Jenkins</span><span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Admin</span></div><span class="material-symbols-outlined text-base text-outline ml-1">expand_more</span></div></div></header><main class="w-full pt-16 px-space-lg pb-space-xl bg-background flex-1"><div class="flex flex-col w-full">
+<script>
+    (function updateSidebar() {
+      const sidebarNav = document.querySelector('aside nav');
+      if (sidebarNav) {
+        sidebarNav.innerHTML = `
+          <a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all">
+            <span class="material-symbols-outlined text-lg">dashboard</span>
+            <span>Dashboard</span>
+          </a>
+          <a href="#" class="flex items-center justify-between px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all">
+            <div class="flex items-center gap-space-xs">
+              <span class="material-symbols-outlined text-lg">chat</span>
+              <span>Conversations</span>
+            </div>
+            <span class="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary">6</span>
+          </a>
+          <div class="flex flex-col">
+            <div class="flex items-center justify-between px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high cursor-pointer">
+              <div class="flex items-center gap-space-xs">
+                <span class="material-symbols-outlined text-lg">inventory_2</span>
+                <span>Products</span>
+              </div>
+              <span class="material-symbols-outlined text-base">expand_more</span>
+            </div>
+            <div class="pl-6 flex flex-col gap-1 mt-0.5">
+              <a href="#" class="px-space-xs py-1 rounded-lg font-caption text-caption text-on-surface-variant hover:text-primary">All Products</a>
+              <a href="#" class="px-space-xs py-1 rounded-lg font-caption text-caption text-on-surface-variant hover:text-primary">Categories</a>
+            </div>
+          </div>
+          <a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all">
+            <span class="material-symbols-outlined text-lg">event</span>
+            <span>Appointments / Calendly</span>
+          </a>
+          <a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all">
+            <span class="material-symbols-outlined text-lg">menu_book</span>
+            <span>Knowledge Base</span>
+          </a>
+          <a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all">
+            <span class="material-symbols-outlined text-lg">groups</span>
+            <span>Teams</span>
+          </a>
+          <a href="#" class="flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm bg-primary-container text-on-primary-container font-semibold shadow-sm transition-all">
+            <span class="material-symbols-outlined text-lg">terminal</span>
+            <span>Developer</span>
+          </a>
+        `;
+      }
+    })();
+  </script>
+<div class="flex flex-col gap-space-lg">
+<!-- Breadcrumb & Top Command Bar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2 font-caption text-caption text-outline">
+<span class="">OmniFlow</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-primary font-semibold">Developer Settings</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Developer Settings &amp; API Integration</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-3xl">
+          Manage your embeddable client widget credentials, environment configuration, and Perfox API engine connection keys.
+        </p>
+</div>
+<!-- Environment & Actions -->
+<div class="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
+<div class="flex items-center gap-2 px-space-sm py-1.5 rounded-full bg-surface-container-low shadow-sm">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-secondary"></span>
+</span>
+<span class="font-label-sm text-label-sm font-semibold text-secondary">Production (v2.4.0-live)</span>
+</div>
+<div class="flex items-center gap-2 px-space-sm py-1 rounded-xl bg-surface-container-lowest shadow-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Staging Mode</span>
+<button class="w-9 h-5 rounded-full bg-surface-container-highest transition-colors relative flex items-center px-0.5 cursor-pointer" id="envToggle" type="button">
+<div class="w-4 h-4 rounded-full bg-surface-container-lowest shadow-sm transition-transform transform translate-x-0"></div>
+</button>
+</div>
+<a class="flex items-center gap-1.5 px-space-sm py-2 rounded-xl bg-surface-container-high text-primary hover:bg-primary-fixed transition-colors font-label-md text-label-md font-medium shadow-sm" href="#docs">
+<span class="material-symbols-outlined text-base">description</span>
+<span class="">Documentation</span>
+<span class="material-symbols-outlined text-xs">open_in_new</span>
+</a>
+</div>
+</div>
+<!-- Telemetry Strip Banner -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-space-sm">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl">speed</span>
+</div>
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Gateway Latency</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">18 ms</span>
+<span class="font-caption text-caption text-secondary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-xs">trending_flat</span> Nominal baseline
+          </span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-xl">verified</span>
+</div>
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">API Uptime (30d)</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">99.98%</span>
+<span class="font-caption text-caption text-secondary">0 degraded hours</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined text-xl">insights</span>
+</div>
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Hourly Calls</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">41,290</span>
+<span class="font-caption text-caption text-outline">Quota: 250k / hr</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-error-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-xl">security</span>
+</div>
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Key Health</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Secure</span>
+<span class="font-caption text-caption text-outline">Rotated 8 days ago</span>
+</div>
+</div>
+</div>
+<!-- SECTION 1: Embedded Web Widget Configuration -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Section Header -->
+<div class="p-space-lg bg-gradient-to-r from-surface-container-low via-surface-container-lowest to-surface-container-lowest flex flex-col md:flex-row md:items-center justify-between gap-space-xs">
+<div class="flex items-start gap-space-sm">
+<div class="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-xl">widgets</span>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Embedded Web Widget Configuration</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Configure and embed the AI assistant and booking widget onto your customer-facing web storefront or portal.</p>
+</div>
+</div>
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm bg-secondary-fixed text-on-secondary-fixed self-start md:self-auto font-medium">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+          Widget Engine v2.4 Active
+        </span>
+</div>
+<div class="p-space-lg grid grid-cols-1 xl:grid-cols-12 gap-space-lg">
+<!-- Configuration Fields (Left 7 Cols) -->
+<div class="xl:col-span-7 flex flex-col gap-space-md">
+<!-- API Host -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-title-sm text-title-sm text-on-surface flex items-center gap-1">
+                API Host URL
+                <span class="material-symbols-outlined text-sm text-outline cursor-help" title="Base gateway through which the browser widget routes messages">help</span>
+</label>
+<span class="font-caption text-caption text-secondary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                200 OK — 18ms latency
+              </span>
+</div>
+<div class="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
+<span class="font-body-sm text-body-sm flex-1 font-mono select-all">https://widget-api.omniflow.io/v2</span>
+<button class="flex items-center gap-1 text-primary hover:text-on-primary-fixed-variant px-2 py-1 rounded-lg hover:bg-surface-container transition-all" onclick="navigator.clipboard.writeText('https://widget-api.omniflow.io/v2'); alert('Copied API Host URL');">
+<span class="material-symbols-outlined text-base">content_copy</span>
+<span class="font-label-sm text-label-sm">Copy</span>
+</button>
+</div>
+</div>
+<!-- Site Key / Public Token -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-title-sm text-title-sm text-on-surface">Site Key / Public Token</label>
+<span class="font-caption text-caption text-outline">Safe for client-side inclusion</span>
+</div>
+<div class="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
+<span class="font-body-sm text-body-sm flex-1 font-mono" id="siteKeyText">pk_live_••••••••••••••••••••••••••••09e5</span>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container transition-all" id="toggleSiteKey" title="Toggle visibility">
+<span class="material-symbols-outlined text-base" id="siteKeyIcon">visibility</span>
+</button>
+<button class="flex items-center gap-1 text-primary hover:text-on-primary-fixed-variant px-2 py-1 rounded-lg hover:bg-surface-container transition-all" onclick="navigator.clipboard.writeText('pk_live_8f93a0d7e4b94c1a8e99bc1209e5'); alert('Copied Public Site Key');">
+<span class="material-symbols-outlined text-base">content_copy</span>
+<span class="font-label-sm text-label-sm">Copy</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Workflow ID -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-title-sm text-title-sm text-on-surface">Production Workflow ID</label>
+<span class="px-2 py-0.5 rounded-full font-caption text-caption bg-surface-container-high text-primary font-semibold">Default Active Flow</span>
+</div>
+<div class="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
+<span class="font-body-sm text-body-sm flex-1 font-mono select-all">wf_flow_ecom_prod_9024a</span>
+<button class="flex items-center gap-1 text-primary hover:text-on-primary-fixed-variant px-2 py-1 rounded-lg hover:bg-surface-container transition-all" onclick="navigator.clipboard.writeText('wf_flow_ecom_prod_9024a'); alert('Copied Workflow ID');">
+<span class="material-symbols-outlined text-base">content_copy</span>
+<span class="font-label-sm text-label-sm">Copy</span>
+</button>
+</div>
+</div>
+<!-- Allowed Origins -->
+<div class="flex flex-col gap-2">
+<label class="font-title-sm text-title-sm text-on-surface">Allowed Origins / CORS Security Domains</label>
+<div class="flex flex-wrap items-center gap-2 p-space-xs rounded-xl bg-surface-container-low min-h-[46px]">
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container-lowest shadow-sm">
+<span class="font-body-sm text-body-sm font-mono text-on-surface">*.yourbrand.com</span>
+<button class="material-symbols-outlined text-xs text-outline hover:text-error">close</button>
+</div>
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container-lowest shadow-sm">
+<span class="font-body-sm text-body-sm font-mono text-on-surface">https://store.yourbrand.com</span>
+<button class="material-symbols-outlined text-xs text-outline hover:text-error">close</button>
+</div>
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container-lowest shadow-sm">
+<span class="font-body-sm text-body-sm font-mono text-on-surface">http://localhost:3000</span>
+<button class="material-symbols-outlined text-xs text-outline hover:text-error">close</button>
+</div>
+<button class="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-all font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="">Add Origin</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Embed Code Inspector (Right 5 Cols) -->
+<div class="xl:col-span-5 flex flex-col rounded-xl bg-inverse-surface text-inverse-on-surface p-space-md shadow-md">
+<div class="flex items-center justify-between pb-space-xs mb-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-error"></span>
+<span class="w-3 h-3 rounded-full bg-tertiary-fixed-dim"></span>
+<span class="w-3 h-3 rounded-full bg-secondary-fixed"></span>
+<span class="ml-2 font-caption text-caption text-inverse-on-surface/60 font-mono">embed-snippet</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2 py-1 rounded font-label-sm text-label-sm bg-primary text-on-primary" id="tabHtml">HTML Script</button>
+<button class="px-2 py-1 rounded font-label-sm text-label-sm text-inverse-on-surface/70 hover:text-inverse-on-surface" id="tabReact">React / Next</button>
+</div>
+</div>
+<!-- Code Snippet Box -->
+<div class="flex-1 font-mono text-caption leading-relaxed bg-black/30 p-space-sm rounded-lg overflow-x-auto select-all">
+<div id="codeHtml" class="">
+<span class="text-inverse-on-surface/40">&lt;!-- OmniFlow Assistant Injection --&gt;</span><br>
+<span class="text-secondary-fixed">&lt;script</span><br>
+              &nbsp;&nbsp;<span class="text-primary-fixed">src</span>=<span class="text-tertiary-fixed">"https://widget.omniflow.io/bundle.js"</span><br>
+              &nbsp;&nbsp;<span class="text-primary-fixed">data-site-key</span>=<span class="text-tertiary-fixed">"pk_live_8f93a0d7e4b94c1a8e99bc1209e5"</span><br>
+              &nbsp;&nbsp;<span class="text-primary-fixed">data-flow</span>=<span class="text-tertiary-fixed">"wf_flow_ecom_prod_9024a"</span><br>
+              &nbsp;&nbsp;<span class="text-primary-fixed">async</span><br>
+<span class="text-secondary-fixed">&gt;&lt;/script&gt;</span>
+</div>
+<div class="hidden" id="codeReact">
+<span class="text-inverse-on-surface/40">// npm i @omniflow/widget</span><br>
+<span class="text-primary-fixed">import</span> { OmniWidget } <span class="text-primary-fixed">from</span> <span class="text-tertiary-fixed">'@omniflow/widget'</span>;<br><br>
+<span class="text-primary-fixed">export default function</span> App() {<br>
+              &nbsp;&nbsp;<span class="text-primary-fixed">return</span> (<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span class="text-secondary-fixed">OmniWidget</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="text-primary-fixed">siteKey</span>=<span class="text-tertiary-fixed">"pk_live_8f93a0d7e4b9..."</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="text-primary-fixed">workflow</span>=<span class="text-tertiary-fixed">"wf_flow_ecom_prod_9024a"</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="text-primary-fixed">theme</span>=<span class="text-tertiary-fixed">"adaptive"</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;/&gt;<br>
+              &nbsp;&nbsp;);<br>
+              }
+            </div>
+</div>
+<div class="mt-space-sm flex items-center justify-between">
+<span class="font-caption text-caption text-inverse-on-surface/60">Bundle size: 14.2kb gzipped</span>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-on-primary hover:bg-primary-container font-label-sm text-label-sm font-semibold transition-all" onclick="navigator.clipboard.writeText(document.getElementById('codeHtml').innerText); alert('Copied Embed Code!');">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span class="">Copy Embed Snippet</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION 2: Perfox API Engine Details -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Section Header -->
+<div class="p-space-lg bg-gradient-to-r from-surface-container-low via-surface-container-lowest to-surface-container-lowest flex flex-col md:flex-row md:items-center justify-between gap-space-xs">
+<div class="flex items-start gap-space-sm">
+<div class="w-9 h-9 rounded-xl bg-inverse-surface text-inverse-on-surface flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-xl">dns</span>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Perfox API Engine &amp; Webhook Endpoints</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Direct REST &amp; Streaming API credentials for catalog syncing, conversational telemetry, and autonomous execution.</p>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant self-start md:self-auto font-medium">
+          API Version: 2026-03-Stable
+        </span>
+</div>
+<div class="p-space-lg flex flex-col gap-space-lg">
+<!-- Base URL & Secret Key Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-md">
+<!-- API Base URL -->
+<div class="flex flex-col gap-1.5">
+<label class="font-title-sm text-title-sm text-on-surface">API Base URL Endpoint</label>
+<div class="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
+<span class="font-body-sm text-body-sm flex-1 font-mono select-all">https://api.perfox.ai/v1/omniflow</span>
+<button class="flex items-center gap-1 text-primary hover:text-on-primary-fixed-variant px-2 py-1 rounded-lg hover:bg-surface-container transition-all" onclick="navigator.clipboard.writeText('https://api.perfox.ai/v1/omniflow'); alert('Copied Perfox API Base URL');">
+<span class="material-symbols-outlined text-base">content_copy</span>
+<span class="font-label-sm text-label-sm">Copy</span>
+</button>
+</div>
+</div>
+<!-- Secret Key -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-title-sm text-title-sm text-on-surface flex items-center gap-1.5">
+                API Authentication Key (Secret Key)
+                <span class="material-symbols-outlined text-sm text-error">lock</span>
+</label>
+<button class="font-caption text-caption text-error hover:underline flex items-center gap-0.5" onclick="confirm('Regenerating this key will immediately revoke access for all active services using it. Proceed?') &amp;&amp; alert('Key rotation requested. Check security email verification.');">
+<span class="material-symbols-outlined text-xs">restart_alt</span>
+<span class="">Regenerate Key</span>
+</button>
+</div>
+<div class="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
+<span class="font-body-sm text-body-sm flex-1 font-mono" id="secretKeyText">sk_live_perfox_••••••••••••••••••••••••••••bc65</span>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container transition-all" id="toggleSecretKey" title="Reveal Secret Key">
+<span class="material-symbols-outlined text-base" id="secretKeyIcon">visibility</span>
+</button>
+<button class="flex items-center gap-1 text-primary hover:text-on-primary-fixed-variant px-2 py-1 rounded-lg hover:bg-surface-container transition-all" onclick="navigator.clipboard.writeText('sk_live_perfox_78a1bc90d34fe289901adffbc65'); alert('Copied Secret Key to Clipboard!');">
+<span class="material-symbols-outlined text-base">content_copy</span>
+<span class="font-label-sm text-label-sm">Copy</span>
+</button>
+</div>
+</div>
+<span class="font-caption text-caption text-outline">Generated on Feb 18, 2026 by Sarah Jenkins (Admin)</span>
+</div>
+</div>
+<!-- Required Headers Table Spec -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-title-sm text-title-sm text-on-surface">Required Global HTTP Headers</span>
+<span class="font-caption text-caption text-outline">Include in every incoming webhook/REST payload</span>
+</div>
+<div class="overflow-x-auto rounded-xl shadow-sm bg-surface-container-lowest">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container font-caption text-caption uppercase text-on-surface-variant tracking-wider">
+<tr>
+<th class="py-2.5 px-space-md">Header Key</th>
+<th class="py-2.5 px-space-md">Value Type</th>
+<th class="py-2.5 px-space-md">Configured Value / Description</th>
+<th class="py-2.5 px-space-md text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-3 px-space-md font-mono font-semibold text-primary">Authorization</td>
+<td class="py-3 px-space-md"><span class="px-2 py-0.5 rounded bg-surface-container-high font-caption text-caption">Bearer Token</span></td>
+<td class="py-3 px-space-md font-mono text-outline">Bearer sk_live_perfox_78a1bc90d...</td>
+<td class="py-3 px-space-md text-right">
+<button class="text-outline hover:text-primary" onclick="navigator.clipboard.writeText('Bearer sk_live_perfox_78a1bc90d34fe289901adffbc65'); alert('Copied Auth Header');"><span class="material-symbols-outlined text-base">content_copy</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-3 px-space-md font-mono font-semibold text-primary">X-Perfox-Workspace-ID</td>
+<td class="py-3 px-space-md"><span class="px-2 py-0.5 rounded bg-surface-container-high font-caption text-caption">UUID / Slug</span></td>
+<td class="py-3 px-space-md font-mono text-on-surface">ws_9024_omniflow</td>
+<td class="py-3 px-space-md text-right">
+<button class="text-outline hover:text-primary" onclick="navigator.clipboard.writeText('ws_9024_omniflow'); alert('Copied Workspace ID');"><span class="material-symbols-outlined text-base">content_copy</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-3 px-space-md font-mono font-semibold text-primary">Content-Type</td>
+<td class="py-3 px-space-md"><span class="px-2 py-0.5 rounded bg-surface-container-high font-caption text-caption">MIME Type</span></td>
+<td class="py-3 px-space-md font-mono text-on-surface">application/json</td>
+<td class="py-3 px-space-md text-right">
+<button class="text-outline hover:text-primary" onclick="navigator.clipboard.writeText('application/json');"><span class="material-symbols-outlined text-base">content_copy</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-3 px-space-md font-mono font-semibold text-primary">X-Perfox-Agent-Id</td>
+<td class="py-3 px-space-md"><span class="px-2 py-0.5 rounded bg-surface-container-high font-caption text-caption">String</span></td>
+<td class="py-3 px-space-md font-mono text-on-surface">ag_ecom_booker_01</td>
+<td class="py-3 px-space-md text-right">
+<button class="text-outline hover:text-primary" onclick="navigator.clipboard.writeText('ag_ecom_booker_01'); alert('Copied Agent ID');"><span class="material-symbols-outlined text-base">content_copy</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Primary Endpoints Grid -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-title-sm text-title-sm text-on-surface">Live Orchestration Endpoints</span>
+<span class="font-caption text-caption text-secondary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+              All 3 Endpoints Operational
+            </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Endpoint Card 1 -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-sm shadow-sm hover:shadow transition-shadow">
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="px-2 py-0.5 rounded bg-primary text-on-primary font-caption text-caption font-bold">POST</span>
+<span class="font-caption text-caption text-outline">v1.audit</span>
+</div>
+<span class="font-mono text-body-sm font-semibold text-on-surface">/v1/conversations/audit</span>
+<p class="font-caption text-caption text-on-surface-variant">Sync live chat metrics, tokens, sentiment rating, and Autonomous Agent actions.</p>
+</div>
+<div class="flex items-center justify-between pt-2">
+<span class="font-caption text-caption text-secondary">200 OK · 24ms</span>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest text-primary hover:bg-primary hover:text-on-primary font-label-sm text-label-sm font-medium transition-all shadow-sm" onclick="alert('Sending test ping to /v1/conversations/audit... Status: 200 OK (payload validated)');">
+                  Test Ping
+                </button>
+</div>
+</div>
+<!-- Endpoint Card 2 -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-sm shadow-sm hover:shadow transition-shadow">
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="px-2 py-0.5 rounded bg-secondary text-on-secondary font-caption text-caption font-bold">GET</span>
+<span class="font-caption text-caption text-outline">v1.catalog</span>
+</div>
+<span class="font-mono text-body-sm font-semibold text-on-surface">/v1/catalog/products/sync</span>
+<p class="font-caption text-caption text-on-surface-variant">Dynamic markdown catalog sync for vector search and real-time inventory levels.</p>
+</div>
+<div class="flex items-center justify-between pt-2">
+<span class="font-caption text-caption text-secondary">200 OK · 38ms</span>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest text-primary hover:bg-primary hover:text-on-primary font-label-sm text-label-sm font-medium transition-all shadow-sm" onclick="alert('Querying catalog snapshot... Returned 1,420 SKUs indexed.');">
+                  Test Ping
+                </button>
+</div>
+</div>
+<!-- Endpoint Card 3 -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-sm shadow-sm hover:shadow transition-shadow">
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="px-2 py-0.5 rounded bg-primary text-on-primary font-caption text-caption font-bold">POST</span>
+<span class="font-caption text-caption text-outline">v1.calendly</span>
+</div>
+<span class="font-mono text-body-sm font-semibold text-on-surface">/v1/appointments/calendly-hook</span>
+<p class="font-caption text-caption text-on-surface-variant">Real-time webhook receiving Calendly invites &amp; cancellations directly into CRM pipeline.</p>
+</div>
+<div class="flex items-center justify-between pt-2">
+<span class="font-caption text-caption text-secondary">200 OK · 12ms</span>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container-lowest text-primary hover:bg-primary hover:text-on-primary font-label-sm text-label-sm font-medium transition-all shadow-sm" onclick="alert('Dispatched mock Calendly booking event... Webhook responded in 12ms with ACK.');">
+                  Test Ping
+                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Live Execution Sandbox & Visual Schema Inspector -->
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col lg:flex-row items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl">schema</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface font-semibold">Ready to test automated client interactions?</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Download our Postman Collection or OpenAPI 3.1 JSON schema to inspect full payload definitions.</span>
+</div>
+</div>
+<div class="flex items-center gap-space-xs flex-wrap">
+<button class="px-space-md py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-all flex items-center gap-1.5" onclick="alert('Downloading OmniFlow_Perfox_Postman_v2.json collection...');">
+<span class="material-symbols-outlined text-base">file_download</span>
+<span class="">Postman Collection</span>
+</button>
+<button class="px-space-md py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-all flex items-center gap-1.5" onclick="alert('Downloading openapi.json schema spec...');">
+<span class="material-symbols-outlined text-base">code</span>
+<span class="">OpenAPI Spec</span>
+</button>
+</div>
+</div>
+<!-- Sticky / Bottom Floating Action Bar -->
+<div class="sticky bottom-4 z-30 p-space-md rounded-xl bg-surface-container-lowest/95 backdrop-blur-md shadow-xl flex flex-col sm:flex-row items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-lg">shield</span>
+<span class="font-body-sm text-body-sm">All changes sync securely with end-to-end TLS 1.3 encryption.</span>
+</div>
+<div class="flex items-center gap-space-sm w-full sm:w-auto justify-end">
+<button class="px-space-md py-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold transition-all" onclick="alert('Pinging all Perfox API hosts... All checks passed!');">
+          Test All Connections
+        </button>
+<button class="px-space-lg py-2 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md font-semibold shadow-md transition-all flex items-center gap-1.5" onclick="alert('Configuration changes successfully saved to cluster!');">
+<span class="material-symbols-outlined text-base">save</span>
+<span class="">Save Configuration Changes</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Interactive JavaScript Behavior -->
+<script>
+    // Tab switching for Code Preview
+    const tabHtml = document.getElementById('tabHtml');
+    const tabReact = document.getElementById('tabReact');
+    const codeHtml = document.getElementById('codeHtml');
+    const codeReact = document.getElementById('codeReact');
+
+    if (tabHtml && tabReact) {
+      tabHtml.addEventListener('click', () => {
+        tabHtml.className = "px-2 py-1 rounded font-label-sm text-label-sm bg-primary text-on-primary";
+        tabReact.className = "px-2 py-1 rounded font-label-sm text-label-sm text-inverse-on-surface/70 hover:text-inverse-on-surface";
+        codeHtml.classList.remove('hidden');
+        codeReact.classList.add('hidden');
+      });
+
+      tabReact.addEventListener('click', () => {
+        tabReact.className = "px-2 py-1 rounded font-label-sm text-label-sm bg-primary text-on-primary";
+        tabHtml.className = "px-2 py-1 rounded font-label-sm text-label-sm text-inverse-on-surface/70 hover:text-inverse-on-surface";
+        codeReact.classList.remove('hidden');
+        codeHtml.classList.add('hidden');
+      });
+    }
+
+    // Toggle Site Key Mask
+    let siteKeyVisible = false;
+    const toggleSiteKey = document.getElementById('toggleSiteKey');
+    const siteKeyText = document.getElementById('siteKeyText');
+    const siteKeyIcon = document.getElementById('siteKeyIcon');
+    if (toggleSiteKey) {
+      toggleSiteKey.addEventListener('click', () => {
+        siteKeyVisible = !siteKeyVisible;
+        if (siteKeyVisible) {
+          siteKeyText.textContent = 'pk_live_8f93a0d7e4b94c1a8e99bc1209e5';
+          siteKeyIcon.textContent = 'visibility_off';
+        } else {
+          siteKeyText.textContent = 'pk_live_••••••••••••••••••••••••••••09e5';
+          siteKeyIcon.textContent = 'visibility';
+        }
+      });
+    }
+
+    // Toggle Secret Key Mask
+    let secretKeyVisible = false;
+    const toggleSecretKey = document.getElementById('toggleSecretKey');
+    const secretKeyText = document.getElementById('secretKeyText');
+    const secretKeyIcon = document.getElementById('secretKeyIcon');
+    if (toggleSecretKey) {
+      toggleSecretKey.addEventListener('click', () => {
+        secretKeyVisible = !secretKeyVisible;
+        if (secretKeyVisible) {
+          secretKeyText.textContent = 'sk_live_perfox_78a1bc90d34fe289901adffbc65';
+          secretKeyIcon.textContent = 'visibility_off';
+        } else {
+          secretKeyText.textContent = 'sk_live_perfox_••••••••••••••••••••••••••••bc65';
+          secretKeyIcon.textContent = 'visibility';
+        }
+      });
+    }
+
+    // Staging Toggle Micro-interaction
+    const envToggle = document.getElementById('envToggle');
+    let isStaging = false;
+    if (envToggle) {
+      envToggle.addEventListener('click', () => {
+        isStaging = !isStaging;
+        const knob = envToggle.firstElementChild;
+        if (isStaging) {
+          envToggle.classList.remove('bg-surface-container-highest');
+          envToggle.classList.add('bg-primary');
+          knob.classList.add('translate-x-4');
+        } else {
+          envToggle.classList.add('bg-surface-container-highest');
+          envToggle.classList.remove('bg-primary');
+          knob.classList.remove('translate-x-4');
+        }
+      });
+    }
+  </script>
+</div></main></div>
+
+</body></html>
