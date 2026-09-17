@@ -193,7 +193,7 @@ export default function DeveloperPage() {
                 </span>
               </div>
               <div className="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
-                <span className="font-body-sm text-body-sm flex-1 font-mono select-all">
+                <span className="font-body-sm text-body-sm flex-1 select-all">
                   https://widget-api.omniflow.io/v2
                 </span>
                 <button
@@ -214,7 +214,7 @@ export default function DeveloperPage() {
                 <span className="font-caption text-caption text-outline">Safe for client-side inclusion</span>
               </div>
               <div className="flex items-center bg-surface-container-low px-space-sm py-2 rounded-xl text-on-surface shadow-inner">
-                <span className="font-body-sm text-body-sm flex-1 font-mono">
+                <span className="font-body-sm text-body-sm flex-1">
                   {showSiteKey ? siteKey : 'pk_live_••••••••••••••••••••••••••••09e5'}
                 </span>
                 <div className="flex items-center gap-1">
@@ -308,7 +308,7 @@ export default function DeveloperPage() {
           <div className="flex flex-col gap-1.5">
             <label className="font-title-sm text-title-sm text-on-surface">Secret Backend API Key</label>
             <div className="flex items-center bg-surface-container-low px-3 py-2 rounded-xl text-on-surface shadow-inner">
-              <span className="font-body-sm text-body-sm flex-1 font-mono">
+              <span className="font-body-sm text-body-sm flex-1">
                 {showSecretKey ? secretKey : 'sk_live_••••••••••••••••••••••••9a'}
               </span>
               <button

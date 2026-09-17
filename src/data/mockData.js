@@ -17,22 +17,22 @@ export const INITIAL_PRODUCTS = [
     reorderPoint: 25,
     margin: "54.2%",
     discount: "31% OFF",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAVx_w1b-jBtKZXpVi6Ukh4pLbitDr5sL2MLWUFFccWwloJqbl-gZNr-up80uDB63SsQo-7Wks4_G2wL-mxz79eOZGx0FM0-2egouMWfQnUM-9lwLQsAtD1_a_1VUWUNwOVajLgSGbdqX-Y4cMVMfy2gjf6MnJNwuTHq3sLrVU3gVt7Q_azaOsR9fInn9OK3UgmqKe0ZZL7JaLZVoaxcJ5sOemxlqflBCpl37am6kl7NZl0AdWXMBRH3DX6OfEA2vUA2g",
+    image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
     gallery: [
-      { id: 0, label: "Front", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuDkL475WkEFTbptqedqxJXGmgDFyKSvV-W3QERAOAUhIeUYXl4CXnSyqrxHnV6oAFqFvrXicx0ghAZ_6pd4p1XQTUXEu43PNLVblUC0CgvU4ubkgHBlIW02E12_T8Y_77lYpvd2s4AG1jJ1xnSVs1ThCTBnpYjzI6RKswawIHf_fXVwpUfMFxJdwD6ZMDaqYP7clcdKzu569nAUp_CJuPoT4_ij5Vfl7ciI8S0c_9dzVmpF5KjS5mU3" },
-      { id: 1, label: "Side", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuC85TOdWoV5iDZgUjKsd7TnngJK3C_0f-yFL-iN2ZCdqnY_N1VzieuEPJKvhOCc4UtT8YW65aVwC4HSY189VihdAtuglf7ah9_6ggwgmxhuKYa0jDxa39LZbPa84Rly4iTuE1sYzYLjhEhwRpTYZwjceN6WCR-itk5Ze4174fi2F_9Xifj-tRDhW1WlOwGxSgLTbQQBQjDDziOpMEMll9zc3yujzkhpbDFi2mcPdcyMg2rSTIsffiOA" },
-      { id: 2, label: "Angled", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuC76gtSrxWdmS3C_YuxfGLdNf0vSgUWzm21kNW5IPzMdHlAk44hUoyXs3lBO7t1NipRZBEYPlse1Q_1cZuUbccIrmwP1SkhPc41josZx7MHp6aHHWMNzyv3FJd06bOAzvBl6rUj7-t4KlvRoEedLF-ZAMWmenx9Tdh8k6lyZ6OaiCDLJxS0Ifod7y30JepnLI5E5NpnOkoz-5cshRXv3CoPII43QoeJ2TTMoHKQ4rReLJyH9fCkV33K" },
-      { id: 3, label: "Detail", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuCBt-Cx1MahLfxAZEBMR17TefDT0Dj5lKZz-2fibRRHJSdVIp6xVFsR0S7fDE6Eb00_TelWxtF-BtrRoUIp-Qycj0syq36DClPXhKDf3d_xyiZ4bzPAsLVQcsZ2QRtajV6iS7ZJGns6UXfYeKDmDMx6xv0BCwbKepdxyva4gXdFao6nf2a3r_cx39GZ0ZnyenoeBr5q1RnZ9zqaLMELyizmjCvzVQdAsWfxYllJcPjrS0yHWVOzom3a" },
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1546938576-6e6a64f317cc?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1581605405669-fcdf81165afa?auto=format&fit=crop&w=800&q=80" },
     ],
     description: "Engineered with waterproof ballistic nylon and ergonomic memory-foam shoulder straps. Features an internal padded 16-inch laptop compartment, hidden passport pocket, and quick-access magnetic modular pockets for effortless daily transit and travel.",
     variants: [
-      { option: "Size", value: "M (Medium 20L)", price: 3499, stock: "18 units", status: "In Stock" },
-      { option: "Size", value: "L (Large 28L)", price: 4199, stock: "12 units", status: "In Stock" },
-      { option: "Colorway", value: "Stealth Slate", price: 3799, stock: "4 units (Low)", status: "Low Stock" },
+      { option: "Size", value: "M (Medium 20L)", price: 1299, stock: "18 units", status: "In Stock" },
+      { option: "Size", value: "L (Large 28L)", price: 1599, stock: "12 units", status: "In Stock" },
+      { option: "Colorway", value: "Stealth Slate", price: 1399, stock: "4 units (Low)", status: "Low Stock" },
     ],
     videos: [
-      { id: 0, duration: "0:45", title: "Product Showcase", thumbnail: "https://lh3.googleusercontent.com/aida-public/AB6AXuBxMHkzIIY8MkLHWUc5HVNwkfHFABl5WOPPB6hiv3vAUTn9FQvpw6ckj7ZjbEhGNxibxVahw7wrEDZTGmQwHy6gombYcr0a1plfI7loq19sSh3eeCg0Kcvnlezv1Uy9Y76HbzA149ulzcH9CGazrTGEb6q8UbH1Pi5VoDxjMZg8dP76ShjbJac6j1OTP-YtkXSCs29-_CvWUqEl-eNojmNgqS5W6vi0t4XMzOWf5tpK3z8wxlQYTa0aVF8f0GJxsSRDjw" },
-      { id: 1, duration: "1:20", title: "Durability & Transit Review", thumbnail: "https://lh3.googleusercontent.com/aida-public/AB6AXuBZpDtIoUBjAmvMjwWqS0WWlTWR-fposZDgY5don3zO14aFLWhoAyzm8zuZVoTGLTi7srIXbXe5Lkybw1IgTosPWlqIE8jBgZLIVOqlBD3b6MzXqqRJ2cOSXbcpc6xkFGVXdoRBIcjjfXQVsopslHDKPcu1EGfncfsB6PKIQTAtX12kQNL--e9WZHEXjUfMrru72dTyRCqw7hE99MPqFdsrXlvpbXK8o7Rlj5mssHclYSV8_FxEgQR04sTGKyMc8DjJAw" }
+      { id: 0, duration: "0:45", title: "Product Showcase", thumbnail: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:20", title: "Durability & Transit Review", thumbnail: "https://images.unsplash.com/photo-1546938576-6e6a64f317cc?auto=format&fit=crop&w=400&q=80" }
     ]
   },
   {
@@ -42,19 +42,29 @@ export const INITIAL_PRODUCTS = [
     sku: "PRD002",
     category: "Accessories",
     categoryCode: "accessories",
-    price: 499,
-    originalPrice: 799,
+    price: 4499,
+    originalPrice: 6999,
     stock: 85,
     stockStatus: "In Stock",
     committed: 5,
     reorderPoint: 15,
     margin: "48.0%",
-    discount: "37% OFF",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDZrinRWPtTLlEB_-W3lWqc70JxHDDbcey2X8dtpIUZRnz8hZePLumuUyeNysfQB2J6h4YR2riVLm_esiHoEH-V7gROFqM3uuuEv6NFTKf3uSKOcAt0i_Ooldhlz9uMLBX4uS0zQjTXe1ijlE0V3OgruckSDJ2JcsOMJoZDmygKF1bI3blzBbaVXBO0ZQKhyv5ZK7rpQAmnQEBW6VQNNfCNAGhkcCx7lsHem2mbYBcbPDQibLpAPh63Dbcxp73eRZl_4g",
-    description: "Sleek water-resistant sports chronograph with sapphire crystal glass and durable silicone strap.",
+    discount: "35% OFF",
+    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80",
+    gallery: [
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Sleek water-resistant sports chronograph with sapphire crystal glass, precision Japanese quartz movement, and a premium brushed stainless steel case.",
     variants: [
-      { option: "Color", value: "Midnight Black", price: 499, stock: "40 units", status: "In Stock" },
-      { option: "Color", value: "Ocean Blue", price: 499, stock: "45 units", status: "In Stock" }
+      { option: "Color", value: "Midnight Black", price: 4499, stock: "40 units", status: "In Stock" },
+      { option: "Color", value: "Ocean Blue", price: 4499, stock: "45 units", status: "In Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "0:50", title: "Timepiece Precision", thumbnail: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:15", title: "Water Resistance Test", thumbnail: "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=400&q=80" }
     ]
   },
   {
@@ -64,41 +74,189 @@ export const INITIAL_PRODUCTS = [
     sku: "PRD003",
     category: "Home",
     categoryCode: "lifestyle",
-    price: 899,
-    originalPrice: 1299,
+    price: 2899,
+    originalPrice: 3999,
     stock: 3,
     stockStatus: "Low Stock",
     committed: 2,
     reorderPoint: 10,
     margin: "42.5%",
-    discount: "30% OFF",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCBm-EXDnlUuHyADDooFkdYBPITwxTppV_7UriG6Kp8D7jVt9mD8v8NZLHZffdl0iBG0sepJDQi1k67kVe8JRHKWctpAl66_saXg5AmeEKQORAtrlZZEaZq6c2o5uMFxePjjyPbJ8jMnsejzsKkqhvEvoJvP14kasRNfr4v9_u1mxyx0prvjnOWZ3Put71UogbUIP1Hx-z_tHG270OLcWqf4nUGM8_GqBZwuU1tBs8vR_iNbAxBqLgFEaHz3BSbx6nXRg",
-    description: "Touch-activated dimmable LED desk lamp crafted with solid beechwood and matte powder-coated steel.",
+    discount: "28% OFF",
+    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=80",
+    gallery: [
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1534349762230-e0cadf78f5da?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1540932239986-30128078f3c5?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Touch-activated dimmable LED desk lamp crafted with solid European beechwood, warm ambient color temperatures, and matte powder-coated steel hardware.",
     variants: [
-      { option: "Finish", value: "Matte White", price: 899, stock: "2 units", status: "Low Stock" },
-      { option: "Finish", value: "Matte Charcoal", price: 899, stock: "1 unit", status: "Low Stock" }
+      { option: "Finish", value: "Matte White", price: 2899, stock: "2 units", status: "Low Stock" },
+      { option: "Finish", value: "Matte Charcoal", price: 2899, stock: "1 unit", status: "Low Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "0:40", title: "Lighting Moods & Dimming", thumbnail: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:05", title: "Assembly & Placement Guide", thumbnail: "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=400&q=80" }
     ]
   },
   {
     id: "PRD004",
-    name: "Tailored Linen Blend Overshirt",
+    name: "Apex Ergonomic Executive Chair",
     shortName: "Product 4",
     sku: "PRD004",
-    category: "Fashion",
-    categoryCode: "apparel",
-    price: 1199,
-    originalPrice: 1699,
+    category: "Home",
+    categoryCode: "furniture",
+    price: 14999,
+    originalPrice: 21999,
     stock: 64,
     stockStatus: "In Stock",
     committed: 8,
     reorderPoint: 20,
     margin: "58.1%",
-    discount: "29% OFF",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAWukTBkxmlZwM9l0nXUiLgW3RC3dwQtH_Zg2uZHHIXpMEm4E07y_v4S2nMwXdOP0l6FYEZfVrS4Nmd6JeYAUiyNqs2c8fAMyyMZ5dTlRVEnGTnrF_Y3Jen62qc_UslmiC6RxUCp6ikf7mw6ZhDVdzCZVcKIWiRCy7fajYDXT-5R1ToV0WaRR85nXi7kSW5_b9Vdl6eAaSB2fiLvR01frtrj3Qxkxh9RNA4q252XQsLbBnceuH_agxix55V4BQ5TWRDAw",
-    description: "Breathable European flax blend overshirt designed with horn buttons and double chest utility pockets.",
+    discount: "32% OFF",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAy_f1NBsFJIrjXllqBAXCSkx8ErDxPXv9FJHKQKzVXxlAuE-M5nTgFOPSyTCYCxCAW6qf071JiTmBW6qR6DmBgtTdGR9arDmL8UFK680ZCJ2paI8q3OVKrelB2fMHha5ChqfqXfXBtLaA-KoXXoMn5vFitnHAmd-TbUmdcKoOejbsk3UejVjPcsSPiJKhjgNcn2rPWCWpcUVVbuzUi-000dW2UjIcpy6_GZ59mywZUdnL7iFPEdzC_Mw",
+    gallery: [
+      { id: 0, label: "Front", src: "https://lh3.googleusercontent.com/aida-public/AB6AXuAy_f1NBsFJIrjXllqBAXCSkx8ErDxPXv9FJHKQKzVXxlAuE-M5nTgFOPSyTCYCxCAW6qf071JiTmBW6qR6DmBgtTdGR9arDmL8UFK680ZCJ2paI8q3OVKrelB2fMHha5ChqfqXfXBtLaA-KoXXoMn5vFitnHAmd-TbUmdcKoOejbsk3UejVjPcsSPiJKhjgNcn2rPWCWpcUVVbuzUi-000dW2UjIcpy6_GZ59mywZUdnL7iFPEdzC_Mw" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1505797149-43b0069ec26b?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1592078615290-033ee584e267?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1589384267710-7a170981ca78?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Engineered for 12+ hour postural support with adaptive lumbar alignment, breathable mesh backing, 4D adjustable armrests, and smooth synchronous tilt mechanism.",
     variants: [
-      { option: "Size", value: "M", price: 1199, stock: "30 units", status: "In Stock" },
-      { option: "Size", value: "L", price: 1199, stock: "34 units", status: "In Stock" }
+      { option: "Colorway", value: "Slate Grey & Chrome", price: 14999, stock: "30 units", status: "In Stock" },
+      { option: "Colorway", value: "Onyx Black & Matte Base", price: 15499, stock: "34 units", status: "In Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "1:10", title: "Ergonomic Posture Demo", thumbnail: "https://images.unsplash.com/photo-1580481077194-469a4733cf6a?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:45", title: "Lumbar & Tilt Adjustment", thumbnail: "https://images.unsplash.com/photo-1505797149-43b0069ec26b?auto=format&fit=crop&w=400&q=80" }
+    ]
+  },
+  {
+    id: "PRD005",
+    name: "Solid Oak Motorized Standing Desk",
+    shortName: "Product 5",
+    sku: "PRD005",
+    category: "Home",
+    categoryCode: "furniture",
+    price: 24999,
+    originalPrice: 34999,
+    stock: 22,
+    stockStatus: "In Stock",
+    committed: 4,
+    reorderPoint: 8,
+    margin: "51.5%",
+    discount: "29% OFF",
+    image: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=800&q=80",
+    gallery: [
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Handcrafted natural solid oak tabletop coupled with dual-motor whisper-quiet lift columns, anti-collision sensor, and 4 programmable memory presets.",
+    variants: [
+      { option: "Size", value: "140 x 70 cm", price: 24999, stock: "14 units", status: "In Stock" },
+      { option: "Size", value: "160 x 80 cm", price: 28999, stock: "8 units", status: "In Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "0:55", title: "Dual-Motor Lift Action", thumbnail: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:30", title: "Cable Management Setup", thumbnail: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=400&q=80" }
+    ]
+  },
+  {
+    id: "PRD006",
+    name: "Studio Pro Wireless Headphones",
+    shortName: "Product 6",
+    sku: "PRD006",
+    category: "Electronics",
+    categoryCode: "electronics",
+    price: 7999,
+    originalPrice: 11999,
+    stock: 58,
+    stockStatus: "In Stock",
+    committed: 7,
+    reorderPoint: 12,
+    margin: "62.0%",
+    discount: "33% OFF",
+    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
+    gallery: [
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Active noise-canceling circumaural studio headphones with custom 40mm beryllium drivers, 45-hour battery lifespan, and memory-foam leather ear cushions.",
+    variants: [
+      { option: "Color", value: "Matte Black", price: 7999, stock: "35 units", status: "In Stock" },
+      { option: "Color", value: "Silver Aluminium", price: 7999, stock: "23 units", status: "In Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "1:00", title: "ANC Acoustic Test", thumbnail: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:15", title: "Spatial Audio Review", thumbnail: "https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&w=400&q=80" }
+    ]
+  },
+  {
+    id: "PRD007",
+    name: "Italian Leather Bifold Wallet",
+    shortName: "Product 7",
+    sku: "PRD007",
+    category: "Accessories",
+    categoryCode: "accessories",
+    price: 1499,
+    originalPrice: 2299,
+    stock: 110,
+    stockStatus: "In Stock",
+    committed: 12,
+    reorderPoint: 20,
+    margin: "45.0%",
+    discount: "35% OFF",
+    image: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80",
+    gallery: [
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1559563458-527698bf5295?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Vegetable-tanned full-grain Tuscan leather wallet with RFID blocking shielding, 8 card slots, and an ultra-slim pocket profile.",
+    variants: [
+      { option: "Leather", value: "Cognac Brown", price: 1499, stock: "60 units", status: "In Stock" },
+      { option: "Leather", value: "Obsidian Black", price: 1499, stock: "50 units", status: "In Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "0:35", title: "Handcrafting & Stitching", thumbnail: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:00", title: "RFID Protection Test", thumbnail: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=400&q=80" }
+    ]
+  },
+  {
+    id: "PRD008",
+    name: "Tailored Linen Blend Overshirt",
+    shortName: "Product 8",
+    sku: "PRD008",
+    category: "Fashion",
+    categoryCode: "fashion",
+    price: 3199,
+    originalPrice: 4499,
+    stock: 45,
+    stockStatus: "In Stock",
+    committed: 6,
+    reorderPoint: 15,
+    margin: "56.4%",
+    discount: "29% OFF",
+    image: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=800&q=80",
+    gallery: [
+      { id: 0, label: "Front", src: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=800&q=80" },
+      { id: 1, label: "Side", src: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=800&q=80" },
+      { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=800&q=80" },
+      { id: 3, label: "Detail", src: "https://images.unsplash.com/photo-1598033129183-c4f50c736f10?auto=format&fit=crop&w=800&q=80" },
+    ],
+    description: "Breathable European flax blend overshirt designed with authentic horn buttons, relaxed modern cut, and reinforced double chest utility pockets.",
+    variants: [
+      { option: "Size", value: "M", price: 3199, stock: "20 units", status: "In Stock" },
+      { option: "Size", value: "L", price: 3199, stock: "25 units", status: "In Stock" }
+    ],
+    videos: [
+      { id: 0, duration: "0:45", title: "Fabric & Texture Closeup", thumbnail: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=400&q=80" },
+      { id: 1, duration: "1:10", title: "Fit & Styling Guide", thumbnail: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=400&q=80" }
     ]
   }
 ];

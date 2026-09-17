@@ -50,7 +50,7 @@ export default function CalendarPage() {
       type: 'Customer Appointment',
       location: 'Online Call',
       status: 'Confirmed',
-      statusColor: 'emerald'
+      statusColor: 'secondary'
     };
     setEvents([...events, newEv]);
     setNewEventTitle('');
@@ -59,126 +59,128 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="flex w-full h-[calc(100vh-5.5rem)] overflow-hidden rounded-2xl bg-white shadow-sm border border-teams-border select-none">
+    <div className="flex w-full h-[calc(100vh-5.5rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container select-none">
       {/* Mini Calendar Navigation Sidebar */}
-      <aside className="w-[220px] flex-shrink-0 bg-teams-grayBg border-r border-teams-border flex flex-col h-full z-20">
-        <div className="h-[52px] flex items-center px-4 border-b border-transparent">
-          <h1 className="font-semibold text-[15px] text-[#242424] tracking-tight">Calendar</h1>
+      <aside className="w-[230px] flex-shrink-0 bg-surface-container-lowest border-r border-surface-container flex flex-col h-full z-20">
+        <div className="h-14 flex items-center px-4 border-b border-surface-container">
+          <h1 className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Calendar</h1>
         </div>
 
         {/* Mini Calendar Grid */}
-        <div className="px-3.5 py-1">
-          <div className="flex items-center justify-between mb-2">
-            <button className="flex items-center space-x-1 text-xs font-semibold text-gray-800 hover:text-teams-brand focus:outline-none">
+        <div className="px-3.5 py-3">
+          <div className="flex items-center justify-between mb-2.5">
+            <button className="flex items-center space-x-1 font-title-sm text-title-sm font-semibold text-on-surface hover:text-primary focus:outline-none transition-colors cursor-pointer">
               <span>September 2026</span>
-              <span className="material-symbols-outlined text-sm text-gray-500">expand_more</span>
+              <span className="material-symbols-outlined text-sm text-outline">expand_more</span>
             </button>
-            <div className="flex items-center space-x-1 text-gray-400">
-              <button className="p-1 hover:text-gray-700 hover:bg-gray-200 rounded">
-                <span className="material-symbols-outlined text-xs">chevron_left</span>
+            <div className="flex items-center space-x-0.5 text-outline">
+              <button className="p-1 hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors cursor-pointer">
+                <span className="material-symbols-outlined text-sm">chevron_left</span>
               </button>
-              <button className="p-1 hover:text-gray-700 hover:bg-gray-200 rounded">
-                <span className="material-symbols-outlined text-xs">chevron_right</span>
+              <button className="p-1 hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors cursor-pointer">
+                <span className="material-symbols-outlined text-sm">chevron_right</span>
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 text-center text-[11px] font-medium text-gray-500 mb-1">
+          <div className="grid grid-cols-7 text-center font-caption text-[11px] font-semibold text-on-surface-variant uppercase mb-1">
             <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
           </div>
 
-          <div className="grid grid-cols-7 text-center text-[11px] font-normal leading-6 gap-y-0.5 relative">
-            <span className="text-gray-400">31</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">1</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">2</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">3</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">4</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">5</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">6</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">7</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">8</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">9</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">10</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">11</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">12</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer">13</span>
+          <div className="grid grid-cols-7 text-center font-body-sm text-[12px] font-normal leading-6 gap-y-0.5 relative">
+            <span className="text-outline/50">31</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">1</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">2</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">3</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">4</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">5</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">6</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">7</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">8</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">9</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">10</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">11</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">12</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">13</span>
             {/* Week 3 (Active) */}
-            <span className="text-teams-brand font-medium cursor-pointer">14</span>
-            <span className="text-teams-brand font-medium cursor-pointer">15</span>
-            <span className="text-teams-brand font-medium cursor-pointer">16</span>
-            <span className="flex items-center justify-center font-semibold text-white cursor-pointer">
-              <span className="w-5 h-5 rounded-full bg-teams-brand flex items-center justify-center shadow-xs">17</span>
+            <span className="text-primary font-semibold cursor-pointer">14</span>
+            <span className="text-primary font-semibold cursor-pointer">15</span>
+            <span className="text-primary font-semibold cursor-pointer">16</span>
+            <span className="flex items-center justify-center font-bold text-on-primary cursor-pointer">
+              <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-sm">17</span>
             </span>
-            <span className="text-teams-brand font-medium cursor-pointer">18</span>
-            <span className="text-teams-brand font-medium cursor-pointer">19</span>
-            <span className="text-teams-brand font-medium cursor-pointer">20</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">21</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">22</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">23</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">24</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">25</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">26</span>
-            <span className="hover:bg-gray-200 rounded-full cursor-pointer mt-1">27</span>
+            <span className="text-primary font-semibold cursor-pointer">18</span>
+            <span className="text-primary font-semibold cursor-pointer">19</span>
+            <span className="text-primary font-semibold cursor-pointer">20</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">21</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">22</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">23</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">24</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">25</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">26</span>
+            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">27</span>
           </div>
         </div>
 
         {/* Action Items & Calendars List */}
-        <div className="mt-4 pt-3 border-t border-teams-border flex-1 px-3 space-y-3">
+        <div className="mt-2 pt-3 border-t border-surface-container flex-1 px-3 space-y-3">
           <button
             type="button"
             onClick={() => setIsAddEventOpen(true)}
-            className="flex items-center space-x-2 text-xs font-medium text-teams-brand hover:text-teams-brandDark w-full px-1 py-1 rounded transition-colors"
+            className="flex items-center justify-center space-x-1.5 font-label-md text-label-md font-semibold text-primary bg-primary-container/10 hover:bg-primary-container/20 w-full px-3 py-2 rounded-xl transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined text-base">add</span>
             <span>Add appointment</span>
           </button>
-          <div className="space-y-1.5 pt-1">
-            <div className="flex items-center justify-between text-xs font-semibold text-gray-700 px-1 py-0.5">
-              <span>My calendars</span>
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant px-1">
+              <span>My Calendars</span>
             </div>
-            <label className="flex items-center space-x-2 px-1 py-1 rounded hover:bg-gray-200/60 cursor-pointer text-xs text-gray-700">
-              <input defaultChecked className="w-3.5 h-3.5 text-teams-brand rounded border-gray-300" type="checkbox" />
-              <span className="text-[13px] text-gray-800">Perfox Store Appointments</span>
+            <label className="flex items-center space-x-2 px-2 py-1.5 rounded-xl hover:bg-surface-container-low cursor-pointer font-body-sm text-body-sm text-on-surface transition-colors">
+              <input defaultChecked className="w-4 h-4 accent-primary rounded cursor-pointer" type="checkbox" />
+              <span className="font-medium text-[13px]">Perfox Store Appointments</span>
             </label>
-            <label className="flex items-center space-x-2 px-1 py-1 rounded hover:bg-gray-200/60 cursor-pointer text-xs text-gray-700">
-              <input defaultChecked className="w-3.5 h-3.5 text-teams-brand rounded border-gray-300" type="checkbox" />
-              <span className="text-[13px] text-gray-800">Site Measurement Visits</span>
+            <label className="flex items-center space-x-2 px-2 py-1.5 rounded-xl hover:bg-surface-container-low cursor-pointer font-body-sm text-body-sm text-on-surface transition-colors">
+              <input defaultChecked className="w-4 h-4 accent-primary rounded cursor-pointer" type="checkbox" />
+              <span className="font-medium text-[13px]">Site Measurement Visits</span>
             </label>
           </div>
         </div>
       </aside>
 
       {/* Main Calendar Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 bg-surface-container-lowest overflow-hidden">
         {/* TopBar Header */}
-        <header className="h-[52px] bg-white border-b border-teams-border flex items-center justify-between px-4 shrink-0">
+        <header className="h-14 bg-surface-container-lowest border-b border-surface-container flex items-center justify-between px-space-lg shrink-0">
           <div className="flex items-center space-x-3">
-            <button className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-semibold rounded text-gray-700 transition-colors">
+            <button className="px-3.5 py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold rounded-xl transition-colors cursor-pointer shadow-inner">
               Today
             </button>
-            <div className="flex items-center space-x-1 text-gray-600">
-              <button className="p-1 hover:bg-gray-100 rounded">
+            <div className="flex items-center space-x-0.5 text-on-surface-variant">
+              <button className="p-1 hover:bg-surface-container rounded-lg transition-colors cursor-pointer">
                 <span className="material-symbols-outlined text-base">chevron_left</span>
               </button>
-              <button className="p-1 hover:bg-gray-100 rounded">
+              <button className="p-1 hover:bg-surface-container rounded-lg transition-colors cursor-pointer">
                 <span className="material-symbols-outlined text-base">chevron_right</span>
               </button>
             </div>
-            <span className="text-sm font-semibold text-gray-800">September 14 – 20, 2026</span>
+            <span className="font-title-md text-title-md text-on-surface font-bold">
+              September 14 – 20, 2026
+            </span>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2.5">
             {/* View switcher */}
-            <div className="inline-flex rounded-lg bg-gray-100 p-0.5 text-xs">
+            <div className="inline-flex rounded-xl bg-surface-container-low p-1 font-label-sm text-label-sm shadow-inner">
               {['Day', 'Week', 'Month'].map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setActiveView(v)}
-                  className={`px-3 py-1 rounded-md transition-all ${
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                     activeView === v
-                      ? 'bg-white text-teams-brand font-semibold shadow-xs'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-surface-container-lowest text-primary font-semibold shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
                   {v}
@@ -189,32 +191,32 @@ export default function CalendarPage() {
             <button
               type="button"
               onClick={() => setIsAddEventOpen(true)}
-              className="px-3 py-1.5 bg-teams-brand hover:bg-teams-brandDark text-white text-xs font-semibold rounded-lg flex items-center space-x-1 shadow-xs transition-colors"
+              className="px-4 py-2 bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold rounded-xl flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
             >
-              <span className="material-symbols-outlined text-sm">add</span>
+              <span className="material-symbols-outlined text-base">add</span>
               <span>New event</span>
             </button>
           </div>
         </header>
 
         {/* Calendar Day Columns Header */}
-        <div className="grid grid-cols-8 border-b border-teams-border bg-gray-50/70 shrink-0">
-          <div className="w-16 border-r border-teams-border py-2 text-center text-xs text-gray-400 font-mono">
+        <div className="grid grid-cols-8 border-b border-surface-container bg-surface-container-low/70 shrink-0">
+          <div className="w-16 border-r border-surface-container py-2.5 text-center font-caption text-caption text-outline font-semibold">
             GMT+5:30
           </div>
           {daysOfWeek.map((d, idx) => (
             <div
               key={idx}
-              className={`py-2 text-center border-r border-teams-border last:border-r-0 ${
-                d.isToday ? 'bg-teams-brandLight/40' : ''
+              className={`py-2 text-center border-r border-surface-container last:border-r-0 ${
+                d.isToday ? 'bg-primary/5' : ''
               }`}
             >
-              <span className="text-xs text-gray-500 font-medium block">{d.name}</span>
+              <span className="font-caption text-caption text-on-surface-variant font-semibold uppercase block">{d.name}</span>
               <span
-                className={`text-sm font-semibold inline-block ${
+                className={`font-title-sm text-title-sm inline-flex items-center justify-center mt-0.5 ${
                   d.isToday
-                    ? 'w-6 h-6 rounded-full bg-teams-brand text-white leading-6'
-                    : 'text-gray-800'
+                    ? 'w-7 h-7 rounded-full bg-primary text-on-primary font-bold shadow-sm'
+                    : 'text-on-surface font-bold'
                 }`}
               >
                 {d.date}
@@ -227,9 +229,9 @@ export default function CalendarPage() {
         <div className="flex-1 overflow-y-auto relative">
           <div className="grid grid-cols-8 relative min-h-[700px]">
             {/* Time labels column */}
-            <div className="w-16 border-r border-teams-border">
+            <div className="w-16 border-r border-surface-container">
               {hours.map((h, i) => (
-                <div key={i} className="time-slot-height hour-line pr-2 text-right text-[11px] text-gray-400 -mt-2">
+                <div key={i} className="time-slot-height pr-2 text-right font-caption text-[11px] text-outline font-medium -mt-2 border-t border-surface-container-low">
                   {h}
                 </div>
               ))}
@@ -239,12 +241,12 @@ export default function CalendarPage() {
             {daysOfWeek.map((day, colIdx) => (
               <div
                 key={colIdx}
-                className={`relative border-r border-teams-border last:border-r-0 ${
-                  day.isToday ? 'bg-teams-brandLight/10' : ''
+                className={`relative border-r border-surface-container last:border-r-0 ${
+                  day.isToday ? 'bg-primary/5' : ''
                 }`}
               >
                 {hours.map((_, hrIdx) => (
-                  <div key={hrIdx} className="time-slot-height hour-line" />
+                  <div key={hrIdx} className="time-slot-height border-t border-surface-container-low/80" />
                 ))}
 
                 {/* Render events for this column */}
@@ -255,12 +257,12 @@ export default function CalendarPage() {
                       key={ev.id}
                       onClick={() => setSelectedEvent(ev)}
                       style={{ top: `${ev.topOffset}px`, height: `${ev.height}px` }}
-                      className="absolute inset-x-1 rounded-lg bg-[#e8eafb] border-l-4 border-teams-brand p-2 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10"
+                      className="absolute inset-x-1 rounded-xl bg-primary-container/10 border-l-4 border-primary p-2 shadow-sm cursor-pointer hover:shadow-md hover:bg-primary-container/15 transition-all overflow-hidden z-10"
                     >
-                      <span className="font-semibold text-xs text-teams-textPrimary block truncate">
+                      <span className="font-title-sm text-title-sm text-primary font-semibold block truncate">
                         {ev.title}
                       </span>
-                      <span className="text-[10px] text-teams-textSecondary block">
+                      <span className="font-body-sm text-[11px] text-on-surface-variant block truncate">
                         {ev.time} • {ev.client}
                       </span>
                     </div>
@@ -273,62 +275,68 @@ export default function CalendarPage() {
 
       {/* Add Event Modal */}
       {isAddEventOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-gray-200 flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-              <h2 className="font-semibold text-lg text-gray-900">Schedule New Appointment</h2>
-              <button onClick={() => setIsAddEventOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <span className="material-symbols-outlined">close</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/35 backdrop-blur-sm">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-space-lg w-full max-w-md border border-surface-container-high flex flex-col gap-space-md">
+            <div className="flex items-center justify-between pb-2 border-b border-surface-container">
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Schedule New Appointment</h2>
+              <button onClick={() => setIsAddEventOpen(false)} className="text-outline hover:text-on-surface cursor-pointer">
+                <span className="material-symbols-outlined text-xl">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleAddEventSubmit} className="flex flex-col gap-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Appointment Title *</label>
+            <form onSubmit={handleAddEventSubmit} className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">
+                  Appointment Title *
+                </label>
                 <input
                   type="text"
                   required
                   value={newEventTitle}
                   onChange={(e) => setNewEventTitle(e.target.value)}
-                  placeholder="e.g. Perfox Kitchen Design Consultation"
-                  className="w-full h-9 px-3 text-sm rounded-lg border border-gray-300 focus:outline-none focus:border-teams-brand mt-1"
+                  placeholder="e.g. Perfox Modular Wardrobe Demo"
+                  className="w-full h-10 px-3 font-body-sm text-body-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Client / Contact Name</label>
+              <div className="flex flex-col gap-1">
+                <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">
+                  Client / Contact Name
+                </label>
                 <input
                   type="text"
                   value={newEventClient}
                   onChange={(e) => setNewEventClient(e.target.value)}
                   placeholder="e.g. Rajesh Kumar"
-                  className="w-full h-9 px-3 text-sm rounded-lg border border-gray-300 focus:outline-none focus:border-teams-brand mt-1"
+                  className="w-full h-10 px-3 font-body-sm text-body-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-gray-700">Time Range</label>
+              <div className="flex flex-col gap-1">
+                <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">
+                  Time Range
+                </label>
                 <input
                   type="text"
                   value={newEventTime}
                   onChange={(e) => setNewEventTime(e.target.value)}
-                  className="w-full h-9 px-3 text-sm rounded-lg border border-gray-300 focus:outline-none focus:border-teams-brand mt-1"
+                  className="w-full h-10 px-3 font-body-sm text-body-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-surface-container">
                 <button
                   type="button"
                   onClick={() => setIsAddEventOpen(false)}
-                  className="px-4 py-2 text-xs rounded-lg text-gray-600 hover:bg-gray-100"
+                  className="px-4 py-2 font-label-md text-label-md font-semibold rounded-xl text-on-surface-variant hover:bg-surface-container cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs rounded-lg bg-teams-brand text-white font-semibold shadow-xs hover:bg-teams-brandDark"
+                  className="px-4 py-2 font-label-md text-label-md font-semibold rounded-xl bg-primary text-on-primary hover:bg-primary-container shadow-sm cursor-pointer transition-all"
                 >
-                  Save Event
+                  Save Appointment
                 </button>
               </div>
             </form>
@@ -338,32 +346,35 @@ export default function CalendarPage() {
 
       {/* Selected Event Details Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-gray-200 flex flex-col gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/35 backdrop-blur-sm">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-space-lg w-full max-w-sm border border-surface-container-high flex flex-col gap-3.5">
             <div className="flex items-center justify-between">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+              <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold bg-secondary-fixed/50 text-on-secondary-fixed-variant flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
                 {selectedEvent.status}
               </span>
-              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-gray-600">
-                <span className="material-symbols-outlined">close</span>
+              <button onClick={() => setSelectedEvent(null)} className="text-outline hover:text-on-surface cursor-pointer">
+                <span className="material-symbols-outlined text-xl">close</span>
               </button>
             </div>
-            <h3 className="font-bold text-lg text-gray-900">{selectedEvent.title}</h3>
-            <p className="text-xs text-gray-600">
-              <strong>Time:</strong> {selectedEvent.time}
-            </p>
-            <p className="text-xs text-gray-600">
-              <strong>Client:</strong> {selectedEvent.client}
-            </p>
-            <p className="text-xs text-gray-600">
-              <strong>Type:</strong> {selectedEvent.type}
-            </p>
-            <p className="text-xs text-gray-600">
-              <strong>Location:</strong> {selectedEvent.location}
-            </p>
+            <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">{selectedEvent.title}</h3>
+            <div className="space-y-1.5 font-body-sm text-body-sm text-on-surface-variant pt-1">
+              <p>
+                <strong className="text-on-surface">Time:</strong> {selectedEvent.time}
+              </p>
+              <p>
+                <strong className="text-on-surface">Client:</strong> {selectedEvent.client}
+              </p>
+              <p>
+                <strong className="text-on-surface">Type:</strong> {selectedEvent.type}
+              </p>
+              <p>
+                <strong className="text-on-surface">Location:</strong> {selectedEvent.location}
+              </p>
+            </div>
             <button
               onClick={() => setSelectedEvent(null)}
-              className="mt-2 w-full py-2 bg-teams-brand text-white text-xs font-semibold rounded-lg hover:bg-teams-brandDark"
+              className="mt-2 w-full py-2.5 bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
             >
               Close
             </button>

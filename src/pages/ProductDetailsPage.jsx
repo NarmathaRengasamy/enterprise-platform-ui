@@ -1,12 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { INITIAL_PRODUCTS } from '../data/mockData';
 
 export default function ProductDetailsPage({ setActiveModule, selectedProduct }) {
   const product = selectedProduct || INITIAL_PRODUCTS[0];
   const [selectedThumbIndex, setSelectedThumbIndex] = useState(0);
   const [mediaTab, setMediaTab] = useState('images');
-  const [selectedVariant, setSelectedVariant] = useState('Size: M');
+  const [selectedVariant, setSelectedVariant] = useState('');
   const [copiedSku, setCopiedSku] = useState(false);
+
+  useEffect(() => {
+    setSelectedThumbIndex(0);
+    if (product.variants && product.variants.length > 0) {
+      setSelectedVariant(product.variants[0].value);
+    } else {
+      setSelectedVariant('Standard');
+    }
+  }, [product.id]);
 
   const gallery = product.gallery || [
     { id: 0, label: "Front", src: product.image },
@@ -22,6 +31,10 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
     setCopiedSku(true);
     setTimeout(() => setCopiedSku(false), 2000);
   };
+
+  const variantsList = product.variants || [
+    { option: "Option", value: "Standard", price: product.price, stock: `${product.stock} units`, status: product.stockStatus }
+  ];
 
   return (
     <div className="flex flex-col w-full pt-space-xs">
@@ -119,7 +132,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
               <div className="flex items-center gap-space-xs">
                 <span className="font-title-md text-title-md text-on-surface">Media Gallery</span>
                 <span className="font-caption text-caption text-outline px-1.5 py-0.5 rounded-full bg-surface-container-high">
-                  6 items
+                  {gallery.length + (product.videos?.length || 0)} items
                 </span>
               </div>
               {/* Tab Bar */}
@@ -134,7 +147,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   }`}
                 >
                   <span className="material-symbols-outlined text-sm">photo_library</span>
-                  <span>Images (4)</span>
+                  <span>Images ({gallery.length})</span>
                 </button>
                 <button
                   type="button"
@@ -146,7 +159,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   }`}
                 >
                   <span className="material-symbols-outlined text-sm">videocam</span>
-                  <span>Videos (2)</span>
+                  <span>Videos ({product.videos?.length || 0})</span>
                 </button>
               </div>
             </div>
@@ -195,8 +208,12 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                 <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">
                   {product.name}
                 </h1>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container/50 text-on-secondary-container font-label-sm text-label-sm font-semibold shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm font-semibold shrink-0 ${
+                  product.stockStatus === 'In Stock'
+                    ? 'bg-secondary-container/50 text-on-secondary-container'
+                    : 'bg-tertiary-fixed/60 text-on-tertiary-fixed'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${product.stockStatus === 'In Stock' ? 'bg-secondary animate-pulse' : 'bg-tertiary'}`}></span>
                   {product.stockStatus}
                 </span>
               </div>
@@ -252,10 +269,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   {product.category}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption text-caption">
-                  Smart Devices
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption text-caption">
-                  Accessories
+                  Omnichannel Verified
                 </span>
               </div>
             </div>
@@ -272,22 +286,22 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
             <div className="flex flex-col gap-space-2xs pt-space-xs">
               <div className="flex items-center justify-between">
                 <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Variants</span>
-                <span className="font-caption text-caption text-primary cursor-pointer hover:underline">Size Chart</span>
+                <span className="font-caption text-caption text-primary cursor-pointer hover:underline">Size & Option Guide</span>
               </div>
               <div className="flex items-center gap-space-sm flex-wrap mt-1">
-                {['Size: M', 'Size: L', 'Size: XL'].map((v) => (
+                {variantsList.map((v) => (
                   <button
-                    key={v}
+                    key={v.value}
                     type="button"
-                    onClick={() => setSelectedVariant(v)}
+                    onClick={() => setSelectedVariant(v.value)}
                     className={`px-4 py-2 rounded-xl font-title-sm text-title-sm transition-all flex items-center gap-1.5 cursor-pointer ${
-                      selectedVariant === v
+                      selectedVariant === v.value
                         ? 'bg-primary text-on-primary shadow-sm'
                         : 'bg-surface-container-low hover:bg-surface-container text-on-surface'
                     }`}
                   >
-                    {selectedVariant === v && <span className="material-symbols-outlined text-sm">check</span>}
-                    <span>{v}</span>
+                    {selectedVariant === v.value && <span className="material-symbols-outlined text-sm">check</span>}
+                    <span>{v.value}</span>
                   </button>
                 ))}
               </div>
