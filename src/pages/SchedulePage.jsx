@@ -1,6 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_SCHEDULE_EVENTS } from '../data/mockData';
 
+// Format Date object to "YYYY-MM-DD"
+const formatDateKey = (d) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Check if two dates represent the same calendar day
+const isSameDay = (d1, d2) => {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+};
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const MONTH_NAMES_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+const DAY_NAMES_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_NAMES_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 // Convert 12h parts to total minutes from midnight (0 - 1439)
 const toMinutesFrom12h = (hour, minute, period) => {
   let h = parseInt(hour, 10) || 12;
@@ -42,16 +72,83 @@ const formatDuration = (mins) => {
   return m === 0 ? `${h} ${h === 1 ? 'hr' : 'hrs'}` : `${h} hr ${m} mins`;
 };
 
+// Generate 35 or 42 calendar grid cells for a given month and year
+const generateMonthGrid = (year, month, todayDate, selectedDate) => {
+  const firstDay = new Date(year, month, 1);
+  const startDayOfWeek = (firstDay.getDay() + 6) % 7; // Monday = 0, Sunday = 6
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const cells = [];
+
+  // Previous month padding
+  for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    const d = new Date(year, month - 1, daysInPrevMonth - i);
+    cells.push({
+      dateObj: d,
+      date: d.getDate(),
+      month: MONTH_NAMES_SHORT[d.getMonth()],
+      isCurrentMonth: false,
+      isToday: isSameDay(d, todayDate),
+      isSelected: selectedDate ? isSameDay(d, selectedDate) : false,
+      dateKey: formatDateKey(d),
+      dayIndex: (d.getDay() + 6) % 7
+    });
+  }
+
+  // Current month days
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(year, month, i);
+    cells.push({
+      dateObj: d,
+      date: i,
+      month: MONTH_NAMES_SHORT[month],
+      isCurrentMonth: true,
+      isToday: isSameDay(d, todayDate),
+      isSelected: selectedDate ? isSameDay(d, selectedDate) : false,
+      dateKey: formatDateKey(d),
+      dayIndex: (d.getDay() + 6) % 7
+    });
+  }
+
+  // Next month padding to reach full weeks (35 or 42 total cells)
+  const totalCells = cells.length > 35 ? 42 : 35;
+  const remaining = totalCells - cells.length;
+  for (let i = 1; i <= remaining; i++) {
+    const d = new Date(year, month + 1, i);
+    cells.push({
+      dateObj: d,
+      date: i,
+      month: MONTH_NAMES_SHORT[d.getMonth()],
+      isCurrentMonth: false,
+      isToday: isSameDay(d, todayDate),
+      isSelected: selectedDate ? isSameDay(d, selectedDate) : false,
+      dateKey: formatDateKey(d),
+      dayIndex: (d.getDay() + 6) % 7
+    });
+  }
+
+  return cells;
+};
+
 export default function SchedulePage() {
   const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
-  const [activeView, setActiveView] = useState('Week');
+  const [activeView, setActiveView] = useState('Week'); // 'Day' | 'Week' | 'Month'
+
+  // Dynamic Calendar Navigation Date States (default: Sep 17, 2026)
+  const [todayDate] = useState(() => new Date(2026, 8, 17));
+  const [selectedDate, setSelectedDate] = useState(() => new Date(2026, 8, 17));
+  const [sidebarDate, setSidebarDate] = useState(() => new Date(2026, 8, 1));
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(2026);
+
   const [participantFilter, setParticipantFilter] = useState('all'); // 'all', 'human', 'agent', 'customer'
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
 
   // New Event Form State with typable numbers and selectable AM/PM
   const [newEventTitle, setNewEventTitle] = useState('');
-  const [newEventDayIndex, setNewEventDayIndex] = useState(3); // default Thu
+  const [newEventDateObj, setNewEventDateObj] = useState(() => new Date(2026, 8, 17));
 
   // Start Time parts (Typable Hour, Typable Minute, Selectable AM/PM)
   const [startHour, setStartHour] = useState('10');
@@ -73,25 +170,82 @@ export default function SchedulePage() {
   const [newEventNotes, setNewEventNotes] = useState('');
 
   const gridScrollRef = useRef(null);
+  const dayGridScrollRef = useRef(null);
+  const monthPickerRef = useRef(null);
 
-  // Auto-scroll to 8:00 AM on mount for best viewport positioning
+  // Close month picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (monthPickerRef.current && !monthPickerRef.current.contains(e.target)) {
+        setIsMonthPickerOpen(false);
+      }
+    };
+    if (isMonthPickerOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMonthPickerOpen]);
+
+  // Auto-scroll to 8:00 AM on mount / view change
   useEffect(() => {
     if (gridScrollRef.current) {
       gridScrollRef.current.scrollTop = 8 * 64; // 8:00 AM offset
     }
-  }, []);
+    if (dayGridScrollRef.current) {
+      dayGridScrollRef.current.scrollTop = 8 * 64;
+    }
+  }, [activeView]);
 
-  const daysOfWeek = [
-    { name: 'Mon', date: '14', fullDay: 'Monday, Sep 14' },
-    { name: 'Tue', date: '15', fullDay: 'Tuesday, Sep 15' },
-    { name: 'Wed', date: '16', fullDay: 'Wednesday, Sep 16' },
-    { name: 'Thu', date: '17', fullDay: 'Thursday, Sep 17', isToday: true },
-    { name: 'Fri', date: '18', fullDay: 'Friday, Sep 18' },
-    { name: 'Sat', date: '19', fullDay: 'Saturday, Sep 19' },
-    { name: 'Sun', date: '20', fullDay: 'Sunday, Sep 20' }
-  ];
+  // Compute 7 days of the currently selected week (Monday to Sunday)
+  const currentWeekDays = React.useMemo(() => {
+    const dayOfWeek = (selectedDate.getDay() + 6) % 7; // Mon = 0, Sun = 6
+    const monday = new Date(selectedDate);
+    monday.setDate(selectedDate.getDate() - dayOfWeek);
 
-  // Full 24 Hours (12:00 AM to 11:00 PM)
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const isCurToday = isSameDay(d, todayDate);
+      const isCurSelected = isSameDay(d, selectedDate);
+      return {
+        dateObj: d,
+        name: DAY_NAMES_SHORT[i],
+        fullName: DAY_NAMES_FULL[i],
+        date: String(d.getDate()).padStart(2, '0'),
+        dateNum: d.getDate(),
+        monthShort: MONTH_NAMES_SHORT[d.getMonth()],
+        fullDay: `${DAY_NAMES_FULL[i]}, ${MONTH_NAMES_SHORT[d.getMonth()]} ${d.getDate()}`,
+        dateKey: formatDateKey(d),
+        isToday: isCurToday,
+        isSelected: isCurSelected,
+        dayIndex: i
+      };
+    });
+  }, [selectedDate, todayDate]);
+
+  // Compute Month Grid for Main View
+  const mainMonthGrid = React.useMemo(() => {
+    return generateMonthGrid(
+      selectedDate.getFullYear(),
+      selectedDate.getMonth(),
+      todayDate,
+      selectedDate
+    );
+  }, [selectedDate, todayDate]);
+
+  // Compute Month Grid for Sidebar Mini Calendar
+  const sidebarMonthGrid = React.useMemo(() => {
+    return generateMonthGrid(
+      sidebarDate.getFullYear(),
+      sidebarDate.getMonth(),
+      todayDate,
+      selectedDate
+    );
+  }, [sidebarDate, todayDate, selectedDate]);
+
+  // Full 24 Hours list
   const hours = [
     '12:00 AM',
     '01:00 AM',
@@ -129,6 +283,71 @@ export default function SchedulePage() {
     return events.filter((e) => (e.participantType || 'human') === type).length;
   };
 
+  // Match events for a specific dateKey
+  const getEventsForDateKey = (dateKey) => {
+    return filteredEvents.filter((e) => {
+      if (e.dateKey) return e.dateKey === dateKey;
+      // Fallback matching if event is legacy
+      return false;
+    });
+  };
+
+  // Header Navigation: Previous Button (<)
+  const handleNavPrev = () => {
+    const newDate = new Date(selectedDate);
+    if (activeView === 'Day') {
+      newDate.setDate(newDate.getDate() - 1);
+    } else if (activeView === 'Week') {
+      newDate.setDate(newDate.getDate() - 7);
+    } else if (activeView === 'Month') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    }
+    setSelectedDate(newDate);
+    setSidebarDate(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+  };
+
+  // Header Navigation: Next Button (>)
+  const handleNavNext = () => {
+    const newDate = new Date(selectedDate);
+    if (activeView === 'Day') {
+      newDate.setDate(newDate.getDate() + 1);
+    } else if (activeView === 'Week') {
+      newDate.setDate(newDate.getDate() + 7);
+    } else if (activeView === 'Month') {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setSelectedDate(newDate);
+    setSidebarDate(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+  };
+
+  // Header Navigation: Today Button
+  const handleNavToday = () => {
+    const todayCopy = new Date(todayDate);
+    setSelectedDate(todayCopy);
+    setSidebarDate(new Date(todayCopy.getFullYear(), todayCopy.getMonth(), 1));
+  };
+
+  // Sidebar Mini Calendar Navigation
+  const handleSidebarPrevMonth = () => {
+    const newD = new Date(sidebarDate);
+    newD.setMonth(newD.getMonth() - 1);
+    setSidebarDate(newD);
+  };
+
+  const handleSidebarNextMonth = () => {
+    const newD = new Date(sidebarDate);
+    newD.setMonth(newD.getMonth() + 1);
+    setSidebarDate(newD);
+  };
+
+  // Jump to specific month/year from popup picker
+  const handleSelectMonthFromPicker = (monthIndex) => {
+    const newD = new Date(pickerYear, monthIndex, Math.min(selectedDate.getDate(), 28));
+    setSelectedDate(newD);
+    setSidebarDate(new Date(pickerYear, monthIndex, 1));
+    setIsMonthPickerOpen(false);
+  };
+
   // Helper to handle and format hour inputs
   const handleHourChange = (val, setter) => {
     const clean = val.replace(/\D/g, '').slice(0, 2);
@@ -155,12 +374,12 @@ export default function SchedulePage() {
     setter(String(num).padStart(2, '0'));
   };
 
-  // Triggered on double clicking any time slot in the 24h grid
-  const handleSlotDoubleClick = (colIdx, hrIdx) => {
+  // Triggered on double clicking any time slot in the grid
+  const handleSlotDoubleClick = (targetDateObj, hrIdx) => {
     const startObj = fromMinutesTo12h(hrIdx * 60);
     const endObj = fromMinutesTo12h(((hrIdx + 1) % 24) * 60);
 
-    setNewEventDayIndex(colIdx);
+    setNewEventDateObj(targetDateObj);
     setStartHour(startObj.hour);
     setStartMinute(startObj.minute);
     setStartPeriod(startObj.period);
@@ -188,8 +407,29 @@ export default function SchedulePage() {
     setIsAddEventOpen(true);
   };
 
+  // Triggered when double clicking a month calendar cell
+  const handleMonthCellDoubleClick = (cell) => {
+    setNewEventDateObj(cell.dateObj);
+    setStartHour('10');
+    setStartMinute('00');
+    setStartPeriod('AM');
+    setEndHour('11');
+    setEndMinute('00');
+    setEndPeriod('AM');
+
+    setNewEventTitle('');
+    setNewEventClient('');
+    setNewEventEmail('');
+    setNewEventPhone('');
+    setNewEventAttendee('OmniFlow AI Agent');
+    setNewEventParticipantType(participantFilter !== 'all' ? participantFilter : 'agent');
+    setNewEventLocation('Microsoft Teams Meeting');
+    setNewEventNotes('');
+    setIsAddEventOpen(true);
+  };
+
   const handleOpenAddModal = () => {
-    setNewEventDayIndex(3); // Thu
+    setNewEventDateObj(selectedDate);
     setStartHour('10');
     setStartMinute('00');
     setStartPeriod('AM');
@@ -249,7 +489,9 @@ export default function SchedulePage() {
       time: formattedTimeRange,
       startTime: format12hString(startHour, startMinute, startPeriod),
       endTime: format12hString(endHour, endMinute, endPeriod),
-      dayIndex: newEventDayIndex,
+      dateKey: formatDateKey(newEventDateObj),
+      dayIndex: (newEventDateObj.getDay() + 6) % 7,
+      dateNum: newEventDateObj.getDate(),
       topOffset: Math.round(topOffset),
       height: Math.round(height),
       client: newEventClient || 'Enterprise Client',
@@ -273,6 +515,86 @@ export default function SchedulePage() {
     setSelectedEvent(null);
   };
 
+  // Header Title Formatting with Dynamic Month/Range and Quick Picker Trigger
+  const renderHeaderTitle = () => {
+    if (activeView === 'Day') {
+      const dayName = DAY_NAMES_FULL[(selectedDate.getDay() + 6) % 7];
+      const monthName = MONTH_NAMES[selectedDate.getMonth()];
+      const dayNum = selectedDate.getDate();
+      const year = selectedDate.getFullYear();
+      const isCurToday = isSameDay(selectedDate, todayDate);
+
+      return (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setPickerYear(selectedDate.getFullYear());
+              setIsMonthPickerOpen(!isMonthPickerOpen);
+            }}
+            className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer"
+          >
+            <span>{dayName}, {monthName} {dayNum}, {year}</span>
+            <span className="material-symbols-outlined text-base text-outline">expand_more</span>
+          </button>
+          {isCurToday && (
+            <span className="text-primary font-semibold text-[11px] bg-primary/10 px-2 py-0.5 rounded-md">
+              Today
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    if (activeView === 'Month') {
+      const monthName = MONTH_NAMES[selectedDate.getMonth()];
+      const year = selectedDate.getFullYear();
+
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            setPickerYear(selectedDate.getFullYear());
+            setIsMonthPickerOpen(!isMonthPickerOpen);
+          }}
+          className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer"
+        >
+          <span>{monthName} {year}</span>
+          <span className="material-symbols-outlined text-base text-outline">expand_more</span>
+        </button>
+      );
+    }
+
+    // Week View
+    const firstDay = currentWeekDays[0]?.dateObj || selectedDate;
+    const lastDay = currentWeekDays[6]?.dateObj || selectedDate;
+    const startMonth = MONTH_NAMES[firstDay.getMonth()];
+    const endMonth = MONTH_NAMES[lastDay.getMonth()];
+    const year = lastDay.getFullYear();
+
+    const rangeLabel = `${MONTH_NAMES_SHORT[firstDay.getMonth()]} ${firstDay.getDate()} – ${MONTH_NAMES_SHORT[lastDay.getMonth()]} ${lastDay.getDate()}`;
+    const mainTitle = startMonth === endMonth ? `${startMonth} ${year}` : `${startMonth} – ${endMonth} ${year}`;
+
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setPickerYear(selectedDate.getFullYear());
+            setIsMonthPickerOpen(!isMonthPickerOpen);
+          }}
+          className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer"
+        >
+          <span>{mainTitle}</span>
+          <span className="material-symbols-outlined text-base text-outline">expand_more</span>
+        </button>
+        <span className="text-on-surface-variant font-normal text-body-sm">
+          ({rangeLabel})
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="flex w-full h-[calc(100vh-5.5rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container select-none">
       {/* Mini Schedule Navigation Sidebar */}
@@ -286,18 +608,35 @@ export default function SchedulePage() {
           </div>
         </div>
 
-        {/* Mini Schedule Grid */}
+        {/* Mini Dynamic Calendar */}
         <div className="px-3.5 py-3">
           <div className="flex items-center justify-between mb-2.5">
-            <button className="flex items-center space-x-1 font-title-sm text-title-sm font-semibold text-on-surface hover:text-primary focus:outline-none transition-colors cursor-pointer">
-              <span>September 2026</span>
+            <button
+              type="button"
+              onClick={() => {
+                setPickerYear(sidebarDate.getFullYear());
+                setIsMonthPickerOpen(!isMonthPickerOpen);
+              }}
+              className="flex items-center space-x-1 font-title-sm text-title-sm font-semibold text-on-surface hover:text-primary focus:outline-none transition-colors cursor-pointer"
+            >
+              <span>{MONTH_NAMES[sidebarDate.getMonth()]} {sidebarDate.getFullYear()}</span>
               <span className="material-symbols-outlined text-sm text-outline">expand_more</span>
             </button>
             <div className="flex items-center space-x-0.5 text-outline">
-              <button className="p-1 hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors cursor-pointer">
+              <button
+                type="button"
+                onClick={handleSidebarPrevMonth}
+                title="Previous month"
+                className="p-1 hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-sm">chevron_left</span>
               </button>
-              <button className="p-1 hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors cursor-pointer">
+              <button
+                type="button"
+                onClick={handleSidebarNextMonth}
+                title="Next month"
+                className="p-1 hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-sm">chevron_right</span>
               </button>
             </div>
@@ -308,37 +647,34 @@ export default function SchedulePage() {
           </div>
 
           <div className="grid grid-cols-7 text-center font-body-sm text-[12px] font-normal leading-6 gap-y-0.5 relative">
-            <span className="text-outline/50">31</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">1</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">2</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">3</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">4</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">5</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">6</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">7</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">8</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">9</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">10</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">11</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">12</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer">13</span>
-            {/* Week 3 (Active) */}
-            <span className="text-primary font-semibold cursor-pointer">14</span>
-            <span className="text-primary font-semibold cursor-pointer">15</span>
-            <span className="text-primary font-semibold cursor-pointer">16</span>
-            <span className="flex items-center justify-center font-bold text-on-primary cursor-pointer">
-              <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-sm">17</span>
-            </span>
-            <span className="text-primary font-semibold cursor-pointer">18</span>
-            <span className="text-primary font-semibold cursor-pointer">19</span>
-            <span className="text-primary font-semibold cursor-pointer">20</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">21</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">22</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">23</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">24</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">25</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">26</span>
-            <span className="hover:bg-surface-container-low rounded-full cursor-pointer mt-1">27</span>
+            {sidebarMonthGrid.map((c, i) => {
+              const isSelected = isSameDay(c.dateObj, selectedDate);
+              return (
+                <span
+                  key={i}
+                  onClick={() => {
+                    setSelectedDate(c.dateObj);
+                  }}
+                  className={`cursor-pointer transition-colors text-center rounded-full ${
+                    !c.isCurrentMonth
+                      ? 'text-outline/40 hover:bg-surface-container-low'
+                      : c.isToday
+                      ? 'flex items-center justify-center font-bold text-on-primary'
+                      : isSelected
+                      ? 'bg-primary/20 text-primary font-bold'
+                      : 'text-on-surface hover:bg-surface-container-low'
+                  }`}
+                >
+                  {c.isToday ? (
+                    <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-sm text-on-primary">
+                      {c.date}
+                    </span>
+                  ) : (
+                    c.date
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
 
@@ -446,11 +782,11 @@ export default function SchedulePage() {
           <div className="pt-3 border-t border-surface-container">
             <div className="p-2.5 rounded-xl bg-surface-container-low border border-surface-container text-on-surface-variant text-[11px] space-y-1.5">
               <div className="flex items-center gap-1.5 font-semibold text-on-surface">
-                <span className="material-symbols-outlined text-sm text-primary">touch_app</span>
-                <span>24-Hour Scheduling</span>
+                <span className="material-symbols-outlined text-sm text-primary">calendar_month</span>
+                <span>Teams-Style Navigation</span>
               </div>
               <p className="leading-relaxed opacity-85">
-                Double-click any 24-hour time slot to book an event with typable numbers, selectable AM/PM, and client contact info.
+                Use the top arrows or click the month title to navigate any month, week, or day across years seamlessly.
               </p>
             </div>
           </div>
@@ -458,13 +794,85 @@ export default function SchedulePage() {
       </aside>
 
       {/* Main Schedule Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-surface-container-lowest overflow-hidden">
-        {/* Simplified & Clean Calendar TopBar Header */}
-        <header className="h-14 bg-surface-container-lowest border-b border-surface-container flex items-center justify-between px-5 shrink-0">
-          {/* Left: Navigation & Date Range */}
+      <main className="flex-1 flex flex-col min-w-0 bg-surface-container-lowest overflow-hidden relative">
+        {/* Teams-Style Month/Year Quick Jump Popover */}
+        {isMonthPickerOpen && (
+          <div
+            ref={monthPickerRef}
+            className="absolute top-14 left-5 z-40 bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4 w-72 animate-in fade-in zoom-in-95 duration-150"
+          >
+            {/* Year selector header */}
+            <div className="flex items-center justify-between pb-3 border-b border-surface-container mb-3">
+              <span className="font-bold text-sm text-on-surface">Select Month &amp; Year</span>
+              <div className="flex items-center gap-1 bg-surface-container-low px-2 py-0.5 rounded-lg border border-surface-container">
+                <button
+                  type="button"
+                  onClick={() => setPickerYear((y) => y - 1)}
+                  className="p-0.5 hover:text-primary text-outline transition-colors cursor-pointer"
+                  title="Previous year"
+                >
+                  <span className="material-symbols-outlined text-sm">chevron_left</span>
+                </button>
+                <span className="text-xs font-bold text-primary px-1">{pickerYear}</span>
+                <button
+                  type="button"
+                  onClick={() => setPickerYear((y) => y + 1)}
+                  className="p-0.5 hover:text-primary text-outline transition-colors cursor-pointer"
+                  title="Next year"
+                >
+                  <span className="material-symbols-outlined text-sm">chevron_right</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 12 Months Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {MONTH_NAMES_SHORT.map((mName, mIdx) => {
+                const isCurrentMonth =
+                  selectedDate.getMonth() === mIdx && selectedDate.getFullYear() === pickerYear;
+                return (
+                  <button
+                    key={mName}
+                    type="button"
+                    onClick={() => handleSelectMonthFromPicker(mIdx)}
+                    className={`py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                      isCurrentMonth
+                        ? 'bg-primary text-on-primary border-primary shadow-xs font-bold'
+                        : 'bg-surface-container-low border-surface-container text-on-surface hover:bg-primary/10 hover:text-primary'
+                    }`}
+                  >
+                    {mName}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-3 mt-3 border-t border-surface-container flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleNavToday}
+                className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+              >
+                Go to Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMonthPickerOpen(false)}
+                className="text-xs text-on-surface-variant hover:text-on-surface px-2.5 py-1 rounded-lg hover:bg-surface-container cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Simplified & Clean Calendar TopBar Header with Dynamic Navigation */}
+        <header className="h-14 bg-surface-container-lowest border-b border-surface-container flex items-center justify-between px-5 shrink-0 z-10">
+          {/* Left: Navigation & Dynamic Date Range */}
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={handleNavToday}
               className="px-3 py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold rounded-lg border border-surface-container transition-colors cursor-pointer"
             >
               Today
@@ -472,26 +880,23 @@ export default function SchedulePage() {
             <div className="flex items-center border border-surface-container rounded-lg overflow-hidden bg-surface-container-low">
               <button
                 type="button"
+                onClick={handleNavPrev}
                 className="p-1.5 hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
-                title="Previous week"
+                title={`Previous ${activeView.toLowerCase()}`}
               >
                 <span className="material-symbols-outlined text-base">chevron_left</span>
               </button>
               <div className="w-[1px] h-4 bg-surface-container" />
               <button
                 type="button"
+                onClick={handleNavNext}
                 className="p-1.5 hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
-                title="Next week"
+                title={`Next ${activeView.toLowerCase()}`}
               >
                 <span className="material-symbols-outlined text-base">chevron_right</span>
               </button>
             </div>
-            <h2 className="font-title-md text-title-md text-on-surface font-bold tracking-tight">
-              September 2026
-              <span className="text-on-surface-variant font-normal text-body-sm ml-2">
-                (Sep 14 – 20)
-              </span>
-            </h2>
+            {renderHeaderTitle()}
           </div>
 
           {/* Right: Active Filter Badge (when filtered) + View Switcher + Action CTA */}
@@ -511,7 +916,7 @@ export default function SchedulePage() {
               </div>
             )}
 
-            {/* View switcher */}
+            {/* View switcher: Day, Week, Month */}
             <div className="inline-flex rounded-lg bg-surface-container-low p-0.5 border border-surface-container font-label-sm text-label-sm">
               {['Day', 'Week', 'Month'].map((v) => (
                 <button
@@ -541,84 +946,94 @@ export default function SchedulePage() {
           </div>
         </header>
 
-        {/* Schedule Day Columns Header */}
-        <div className="grid grid-cols-8 border-b border-surface-container bg-surface-container-low/70 shrink-0">
-          <div className="w-18 border-r border-surface-container py-2.5 text-center font-caption text-caption text-outline font-semibold">
-            GMT+5:30
-          </div>
-          {daysOfWeek.map((d, idx) => (
-            <div
-              key={idx}
-              className={`py-2 text-center border-r border-surface-container last:border-r-0 ${
-                d.isToday ? 'bg-primary/5' : ''
-              }`}
-            >
-              <span className="font-caption text-caption text-on-surface-variant font-semibold uppercase block">{d.name}</span>
-              <span
-                className={`font-title-sm text-title-sm inline-flex items-center justify-center mt-0.5 ${
-                  d.isToday
-                    ? 'w-7 h-7 rounded-full bg-primary text-on-primary font-bold shadow-sm'
-                    : 'text-on-surface font-bold'
-                }`}
-              >
-                {d.date}
-              </span>
+        {/* -------------------------------------------------------------------------------- */}
+        {/* VIEW 1: DAY VIEW */}
+        {/* -------------------------------------------------------------------------------- */}
+        {activeView === 'Day' && (
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Dynamic Day Selector Ribbon */}
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-low/70 border-b border-surface-container overflow-x-auto shrink-0">
+              {currentWeekDays.map((d, idx) => {
+                const dayEventCount = getEventsForDateKey(d.dateKey).length;
+                const isSelected = isSameDay(d.dateObj, selectedDate);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedDate(d.dateObj)}
+                    className={`flex-1 min-w-[110px] py-2 px-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
+                      isSelected
+                        ? 'bg-primary text-on-primary border-primary shadow-sm font-semibold'
+                        : d.isToday
+                        ? 'bg-primary/10 border-primary/30 text-on-surface hover:bg-primary/15'
+                        : 'bg-surface-container-lowest border-surface-container text-on-surface hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <span className={`text-[11px] uppercase tracking-wider ${isSelected ? 'text-on-primary/90' : 'text-on-surface-variant font-medium'}`}>
+                      {d.name} {d.isToday && !isSelected && '• Today'}
+                    </span>
+                    <span className="text-base font-bold leading-tight">{d.date}</span>
+                    {dayEventCount > 0 && (
+                      <span className={`text-[10px] px-2 py-0.2 rounded-full font-semibold mt-0.5 ${
+                        isSelected ? 'bg-on-primary/20 text-on-primary' : 'bg-primary/15 text-primary'
+                      }`}>
+                        {dayEventCount} {dayEventCount === 1 ? 'event' : 'events'}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-          ))}
-        </div>
 
-        {/* Full 24-Hour Time Grid Scroll Area with Double-Click Slots */}
-        <div ref={gridScrollRef} className="flex-1 overflow-y-auto relative">
-          <div className="grid grid-cols-8 relative min-h-[1536px]">
-            {/* 24-Hour Time labels column */}
-            <div className="w-18 border-r border-surface-container select-none">
-              {hours.map((h, i) => (
-                <div key={i} className="time-slot-height pr-2 text-right font-caption text-[11px] text-outline font-medium -mt-2 border-t border-surface-container-low">
-                  {h}
+            {/* Single Day 24-Hour Timeline */}
+            <div ref={dayGridScrollRef} className="flex-1 overflow-y-auto relative bg-surface-container-lowest">
+              <div className="flex relative min-h-[1536px]">
+                {/* Time Labels Column */}
+                <div className="w-20 border-r border-surface-container select-none shrink-0 bg-surface-container-low/30">
+                  {hours.map((h, i) => (
+                    <div
+                      key={i}
+                      className="time-slot-height pr-3 text-right font-caption text-[11px] text-outline font-medium -mt-2 border-t border-surface-container-low"
+                    >
+                      {h}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            {/* 7 Days Columns */}
-            {daysOfWeek.map((day, colIdx) => {
-              const dayEvents = filteredEvents.filter((e) => e.dayIndex === colIdx);
-              return (
-                <div
-                  key={colIdx}
-                  className={`relative border-r border-surface-container last:border-r-0 ${
-                    day.isToday ? 'bg-primary/5' : ''
-                  }`}
-                >
-                  {/* Interactive Double-Click Time Slots for all 24 hours */}
+                {/* Day Single Column Canvas */}
+                <div className="flex-1 relative border-r border-surface-container">
+                  {/* Interactive Double-Click Time Slots */}
                   {hours.map((h, hrIdx) => (
                     <div
                       key={hrIdx}
                       onDoubleClick={(e) => {
                         e.stopPropagation();
-                        handleSlotDoubleClick(colIdx, hrIdx);
+                        handleSlotDoubleClick(selectedDate, hrIdx);
                       }}
-                      title={`Double-click to schedule on ${day.name} ${day.date} at ${h}`}
+                      title={`Double-click to schedule on ${DAY_NAMES_FULL[(selectedDate.getDay() + 6) % 7]} at ${h}`}
                       className="time-slot-height border-t border-surface-container-low/80 relative group cursor-pointer hover:bg-primary/5 transition-colors"
                     >
-                      {/* Subtle hover slot indicator */}
-                      <div className="absolute inset-x-1 inset-y-1 rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all pointer-events-none z-0">
-                        <span className="text-[11px] font-medium text-primary flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">add</span>
-                          <span>Double-click to schedule ({h})</span>
+                      <div className="absolute inset-x-2 inset-y-1 rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] opacity-0 group-hover:opacity-100 flex items-center justify-between px-3 transition-all pointer-events-none z-0">
+                        <span className="text-[12px] font-medium text-primary flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                          <span>Double-click to book meeting on {DAY_NAMES_SHORT[(selectedDate.getDay() + 6) % 7]} at {h}</span>
+                        </span>
+                        <span className="text-[11px] text-primary/70 font-semibold">
+                          Click or double click to add
                         </span>
                       </div>
                     </div>
                   ))}
 
-                  {/* Render events for this column with participant type indicators */}
-                  {dayEvents.map((ev) => {
+                  {/* Render Day Events with Full Width & Rich Details */}
+                  {getEventsForDateKey(formatDateKey(selectedDate)).map((ev) => {
                     const pType = ev.participantType || 'human';
                     const cardStyle =
                       pType === 'agent'
-                        ? 'bg-purple-500/10 border-l-4 border-purple-600 text-purple-950 hover:bg-purple-500/20'
+                        ? 'bg-purple-500/10 border-l-4 border-purple-600 text-purple-950 hover:bg-purple-500/15'
                         : pType === 'customer'
-                        ? 'bg-emerald-500/10 border-l-4 border-emerald-600 text-emerald-950 hover:bg-emerald-500/20'
-                        : 'bg-blue-500/10 border-l-4 border-blue-600 text-blue-950 hover:bg-blue-500/20';
+                        ? 'bg-emerald-500/10 border-l-4 border-emerald-600 text-emerald-950 hover:bg-emerald-500/15'
+                        : 'bg-blue-500/10 border-l-4 border-blue-600 text-blue-950 hover:bg-blue-500/15';
 
                     const badgeStyle =
                       pType === 'agent'
@@ -641,36 +1056,337 @@ export default function SchedulePage() {
                           e.stopPropagation();
                           setSelectedEvent(ev);
                         }}
-                        style={{ top: `${ev.topOffset}px`, height: `${ev.height}px` }}
-                        className={`absolute inset-x-1 rounded-xl p-2.5 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
+                        style={{ top: `${ev.topOffset}px`, height: `${Math.max(54, ev.height)}px` }}
+                        className={`absolute inset-x-3 rounded-xl p-3 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
                       >
-                        <div className="flex items-start justify-between gap-1">
-                          <span className="font-title-sm text-title-sm font-bold block truncate leading-tight">
-                            {ev.title}
-                          </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-title-sm text-title-sm font-bold truncate">
+                              {ev.title}
+                            </span>
+                            <span className="text-xs text-on-surface-variant font-medium bg-surface-container px-2 py-0.5 rounded-md shrink-0">
+                              {ev.time}
+                            </span>
+                          </div>
+
                           <span
-                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md font-caption text-[10px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-caption text-[11px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}
                           >
-                            <span className="material-symbols-outlined text-[11px]">{iconName}</span>
+                            <span className="material-symbols-outlined text-[13px]">{iconName}</span>
                             <span>{pType}</span>
                           </span>
                         </div>
-                        <div className="flex items-center justify-between font-body-sm text-[11px] opacity-90 truncate mt-1">
-                          <span className="truncate">{ev.time} • {ev.client}</span>
-                          {ev.location && (
-                            <span className="text-[10px] text-outline font-medium truncate ml-1">
-                              {ev.location.includes('Teams') ? 'Teams' : ev.location}
+
+                        {/* Extra Day View Details */}
+                        <div className="flex items-center gap-4 text-xs font-medium text-on-surface-variant mt-1.5 flex-wrap">
+                          <span className="flex items-center gap-1 text-on-surface font-semibold">
+                            <span className="material-symbols-outlined text-xs text-primary">account_circle</span>
+                            <span>{ev.client}</span>
+                          </span>
+
+                          {ev.email && (
+                            <span className="flex items-center gap-1 text-primary">
+                              <span className="material-symbols-outlined text-xs">mail</span>
+                              <span>{ev.email}</span>
                             </span>
                           )}
+
+                          {ev.phone && (
+                            <span className="flex items-center gap-1 text-primary">
+                              <span className="material-symbols-outlined text-xs">call</span>
+                              <span>{ev.phone}</span>
+                            </span>
+                          )}
+
+                          {ev.location && (
+                            <span className="flex items-center gap-1 text-outline">
+                              <span className="material-symbols-outlined text-xs">videocam</span>
+                              <span>{ev.location}</span>
+                            </span>
+                          )}
+
+                          <span className="ml-auto text-[11px] text-emerald-700 font-semibold bg-emerald-500/15 px-2 py-0.2 rounded-md">
+                            {ev.status || 'Confirmed'}
+                          </span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              );
-            })}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* -------------------------------------------------------------------------------- */}
+        {/* VIEW 2: WEEK VIEW */}
+        {/* -------------------------------------------------------------------------------- */}
+        {activeView === 'Week' && (
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Dynamic Week Day Columns Header */}
+            <div className="grid grid-cols-8 border-b border-surface-container bg-surface-container-low/70 shrink-0">
+              <div className="w-18 border-r border-surface-container py-2.5 text-center font-caption text-caption text-outline font-semibold">
+                GMT+5:30
+              </div>
+              {currentWeekDays.map((d, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setSelectedDate(d.dateObj);
+                  }}
+                  className={`py-2 text-center border-r border-surface-container last:border-r-0 cursor-pointer hover:bg-surface-container-low transition-colors ${
+                    d.isToday ? 'bg-primary/5' : ''
+                  }`}
+                  title={`Click to select ${d.fullName}`}
+                >
+                  <span className="font-caption text-caption text-on-surface-variant font-semibold uppercase block">
+                    {d.name}
+                  </span>
+                  <span
+                    className={`font-title-sm text-title-sm inline-flex items-center justify-center mt-0.5 ${
+                      d.isToday
+                        ? 'w-7 h-7 rounded-full bg-primary text-on-primary font-bold shadow-sm'
+                        : isSameDay(d.dateObj, selectedDate)
+                        ? 'w-7 h-7 rounded-full bg-primary/15 text-primary font-bold'
+                        : 'text-on-surface font-bold'
+                    }`}
+                  >
+                    {d.date}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Full 24-Hour Time Grid Scroll Area with Double-Click Slots */}
+            <div ref={gridScrollRef} className="flex-1 overflow-y-auto relative">
+              <div className="grid grid-cols-8 relative min-h-[1536px]">
+                {/* 24-Hour Time labels column */}
+                <div className="w-18 border-r border-surface-container select-none">
+                  {hours.map((h, i) => (
+                    <div key={i} className="time-slot-height pr-2 text-right font-caption text-[11px] text-outline font-medium -mt-2 border-t border-surface-container-low">
+                      {h}
+                    </div>
+                  ))}
+                </div>
+
+                {/* 7 Days Columns */}
+                {currentWeekDays.map((day, colIdx) => {
+                  const dayEvents = getEventsForDateKey(day.dateKey);
+                  return (
+                    <div
+                      key={colIdx}
+                      className={`relative border-r border-surface-container last:border-r-0 ${
+                        day.isToday ? 'bg-primary/5' : ''
+                      }`}
+                    >
+                      {/* Interactive Double-Click Time Slots for all 24 hours */}
+                      {hours.map((h, hrIdx) => (
+                        <div
+                          key={hrIdx}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            handleSlotDoubleClick(day.dateObj, hrIdx);
+                          }}
+                          title={`Double-click to schedule on ${day.name} ${day.date} at ${h}`}
+                          className="time-slot-height border-t border-surface-container-low/80 relative group cursor-pointer hover:bg-primary/5 transition-colors"
+                        >
+                          {/* Subtle hover slot indicator */}
+                          <div className="absolute inset-x-1 inset-y-1 rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all pointer-events-none z-0">
+                            <span className="text-[11px] font-medium text-primary flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px]">add</span>
+                              <span>Double-click ({h})</span>
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Render events for this column with participant type indicators */}
+                      {dayEvents.map((ev) => {
+                        const pType = ev.participantType || 'human';
+                        const cardStyle =
+                          pType === 'agent'
+                            ? 'bg-purple-500/10 border-l-4 border-purple-600 text-purple-950 hover:bg-purple-500/20'
+                            : pType === 'customer'
+                            ? 'bg-emerald-500/10 border-l-4 border-emerald-600 text-emerald-950 hover:bg-emerald-500/20'
+                            : 'bg-blue-500/10 border-l-4 border-blue-600 text-blue-950 hover:bg-blue-500/20';
+
+                        const badgeStyle =
+                          pType === 'agent'
+                            ? 'bg-purple-500/20 text-purple-700'
+                            : pType === 'customer'
+                            ? 'bg-emerald-500/20 text-emerald-700'
+                            : 'bg-blue-500/20 text-blue-700';
+
+                        const iconName =
+                          pType === 'agent' ? 'smart_toy' : pType === 'customer' ? 'group' : 'person';
+
+                        return (
+                          <div
+                            key={ev.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEvent(ev);
+                            }}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEvent(ev);
+                            }}
+                            style={{ top: `${ev.topOffset}px`, height: `${ev.height}px` }}
+                            className={`absolute inset-x-1 rounded-xl p-2.5 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
+                          >
+                            <div className="flex items-start justify-between gap-1">
+                              <span className="font-title-sm text-title-sm font-bold block truncate leading-tight">
+                                {ev.title}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md font-caption text-[10px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}
+                              >
+                                <span className="material-symbols-outlined text-[11px]">{iconName}</span>
+                                <span>{pType}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between font-body-sm text-[11px] opacity-90 truncate mt-1">
+                              <span className="truncate">{ev.time} • {ev.client}</span>
+                              {ev.location && (
+                                <span className="text-[10px] text-outline font-medium truncate ml-1">
+                                  {ev.location.includes('Teams') ? 'Teams' : ev.location}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* -------------------------------------------------------------------------------- */}
+        {/* VIEW 3: MONTH VIEW */}
+        {/* -------------------------------------------------------------------------------- */}
+        {activeView === 'Month' && (
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Month Day Headers (Mon - Sun) */}
+            <div className="grid grid-cols-7 border-b border-surface-container bg-surface-container-low/70 shrink-0">
+              {DAY_NAMES_SHORT.map((dName, i) => (
+                <div key={i} className="py-2.5 text-center font-caption text-caption text-on-surface-variant font-bold uppercase tracking-wider border-r border-surface-container last:border-r-0">
+                  {dName}
+                </div>
+              ))}
+            </div>
+
+            {/* Dynamic Month Grid */}
+            <div className="flex-1 grid grid-cols-7 grid-rows-5 overflow-y-auto bg-surface-container-lowest divide-x divide-y divide-surface-container border-b border-surface-container">
+              {mainMonthGrid.map((cell, idx) => {
+                const cellEvents = getEventsForDateKey(cell.dateKey);
+                return (
+                  <div
+                    key={idx}
+                    onDoubleClick={() => handleMonthCellDoubleClick(cell)}
+                    className={`min-h-[110px] p-2 flex flex-col justify-between transition-colors relative group ${
+                      !cell.isCurrentMonth
+                        ? 'bg-surface-container-low/40 opacity-45'
+                        : cell.isToday
+                        ? 'bg-primary/5 hover:bg-primary/10 cursor-pointer'
+                        : 'hover:bg-surface-container-low/70 cursor-pointer'
+                    }`}
+                  >
+                    {/* Top Row: Date & Actions */}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-title-sm text-title-sm inline-flex items-center justify-center font-bold ${
+                            cell.isToday
+                              ? 'w-6 h-6 rounded-full bg-primary text-on-primary shadow-sm text-xs'
+                              : cell.isCurrentMonth
+                              ? 'text-on-surface'
+                              : 'text-outline'
+                          }`}
+                        >
+                          {cell.date}
+                        </span>
+                        {cell.isToday && (
+                          <span className="text-[10px] font-bold text-primary">Today</span>
+                        )}
+                      </div>
+
+                      {/* Event count or quick action button */}
+                      <div className="flex items-center gap-1">
+                        {cellEvents.length > 0 && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-surface-container text-on-surface-variant">
+                            {cellEvents.length} {cellEvents.length === 1 ? 'event' : 'events'}
+                          </span>
+                        )}
+                        {cell.isCurrentMonth && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDate(cell.dateObj);
+                              setActiveView('Day');
+                            }}
+                            className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary hover:text-on-primary rounded transition-all cursor-pointer"
+                            title="Open Day View"
+                          >
+                            View Day
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Events List in Month Cell */}
+                    <div className="flex-1 flex flex-col gap-1 overflow-hidden">
+                      {cellEvents.slice(0, 3).map((ev) => {
+                        const pType = ev.participantType || 'human';
+                        const pillBg =
+                          pType === 'agent'
+                            ? 'bg-purple-500/15 border-purple-400/40 text-purple-900 hover:bg-purple-500/25'
+                            : pType === 'customer'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-900 hover:bg-emerald-500/25'
+                            : 'bg-blue-500/15 border-blue-400/40 text-blue-900 hover:bg-blue-500/25';
+
+                        const iconName =
+                          pType === 'agent' ? 'smart_toy' : pType === 'customer' ? 'group' : 'person';
+
+                        return (
+                          <div
+                            key={ev.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEvent(ev);
+                            }}
+                            title={`${ev.title} (${ev.time}) - ${ev.client}`}
+                            className={`px-2 py-1 rounded-lg border text-[11px] font-medium truncate flex items-center gap-1 cursor-pointer transition-all shadow-2xs ${pillBg}`}
+                          >
+                            <span className="material-symbols-outlined text-[12px] shrink-0">{iconName}</span>
+                            <span className="font-bold shrink-0">{ev.startTime || ev.time.split('-')[0]}</span>
+                            <span className="truncate">{ev.title}</span>
+                          </div>
+                        );
+                      })}
+
+                      {cellEvents.length > 3 && (
+                        <span className="text-[10px] font-semibold text-on-surface-variant pl-1">
+                          +{cellEvents.length - 3} more
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Subtle double-click hint on empty cell */}
+                    {cellEvents.length === 0 && cell.isCurrentMonth && (
+                      <div className="opacity-0 group-hover:opacity-70 text-[10px] text-outline text-center py-1">
+                        + Double-click to add
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Teams-Style Add Event / Schedule Modal with Typable Numbers & Contact Details */}
@@ -706,7 +1422,7 @@ export default function SchedulePage() {
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-base">calendar_clock</span>
                   <span className="font-label-md text-label-md font-semibold">
-                    {daysOfWeek[newEventDayIndex]?.fullDay || 'Today'} • {format12hString(startHour, startMinute, startPeriod)} – {format12hString(endHour, endMinute, endPeriod)}
+                    {DAY_NAMES_FULL[(newEventDateObj.getDay() + 6) % 7]}, {MONTH_NAMES_SHORT[newEventDateObj.getMonth()]} {newEventDateObj.getDate()}, {newEventDateObj.getFullYear()} • {format12hString(startHour, startMinute, startPeriod)} – {format12hString(endHour, endMinute, endPeriod)}
                   </span>
                 </div>
                 <span className="text-[11px] font-medium bg-primary/10 px-2 py-0.5 rounded-md">
@@ -784,24 +1500,6 @@ export default function SchedulePage() {
                     <span className="font-label-sm text-label-sm">Customer</span>
                   </button>
                 </div>
-              </div>
-
-              {/* Day Selection */}
-              <div className="flex flex-col gap-1">
-                <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">
-                  Day of Week
-                </label>
-                <select
-                  value={newEventDayIndex}
-                  onChange={(e) => setNewEventDayIndex(Number(e.target.value))}
-                  className="h-10 px-3 font-body-sm text-body-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner cursor-pointer"
-                >
-                  {daysOfWeek.map((d, i) => (
-                    <option key={i} value={i}>
-                      {d.name} {d.date} ({d.fullDay})
-                    </option>
-                  ))}
-                </select>
               </div>
 
               {/* Typable Time Section (Direct Input Hours, Minutes & Selectable AM/PM) */}
