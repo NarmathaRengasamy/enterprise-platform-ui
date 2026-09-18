@@ -818,3 +818,144 @@ export const INITIAL_SCHEDULE_EVENTS = [
 ];
 
 export const INITIAL_CALENDAR_EVENTS = INITIAL_SCHEDULE_EVENTS;
+
+export const INITIAL_DEVELOPER_AGENTS = [
+  {
+    id: "agt-001",
+    name: "OmniFlow E-Commerce Sales Bot",
+    workflowId: "wf_flow_ecom_prod_9024a",
+    channel: "Web Storefront Widget",
+    model: "Perfox-Omni 2.5",
+    siteKey: "pk_mock_8f93a0d7e4b94c1a8e99bc1209e5",
+    secretKey: "sk_mock_948f10b299e4431a8bc430e719bf9a",
+    accentColor: "#2563eb",
+    position: "bottom-right",
+    status: "Active",
+    statusColor: "emerald",
+    totalCalls: "128,400",
+    avgLatency: "16 ms",
+    assignedEndpoints: ["ep-1", "ep-2"],
+    description: "Handles live product recommendations, checkout assistance, and inventory queries on the store."
+  },
+  {
+    id: "agt-002",
+    name: "Homestay Concierge & Booking Agent",
+    workflowId: "wf_flow_stay_booking_7812b",
+    channel: "Booking Portal & WhatsApp",
+    model: "Perfox-Omni 2.5 Pro",
+    siteKey: "pk_mock_41b8a902c3ef716298aa129038fc",
+    secretKey: "sk_mock_1820a99cbf781a5298ff302194ea",
+    accentColor: "#7c3aed",
+    position: "bottom-right",
+    status: "Active",
+    statusColor: "emerald",
+    totalCalls: "84,210",
+    avgLatency: "22 ms",
+    assignedEndpoints: ["ep-2", "ep-3"],
+    description: "Automates room availability lookups, reservation scheduling, and guest check-in queries."
+  },
+  {
+    id: "agt-003",
+    name: "Support & Claims Triage Assistant",
+    workflowId: "wf_flow_support_triage_3301c",
+    channel: "Customer Help Desk & Email",
+    model: "Claude 3.7 Sonnet (Hybrid)",
+    siteKey: "pk_mock_7720bc19e8314981a0293810fec1",
+    secretKey: "sk_mock_9921e102837482910fbc2819203a",
+    accentColor: "#059669",
+    position: "bottom-left",
+    status: "Active",
+    statusColor: "emerald",
+    totalCalls: "45,600",
+    avgLatency: "28 ms",
+    assignedEndpoints: ["ep-1", "ep-4"],
+    description: "Resolves customer support tickets, return requests, and warranty claims."
+  },
+  {
+    id: "agt-004",
+    name: "Voice AI Dispatcher & Hotline",
+    workflowId: "wf_flow_voice_call_1094d",
+    channel: "Telephony Voice SIP Trunk",
+    model: "Perfox Realtime Voice v2",
+    siteKey: "pk_mock_1992ef3018294a029cba882190ee",
+    secretKey: "sk_mock_382910fa892102938472910293aa",
+    accentColor: "#d97706",
+    position: "embed-inline",
+    status: "Standby",
+    statusColor: "amber",
+    totalCalls: "12,900",
+    avgLatency: "45 ms",
+    assignedEndpoints: ["ep-1", "ep-3"],
+    description: "Low-latency bidirectional voice stream integration for customer telephone hotline."
+  }
+];
+
+export const INITIAL_DEVELOPER_ENDPOINTS = [
+  {
+    id: "ep-1",
+    name: "Primary Event Webhook Gateway",
+    url: "https://api.perfox.com/v1/omniflow-webhook",
+    method: "POST",
+    transport: "HTTP",
+    authType: "bearer",
+    authConfig: {
+      bearerToken: "eyJhGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    },
+    status: "Healthy",
+    statusColor: "emerald",
+    latency: "18 ms",
+    connectedAgentsCount: 3,
+    lastPingStatus: "200 OK",
+    lastPingTime: "2 mins ago"
+  },
+  {
+    id: "ep-2",
+    name: "Schedule & Calendar Booking Sync",
+    url: "https://api.perfox.com/v1/schedule-sync",
+    method: "POST",
+    transport: "HTTP",
+    authType: "apiKey",
+    authConfig: {
+      headerName: "X-Perfox-API-Key",
+      apiKeyValue: "pk_mock_8892019b38f8472910"
+    },
+    status: "Healthy",
+    statusColor: "emerald",
+    latency: "14 ms",
+    connectedAgentsCount: 2,
+    lastPingStatus: "200 OK",
+    lastPingTime: "5 mins ago"
+  },
+  {
+    id: "ep-3",
+    name: "Realtime Chat SSE Event Stream",
+    url: "https://api.perfox.com/v1/agent-sse-stream",
+    method: "GET",
+    transport: "SSE",
+    authType: "none",
+    authConfig: {},
+    status: "Healthy",
+    statusColor: "emerald",
+    latency: "24 ms",
+    connectedAgentsCount: 2,
+    lastPingStatus: "200 OK",
+    lastPingTime: "12 mins ago"
+  },
+  {
+    id: "ep-4",
+    name: "Enterprise CRM & Order Dispatch API",
+    url: "https://crm.homestayblr.in/api/v2/contacts",
+    method: "POST",
+    transport: "HTTP",
+    authType: "basic",
+    authConfig: {
+      basicAuth: "admin_integrations:SecretPass#2026"
+    },
+    status: "Healthy",
+    statusColor: "emerald",
+    latency: "32 ms",
+    connectedAgentsCount: 1,
+    lastPingStatus: "200 OK",
+    lastPingTime: "18 mins ago"
+  }
+];
