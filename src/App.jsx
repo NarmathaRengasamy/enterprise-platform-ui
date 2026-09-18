@@ -6,7 +6,7 @@ import ProductsPage from './pages/ProductsPage';
 import AddEditProductPage from './pages/AddEditProductPage';
 import ProductDetailsPage from './pages/ProductDetailsPage';
 import CategoriesPage from './pages/CategoriesPage';
-import CalendarPage from './pages/CalendarPage';
+import SchedulePage from './pages/SchedulePage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
@@ -65,9 +65,10 @@ export default function App() {
         );
       case 'categories':
         return <CategoriesPage setActiveModule={setActiveModule} />;
+      case 'schedule':
       case 'calendar':
       case 'appointments':
-        return <CalendarPage />;
+        return <SchedulePage />;
       case 'knowledge-base':
       case 'collections':
         return <KnowledgeBasePage />;

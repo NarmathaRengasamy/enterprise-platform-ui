@@ -541,65 +541,121 @@ export const INITIAL_COLLECTIONS = [
   }
 ];
 
-export const INITIAL_CALENDAR_EVENTS = [
+export const INITIAL_SCHEDULE_EVENTS = [
   {
     id: "ev-1",
     title: "Consultation with Apex Group",
     time: "09:00 AM - 10:00 AM",
     startTime: "09:00",
     endTime: "10:00",
-    dayIndex: 3, // Wednesday
-    topOffset: 64, // corresponds to 9am in hourly grid
+    dayIndex: 3, // Thursday
+    topOffset: 576, // 9 * 64
     height: 64,
-    client: "Aarav Sharma",
-    type: "Commercial Quote",
+    client: "Apex Group",
+    email: "contact@apexgroup.com",
+    phone: "+91 98450 12345",
+    attendee: "Aarav Sharma",
+    participantType: "human", // human, agent, customer
+    type: "Staff Consultation",
     location: "Teams Video Call",
     status: "Confirmed",
     statusColor: "emerald"
   },
   {
     id: "ev-2",
+    title: "AI Voice Assistant Bot Demo",
+    time: "10:30 AM - 11:30 AM",
+    startTime: "10:30",
+    endTime: "11:30",
+    dayIndex: 1, // Tuesday
+    topOffset: 672, // 10.5 * 64
+    height: 64,
+    client: "Siddharth Rao",
+    email: "siddharth.rao@techcorp.io",
+    phone: "+91 99880 54321",
+    attendee: "OmniFlow AI Bot #02",
+    participantType: "agent",
+    type: "AI Autonomous Booking",
+    location: "Automated Web Widget",
+    status: "Confirmed",
+    statusColor: "purple"
+  },
+  {
+    id: "ev-3",
     title: "Site Measurement - Villa 402",
     time: "11:30 AM - 01:00 PM",
     startTime: "11:30",
     endTime: "13:00",
-    dayIndex: 3, // Wednesday
-    topOffset: 224,
+    dayIndex: 3, // Thursday
+    topOffset: 736, // 11.5 * 64
     height: 96,
     client: "Priya Patel",
-    type: "On-site Visit",
+    email: "priya.patel@homestayblr.in",
+    phone: "+91 97411 88990",
+    attendee: "Priya Patel (Client)",
+    participantType: "customer",
+    type: "Customer Self-Booked",
     location: "Koramangala 4th Block, BLR",
     status: "Confirmed",
     statusColor: "emerald"
   },
   {
-    id: "ev-3",
+    id: "ev-4",
     title: "Material Selection - Studio",
     time: "02:30 PM - 03:30 PM",
     startTime: "14:30",
     endTime: "15:30",
-    dayIndex: 4, // Thursday
-    topOffset: 416,
+    dayIndex: 4, // Friday
+    topOffset: 928, // 14.5 * 64
     height: 64,
     client: "Vikram Malhotra",
-    type: "Sample Review",
+    email: "vikram.m@luxuryhomes.com",
+    phone: "+91 91234 56780",
+    attendee: "Vikram Malhotra (Client)",
+    participantType: "customer",
+    type: "Customer In-Studio Visit",
     location: "Design Studio Floor 2",
     status: "Pending",
     statusColor: "amber"
   },
   {
-    id: "ev-4",
-    title: "Weekly Omnichannel Review",
+    id: "ev-5",
+    title: "Automated Knowledge Sync Follow-up",
+    time: "01:00 PM - 02:00 PM",
+    startTime: "13:00",
+    endTime: "14:00",
+    dayIndex: 2, // Wednesday
+    topOffset: 832, // 13 * 64
+    height: 64,
+    client: "Acme Logistics",
+    email: "dispatch@acmelogistics.com",
+    phone: "+91 94480 33221",
+    attendee: "Perfox Dispatch Agent",
+    participantType: "agent",
+    type: "Agent Triggered",
+    location: "API Webhook Runner",
+    status: "Confirmed",
+    statusColor: "purple"
+  },
+  {
+    id: "ev-6",
+    title: "Weekly Operations Strategy",
     time: "04:00 PM - 05:00 PM",
     startTime: "16:00",
     endTime: "17:00",
-    dayIndex: 5, // Friday
-    topOffset: 512,
+    dayIndex: 5, // Saturday
+    topOffset: 1024, // 16 * 64
     height: 64,
-    client: "Internal Team",
-    type: "Strategy Sync",
+    client: "Leadership Team",
+    email: "ops-lead@perfox.ai",
+    phone: "+91 98800 11223",
+    attendee: "Narmatha & Core Team",
+    participantType: "human",
+    type: "Internal Human Sync",
     location: "Boardroom A",
     status: "Confirmed",
     statusColor: "emerald"
   }
 ];
+
+export const INITIAL_CALENDAR_EVENTS = INITIAL_SCHEDULE_EVENTS;
