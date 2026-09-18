@@ -1,9 +1,9 @@
 import React from 'react';
-import { INITIAL_PRODUCTS, INITIAL_CONVERSATIONS, INITIAL_CALENDAR_EVENTS } from '../data/mockData';
+import { INITIAL_PRODUCTS, INITIAL_CONVERSATIONS, INITIAL_SCHEDULE_EVENTS } from '../data/mockData';
 
 export default function DashboardPage({ setActiveModule, setSelectedProduct }) {
   const recentProducts = INITIAL_PRODUCTS.slice(0, 4);
-  const recentAppointments = INITIAL_CALENDAR_EVENTS.slice(0, 3);
+  const recentAppointments = INITIAL_SCHEDULE_EVENTS.slice(0, 3);
   const recentConversations = INITIAL_CONVERSATIONS.slice(0, 3);
 
   return (
@@ -242,10 +242,10 @@ export default function DashboardPage({ setActiveModule, setSelectedProduct }) {
               </div>
               <button
                 type="button"
-                onClick={() => setActiveModule('calendar')}
+                onClick={() => setActiveModule('schedule')}
                 className="font-label-sm text-label-sm text-primary hover:text-on-primary-fixed-variant font-semibold inline-flex items-center gap-1 transition-colors"
               >
-                View calendar
+                View schedule
                 <span className="material-symbols-outlined text-sm">arrow_forward</span>
               </button>
             </div>
@@ -253,12 +253,12 @@ export default function DashboardPage({ setActiveModule, setSelectedProduct }) {
               {recentAppointments.map((app) => (
                 <div
                   key={app.id}
-                  onClick={() => setActiveModule('calendar')}
+                  onClick={() => setActiveModule('schedule')}
                   className="p-space-md hover:bg-surface-container-low/60 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-tertiary-fixed/30 flex items-center justify-center text-tertiary flex-shrink-0">
-                      <span className="material-symbols-outlined text-lg">event</span>
+                      <span className="material-symbols-outlined text-lg">calendar_month</span>
                     </div>
                     <div className="flex flex-col">
                       <span className="font-title-sm text-title-sm text-on-surface font-semibold">

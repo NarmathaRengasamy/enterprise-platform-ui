@@ -123,18 +123,18 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                 )}
               </div>
 
-              {/* 4. Calendar */}
+              {/* 4. Schedule */}
               <button
                 type="button"
-                onClick={() => setActiveModule('calendar')}
+                onClick={() => setActiveModule('schedule')}
                 className={`w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
-                  activeModule === 'calendar'
+                  activeModule === 'schedule' || activeModule === 'calendar'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">event</span>
-                <span>Calendar</span>
+                <span className="material-symbols-outlined text-lg">calendar_month</span>
+                <span>Schedule</span>
               </button>
 
               {/* 5. Knowledge Base */}

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 
 export default function DeveloperPage() {
-  const [isStaging, setIsStaging] = useState(false);
   const [showSiteKey, setShowSiteKey] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [siteKeyCopied, setSiteKeyCopied] = useState(false);
@@ -57,37 +56,10 @@ export default function DeveloperPage() {
           </p>
         </div>
 
-        {/* Environment & Actions */}
+        {/* Actions */}
         <div className="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
-          <div className="flex items-center gap-2 px-space-sm py-1.5 rounded-full bg-surface-container-low shadow-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary"></span>
-            </span>
-            <span className="font-label-sm text-label-sm font-semibold text-secondary">
-              {isStaging ? 'Staging (v2.4.0-rc2)' : 'Production (v2.4.0-live)'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 px-space-sm py-1 rounded-xl bg-surface-container-lowest shadow-sm border border-surface-container-high">
-            <span className="font-label-sm text-label-sm text-on-surface-variant">Staging Mode</span>
-            <button
-              type="button"
-              onClick={() => setIsStaging(!isStaging)}
-              className={`w-9 h-5 rounded-full transition-colors relative flex items-center px-0.5 cursor-pointer ${
-                isStaging ? 'bg-primary' : 'bg-surface-container-highest'
-              }`}
-            >
-              <div
-                className={`w-4 h-4 rounded-full bg-surface-container-lowest shadow-sm transition-transform ${
-                  isStaging ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-
           <a
-            className="flex items-center gap-1.5 px-space-sm py-2 rounded-xl bg-surface-container-high text-primary hover:bg-primary-fixed transition-colors font-label-md text-label-md font-medium shadow-sm"
+            className="flex items-center gap-1.5 px-space-sm py-2 rounded-xl bg-surface-container-high text-primary hover:bg-primary-fixed transition-colors font-label-md text-label-md font-medium shadow-sm cursor-pointer"
             href="#docs"
             onClick={(e) => { e.preventDefault(); alert("Opening developer API documentation..."); }}
           >
