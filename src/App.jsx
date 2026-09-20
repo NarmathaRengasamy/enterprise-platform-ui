@@ -16,6 +16,8 @@ import { INITIAL_PRODUCTS } from './data/mockData';
 export default function App() {
   const [activeModule, setActiveModule] = useState('dashboard');
   const [selectedProduct, setSelectedProduct] = useState(INITIAL_PRODUCTS[0]);
+  const [selectedScheduleEvent, setSelectedScheduleEvent] = useState(null);
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(true);
 
   if (!isAuthenticated) {
@@ -29,10 +31,17 @@ export default function App() {
           <DashboardPage
             setActiveModule={setActiveModule}
             setSelectedProduct={setSelectedProduct}
+            setSelectedScheduleEvent={setSelectedScheduleEvent}
+            setSelectedConversationId={setSelectedConversationId}
           />
         );
       case 'conversations':
-        return <ConversationsPage />;
+        return (
+          <ConversationsPage
+            selectedConversationId={selectedConversationId}
+            setSelectedConversationId={setSelectedConversationId}
+          />
+        );
       case 'products':
         return (
           <ProductsPage
@@ -68,7 +77,12 @@ export default function App() {
       case 'schedule':
       case 'calendar':
       case 'appointments':
-        return <SchedulePage />;
+        return (
+          <SchedulePage
+            selectedEvent={selectedScheduleEvent}
+            setSelectedEvent={setSelectedScheduleEvent}
+          />
+        );
       case 'knowledge-base':
       case 'collections':
         return <KnowledgeBasePage />;

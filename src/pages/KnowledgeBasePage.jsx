@@ -428,7 +428,7 @@ export default function KnowledgeBasePage() {
               className="bg-primary-container text-on-primary hover:bg-primary px-space-md py-2 rounded-xl font-label-md text-label-md font-semibold shadow-sm transition-all flex items-center gap-space-2xs cursor-pointer"
             >
               <span className="material-symbols-outlined text-base">create_new_folder</span>
-              <span>+ New Collection</span>
+              <span>New Collection</span>
             </button>
           </div>
 

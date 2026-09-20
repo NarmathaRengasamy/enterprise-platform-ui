@@ -515,20 +515,29 @@ export default function DeveloperPage() {
                 </span>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleToggleAgentStatus(activeAgent.id)}
-                className={`px-3 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
-                  activeAgent.status === 'Active'
-                    ? 'bg-amber-500/10 border-amber-400 text-amber-800 hover:bg-amber-500/20'
-                    : 'bg-emerald-500/10 border-emerald-400 text-emerald-800 hover:bg-emerald-500/20'
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm">
-                  {activeAgent.status === 'Active' ? 'pause' : 'play_arrow'}
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-semibold ${
+                  activeAgent.status === 'Active' ? 'text-emerald-700' : 'text-on-surface-variant'
+                }`}>
+                  {activeAgent.status === 'Active' ? 'Active' : 'Paused'}
                 </span>
-                <span>{activeAgent.status === 'Active' ? 'Pause Agent' : 'Activate Agent'}</span>
-              </button>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={activeAgent.status === 'Active'}
+                  onClick={() => handleToggleAgentStatus(activeAgent.id)}
+                  className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer focus:outline-none ${
+                    activeAgent.status === 'Active' ? 'bg-emerald-600' : 'bg-surface-container-high'
+                  }`}
+                  title={activeAgent.status === 'Active' ? 'Click to Pause Agent' : 'Click to Activate Agent'}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform absolute top-0.5 ${
+                      activeAgent.status === 'Active' ? 'left-[22px]' : 'left-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
             {/* Workflow ID & Channel Info */}

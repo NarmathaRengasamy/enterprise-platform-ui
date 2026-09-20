@@ -131,7 +131,10 @@ const generateMonthGrid = (year, month, todayDate, selectedDate) => {
   return cells;
 };
 
-export default function SchedulePage() {
+export default function SchedulePage({
+  selectedEvent: propSelectedEvent,
+  setSelectedEvent: propSetSelectedEvent
+} = {}) {
   const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
   const [activeView, setActiveView] = useState('Week'); // 'Day' | 'Week' | 'Month'
 
@@ -143,7 +146,30 @@ export default function SchedulePage() {
   const [pickerYear, setPickerYear] = useState(2026);
 
   const [participantFilter, setParticipantFilter] = useState('all'); // 'all', 'human', 'agent', 'customer'
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [internalSelectedEvent, setInternalSelectedEvent] = useState(null);
+
+  const selectedEvent = propSelectedEvent !== undefined ? propSelectedEvent : internalSelectedEvent;
+  const setSelectedEvent = (evt) => {
+    if (propSetSelectedEvent) propSetSelectedEvent(evt);
+    setInternalSelectedEvent(evt);
+  };
+
+  // When an event is selected from outside (e.g. Dashboard), navigate calendar to event date
+  useEffect(() => {
+    if (propSelectedEvent && propSelectedEvent.dateKey) {
+      const parts = propSelectedEvent.dateKey.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const targetDate = new Date(year, month, day);
+        setSelectedDate(targetDate);
+        setSidebarDate(new Date(year, month, 1));
+        setPickerYear(year);
+      }
+    }
+  }, [propSelectedEvent]);
+
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
 
   // New Event Form State with typable numbers and selectable AM/PM
@@ -515,17 +541,17 @@ export default function SchedulePage() {
     setSelectedEvent(null);
   };
 
-  // Header Title Formatting with Dynamic Month/Range and Quick Picker Trigger
+  // Header Title Formatting with Dynamic Single Unified Date Range
   const renderHeaderTitle = () => {
     if (activeView === 'Day') {
-      const dayName = DAY_NAMES_FULL[(selectedDate.getDay() + 6) % 7];
-      const monthName = MONTH_NAMES[selectedDate.getMonth()];
+      const dayName = DAY_NAMES_SHORT[(selectedDate.getDay() + 6) % 7];
+      const monthName = MONTH_NAMES_SHORT[selectedDate.getMonth()];
       const dayNum = selectedDate.getDate();
       const year = selectedDate.getFullYear();
       const isCurToday = isSameDay(selectedDate, todayDate);
 
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 whitespace-nowrap shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -533,6 +559,7 @@ export default function SchedulePage() {
               setIsMonthPickerOpen(!isMonthPickerOpen);
             }}
             className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer"
+            title="Click to jump to another month or year"
           >
             <span>{dayName}, {monthName} {dayNum}, {year}</span>
             <span className="material-symbols-outlined text-base text-outline">expand_more</span>
@@ -557,7 +584,8 @@ export default function SchedulePage() {
             setPickerYear(selectedDate.getFullYear());
             setIsMonthPickerOpen(!isMonthPickerOpen);
           }}
-          className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer"
+          className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer whitespace-nowrap shrink-0"
+          title="Click to jump to another month or year"
         >
           <span>{monthName} {year}</span>
           <span className="material-symbols-outlined text-base text-outline">expand_more</span>
@@ -565,33 +593,36 @@ export default function SchedulePage() {
       );
     }
 
-    // Week View
+    // Week View - Single unified date range with month picker toggle (no duplicate field)
     const firstDay = currentWeekDays[0]?.dateObj || selectedDate;
     const lastDay = currentWeekDays[6]?.dateObj || selectedDate;
-    const startMonth = MONTH_NAMES[firstDay.getMonth()];
-    const endMonth = MONTH_NAMES[lastDay.getMonth()];
-    const year = lastDay.getFullYear();
+    const startMonthShort = MONTH_NAMES_SHORT[firstDay.getMonth()];
+    const endMonthShort = MONTH_NAMES_SHORT[lastDay.getMonth()];
+    const startYear = firstDay.getFullYear();
+    const endYear = lastDay.getFullYear();
 
-    const rangeLabel = `${MONTH_NAMES_SHORT[firstDay.getMonth()]} ${firstDay.getDate()} – ${MONTH_NAMES_SHORT[lastDay.getMonth()]} ${lastDay.getDate()}`;
-    const mainTitle = startMonth === endMonth ? `${startMonth} ${year}` : `${startMonth} – ${endMonth} ${year}`;
+    let formattedWeekTitle = '';
+    if (firstDay.getMonth() === lastDay.getMonth()) {
+      formattedWeekTitle = `${startMonthShort} ${firstDay.getDate()} – ${lastDay.getDate()}, ${startYear}`;
+    } else if (startYear === endYear) {
+      formattedWeekTitle = `${startMonthShort} ${firstDay.getDate()} – ${endMonthShort} ${lastDay.getDate()}, ${startYear}`;
+    } else {
+      formattedWeekTitle = `${startMonthShort} ${firstDay.getDate()}, ${startYear} – ${endMonthShort} ${lastDay.getDate()}, ${endYear}`;
+    }
 
     return (
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setPickerYear(selectedDate.getFullYear());
-            setIsMonthPickerOpen(!isMonthPickerOpen);
-          }}
-          className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer"
-        >
-          <span>{mainTitle}</span>
-          <span className="material-symbols-outlined text-base text-outline">expand_more</span>
-        </button>
-        <span className="text-on-surface-variant font-normal text-body-sm">
-          ({rangeLabel})
-        </span>
-      </div>
+      <button
+        type="button"
+        onClick={() => {
+          setPickerYear(selectedDate.getFullYear());
+          setIsMonthPickerOpen(!isMonthPickerOpen);
+        }}
+        className="flex items-center gap-1.5 hover:text-primary transition-colors text-left font-title-md text-title-md font-bold text-on-surface cursor-pointer whitespace-nowrap shrink-0"
+        title="Click to jump to another month or year"
+      >
+        <span>{formattedWeekTitle}</span>
+        <span className="material-symbols-outlined text-base text-outline">expand_more</span>
+      </button>
     );
   };
 
@@ -778,16 +809,29 @@ export default function SchedulePage() {
             </button>
           </div>
 
-          {/* Quick Info & Hint */}
+          {/* Schedule Summary & Activity Status */}
           <div className="pt-3 border-t border-surface-container">
-            <div className="p-2.5 rounded-xl bg-surface-container-low border border-surface-container text-on-surface-variant text-[11px] space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-on-surface">
-                <span className="material-symbols-outlined text-sm text-primary">calendar_month</span>
-                <span>Teams-Style Navigation</span>
+            <div className="p-3 rounded-xl bg-surface-container-low/70 border border-surface-container text-on-surface space-y-2 shadow-xs">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-outline uppercase tracking-wider text-[10px]">Upcoming Status</span>
+                <span className="text-emerald-700 bg-emerald-500/15 px-1.5 py-0.2 rounded font-mono text-[10px]">
+                  {events.filter((e) => e.status === 'Confirmed').length} Active
+                </span>
               </div>
-              <p className="leading-relaxed opacity-85">
-                Use the top arrows or click the month title to navigate any month, week, or day across years seamlessly.
-              </p>
+              <div className="space-y-1 text-[11px] text-on-surface-variant">
+                <div className="flex items-center justify-between">
+                  <span>Total Scheduled:</span>
+                  <span className="font-semibold text-on-surface">{events.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>AI Agent Bookings:</span>
+                  <span className="font-semibold text-purple-700">{getParticipantCount('agent')}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Human Staff Consults:</span>
+                  <span className="font-semibold text-blue-700">{getParticipantCount('human')}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -867,42 +911,43 @@ export default function SchedulePage() {
         )}
 
         {/* Simplified & Clean Calendar TopBar Header with Dynamic Navigation */}
-        <header className="h-14 bg-surface-container-lowest border-b border-surface-container flex items-center justify-between px-5 shrink-0 z-10">
-          {/* Left: Navigation & Dynamic Date Range */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleNavToday}
-              className="px-3 py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold rounded-lg border border-surface-container transition-colors cursor-pointer"
-            >
-              Today
-            </button>
-            <div className="flex items-center border border-surface-container rounded-lg overflow-hidden bg-surface-container-low">
+        <header className="h-14 bg-surface-container-lowest border-b border-surface-container flex items-center justify-between px-4 sm:px-5 shrink-0 z-10 gap-3">
+          {/* Left: Unified Navigation (<, Today, >) & Single Dynamic Date Title */}
+          <div className="flex items-center gap-3 min-w-0 flex-nowrap shrink-0">
+            {/* Unified Navigation Button Group */}
+            <div className="inline-flex items-center bg-surface-container-low rounded-xl border border-surface-container p-0.5 shadow-xs shrink-0">
               <button
                 type="button"
                 onClick={handleNavPrev}
-                className="p-1.5 hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-lowest text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
                 title={`Previous ${activeView.toLowerCase()}`}
               >
-                <span className="material-symbols-outlined text-base">chevron_left</span>
+                <span className="material-symbols-outlined text-lg">chevron_left</span>
               </button>
-              <div className="w-[1px] h-4 bg-surface-container" />
+              <button
+                type="button"
+                onClick={handleNavToday}
+                className="px-3 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-lowest text-on-surface font-label-md text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Today
+              </button>
               <button
                 type="button"
                 onClick={handleNavNext}
-                className="p-1.5 hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-lowest text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
                 title={`Next ${activeView.toLowerCase()}`}
               >
-                <span className="material-symbols-outlined text-base">chevron_right</span>
+                <span className="material-symbols-outlined text-lg">chevron_right</span>
               </button>
             </div>
+
             {renderHeaderTitle()}
           </div>
 
           {/* Right: Active Filter Badge (when filtered) + View Switcher + Action CTA */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap">
             {participantFilter !== 'all' && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container-low border border-surface-container text-xs text-on-surface">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-surface-container-low border border-surface-container text-xs text-on-surface whitespace-nowrap shadow-xs">
                 <span className="text-on-surface-variant">Filter:</span>
                 <span className="font-semibold capitalize text-primary">{participantFilter}</span>
                 <button
@@ -917,13 +962,13 @@ export default function SchedulePage() {
             )}
 
             {/* View switcher: Day, Week, Month */}
-            <div className="inline-flex rounded-lg bg-surface-container-low p-0.5 border border-surface-container font-label-sm text-label-sm">
+            <div className="inline-flex rounded-xl bg-surface-container-low p-0.5 border border-surface-container font-label-sm text-label-sm shrink-0 shadow-xs">
               {['Day', 'Week', 'Month'].map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setActiveView(v)}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                     activeView === v
                       ? 'bg-surface-container-lowest text-primary font-semibold shadow-xs'
                       : 'text-on-surface-variant hover:text-on-surface'
@@ -938,7 +983,7 @@ export default function SchedulePage() {
             <button
               type="button"
               onClick={handleOpenAddModal}
-              className="px-3.5 py-1.5 bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold rounded-lg flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
+              className="px-3.5 py-1.5 bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold rounded-xl flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap shrink-0"
             >
               <span className="material-symbols-outlined text-base">add</span>
               <span>New Schedule</span>
@@ -987,13 +1032,13 @@ export default function SchedulePage() {
 
             {/* Single Day 24-Hour Timeline */}
             <div ref={dayGridScrollRef} className="flex-1 overflow-y-auto relative bg-surface-container-lowest">
-              <div className="flex relative min-h-[1536px]">
+              <div className="flex relative h-[1536px]">
                 {/* Time Labels Column */}
-                <div className="w-20 border-r border-surface-container select-none shrink-0 bg-surface-container-low/30">
+                <div className="w-16 border-r border-surface-container select-none shrink-0 bg-surface-container-low/30">
                   {hours.map((h, i) => (
                     <div
                       key={i}
-                      className="time-slot-height pr-3 text-right font-caption text-[11px] text-outline font-medium -mt-2 border-t border-surface-container-low"
+                      className="h-16 flex items-start justify-center pt-1.5 font-caption text-[11px] text-outline font-medium border-t border-surface-container-low"
                     >
                       {h}
                     </div>
@@ -1011,7 +1056,7 @@ export default function SchedulePage() {
                         handleSlotDoubleClick(selectedDate, hrIdx);
                       }}
                       title={`Double-click to schedule on ${DAY_NAMES_FULL[(selectedDate.getDay() + 6) % 7]} at ${h}`}
-                      className="time-slot-height border-t border-surface-container-low/80 relative group cursor-pointer hover:bg-primary/5 transition-colors"
+                      className="h-16 border-t border-surface-container-low/80 relative group cursor-pointer hover:bg-primary/5 transition-colors"
                     >
                       <div className="absolute inset-x-2 inset-y-1 rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] opacity-0 group-hover:opacity-100 flex items-center justify-between px-3 transition-all pointer-events-none z-0">
                         <span className="text-[12px] font-medium text-primary flex items-center gap-1.5">
@@ -1124,141 +1169,149 @@ export default function SchedulePage() {
         {activeView === 'Week' && (
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Dynamic Week Day Columns Header */}
-            <div className="grid grid-cols-8 border-b border-surface-container bg-surface-container-low/70 shrink-0">
-              <div className="w-18 border-r border-surface-container py-2.5 text-center font-caption text-caption text-outline font-semibold">
-                GMT+5:30
+            <div className="flex border-b border-surface-container bg-surface-container-low/70 shrink-0">
+              <div className="w-16 border-r border-surface-container py-2.5 flex items-center justify-center gap-1 font-caption text-caption text-outline font-semibold shrink-0">
+                <span className="material-symbols-outlined text-[13px] text-outline">schedule</span>
+                <span>Time</span>
               </div>
-              {currentWeekDays.map((d, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    setSelectedDate(d.dateObj);
-                  }}
-                  className={`py-2 text-center border-r border-surface-container last:border-r-0 cursor-pointer hover:bg-surface-container-low transition-colors ${
-                    d.isToday ? 'bg-primary/5' : ''
-                  }`}
-                  title={`Click to select ${d.fullName}`}
-                >
-                  <span className="font-caption text-caption text-on-surface-variant font-semibold uppercase block">
-                    {d.name}
-                  </span>
-                  <span
-                    className={`font-title-sm text-title-sm inline-flex items-center justify-center mt-0.5 ${
-                      d.isToday
-                        ? 'w-7 h-7 rounded-full bg-primary text-on-primary font-bold shadow-sm'
-                        : isSameDay(d.dateObj, selectedDate)
-                        ? 'w-7 h-7 rounded-full bg-primary/15 text-primary font-bold'
-                        : 'text-on-surface font-bold'
+              <div className="flex-1 grid grid-cols-7">
+                {currentWeekDays.map((d, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      setSelectedDate(d.dateObj);
+                    }}
+                    className={`py-2 text-center border-r border-surface-container last:border-r-0 cursor-pointer hover:bg-surface-container-low transition-colors ${
+                      d.isToday ? 'bg-primary/5' : ''
                     }`}
+                    title={`Click to select ${d.fullName}`}
                   >
-                    {d.date}
-                  </span>
-                </div>
-              ))}
+                    <span className="font-caption text-caption text-on-surface-variant font-semibold uppercase block">
+                      {d.name}
+                    </span>
+                    <span
+                      className={`font-title-sm text-title-sm inline-flex items-center justify-center mt-0.5 ${
+                        d.isToday
+                          ? 'w-7 h-7 rounded-full bg-primary text-on-primary font-bold shadow-sm'
+                          : isSameDay(d.dateObj, selectedDate)
+                          ? 'w-7 h-7 rounded-full bg-primary/15 text-primary font-bold'
+                          : 'text-on-surface font-bold'
+                      }`}
+                    >
+                      {d.date}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Full 24-Hour Time Grid Scroll Area with Double-Click Slots */}
             <div ref={gridScrollRef} className="flex-1 overflow-y-auto relative">
-              <div className="grid grid-cols-8 relative min-h-[1536px]">
+              <div className="flex relative h-[1536px]">
                 {/* 24-Hour Time labels column */}
-                <div className="w-18 border-r border-surface-container select-none">
+                <div className="w-16 border-r border-surface-container select-none bg-surface-container-low/30 shrink-0">
                   {hours.map((h, i) => (
-                    <div key={i} className="time-slot-height pr-2 text-right font-caption text-[11px] text-outline font-medium -mt-2 border-t border-surface-container-low">
+                    <div
+                      key={i}
+                      className="h-16 flex items-start justify-center pt-1.5 font-caption text-[11px] text-outline font-medium border-t border-surface-container-low"
+                    >
                       {h}
                     </div>
                   ))}
                 </div>
 
                 {/* 7 Days Columns */}
-                {currentWeekDays.map((day, colIdx) => {
-                  const dayEvents = getEventsForDateKey(day.dateKey);
-                  return (
-                    <div
-                      key={colIdx}
-                      className={`relative border-r border-surface-container last:border-r-0 ${
-                        day.isToday ? 'bg-primary/5' : ''
-                      }`}
-                    >
-                      {/* Interactive Double-Click Time Slots for all 24 hours */}
-                      {hours.map((h, hrIdx) => (
-                        <div
-                          key={hrIdx}
-                          onDoubleClick={(e) => {
-                            e.stopPropagation();
-                            handleSlotDoubleClick(day.dateObj, hrIdx);
-                          }}
-                          title={`Double-click to schedule on ${day.name} ${day.date} at ${h}`}
-                          className="time-slot-height border-t border-surface-container-low/80 relative group cursor-pointer hover:bg-primary/5 transition-colors"
-                        >
-                          {/* Subtle hover slot indicator */}
-                          <div className="absolute inset-x-1 inset-y-1 rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all pointer-events-none z-0">
-                            <span className="text-[11px] font-medium text-primary flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[13px]">add</span>
-                              <span>Double-click ({h})</span>
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Render events for this column with participant type indicators */}
-                      {dayEvents.map((ev) => {
-                        const pType = ev.participantType || 'human';
-                        const cardStyle =
-                          pType === 'agent'
-                            ? 'bg-purple-500/10 border-l-4 border-purple-600 text-purple-950 hover:bg-purple-500/20'
-                            : pType === 'customer'
-                            ? 'bg-emerald-500/10 border-l-4 border-emerald-600 text-emerald-950 hover:bg-emerald-500/20'
-                            : 'bg-blue-500/10 border-l-4 border-blue-600 text-blue-950 hover:bg-blue-500/20';
-
-                        const badgeStyle =
-                          pType === 'agent'
-                            ? 'bg-purple-500/20 text-purple-700'
-                            : pType === 'customer'
-                            ? 'bg-emerald-500/20 text-emerald-700'
-                            : 'bg-blue-500/20 text-blue-700';
-
-                        const iconName =
-                          pType === 'agent' ? 'smart_toy' : pType === 'customer' ? 'group' : 'person';
-
-                        return (
+                <div className="flex-1 grid grid-cols-7">
+                  {currentWeekDays.map((day, colIdx) => {
+                    const dayEvents = getEventsForDateKey(day.dateKey);
+                    return (
+                      <div
+                        key={colIdx}
+                        className={`relative border-r border-surface-container last:border-r-0 ${
+                          day.isToday ? 'bg-primary/5' : ''
+                        }`}
+                      >
+                        {/* Interactive Double-Click Time Slots for all 24 hours */}
+                        {hours.map((h, hrIdx) => (
                           <div
-                            key={ev.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedEvent(ev);
-                            }}
+                            key={hrIdx}
                             onDoubleClick={(e) => {
                               e.stopPropagation();
-                              setSelectedEvent(ev);
+                              handleSlotDoubleClick(day.dateObj, hrIdx);
                             }}
-                            style={{ top: `${ev.topOffset}px`, height: `${ev.height}px` }}
-                            className={`absolute inset-x-1 rounded-xl p-2.5 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
+                            title={`Double-click to schedule on ${day.name} ${day.date} at ${h}`}
+                            className="h-16 border-t border-surface-container-low/80 relative group cursor-pointer hover:bg-primary/5 transition-colors"
                           >
-                            <div className="flex items-start justify-between gap-1">
-                              <span className="font-title-sm text-title-sm font-bold block truncate leading-tight">
-                                {ev.title}
+                            {/* Subtle hover slot indicator */}
+                            <div className="absolute inset-x-1 inset-y-1 rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all pointer-events-none z-0">
+                              <span className="text-[11px] font-medium text-primary flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[13px]">add</span>
+                                <span>Double-click ({h})</span>
                               </span>
-                              <span
-                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md font-caption text-[10px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}
-                              >
-                                <span className="material-symbols-outlined text-[11px]">{iconName}</span>
-                                <span>{pType}</span>
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between font-body-sm text-[11px] opacity-90 truncate mt-1">
-                              <span className="truncate">{ev.time} • {ev.client}</span>
-                              {ev.location && (
-                                <span className="text-[10px] text-outline font-medium truncate ml-1">
-                                  {ev.location.includes('Teams') ? 'Teams' : ev.location}
-                                </span>
-                              )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                        ))}
+
+                        {/* Render events for this column with participant type indicators */}
+                        {dayEvents.map((ev) => {
+                          const pType = ev.participantType || 'human';
+                          const cardStyle =
+                            pType === 'agent'
+                              ? 'bg-purple-500/10 border-l-4 border-purple-600 text-purple-950 hover:bg-purple-500/20'
+                              : pType === 'customer'
+                              ? 'bg-emerald-500/10 border-l-4 border-emerald-600 text-emerald-950 hover:bg-emerald-500/20'
+                              : 'bg-blue-500/10 border-l-4 border-blue-600 text-blue-950 hover:bg-blue-500/20';
+
+                          const badgeStyle =
+                            pType === 'agent'
+                              ? 'bg-purple-500/20 text-purple-700'
+                              : pType === 'customer'
+                              ? 'bg-emerald-500/20 text-emerald-700'
+                              : 'bg-blue-500/20 text-blue-700';
+
+                          const iconName =
+                            pType === 'agent' ? 'smart_toy' : pType === 'customer' ? 'group' : 'person';
+
+                          return (
+                            <div
+                              key={ev.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedEvent(ev);
+                              }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedEvent(ev);
+                              }}
+                              style={{ top: `${ev.topOffset}px`, height: `${ev.height}px` }}
+                              className={`absolute inset-x-1 rounded-xl p-2.5 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="font-title-sm text-title-sm font-bold block truncate leading-tight">
+                                  {ev.title}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md font-caption text-[10px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}
+                                >
+                                  <span className="material-symbols-outlined text-[11px]">{iconName}</span>
+                                  <span>{pType}</span>
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between font-body-sm text-[11px] opacity-90 truncate mt-1">
+                                <span className="truncate">{ev.time} • {ev.client}</span>
+                                {ev.location && (
+                                  <span className="text-[10px] text-outline font-medium truncate ml-1">
+                                    {ev.location.includes('Teams') ? 'Teams' : ev.location}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
