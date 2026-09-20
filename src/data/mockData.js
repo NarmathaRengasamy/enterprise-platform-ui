@@ -5,7 +5,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD001",
     name: "Urban Tech Minimalist Backpack",
-    shortName: "Product 1",
+    shortName: "Minimalist Backpack",
     sku: "PRD001",
     category: "Electronics",
     categoryCode: "electronics",
@@ -38,7 +38,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD002",
     name: "Classic Chrono Sport Watch",
-    shortName: "Product 2",
+    shortName: "Chrono Sport Watch",
     sku: "PRD002",
     category: "Accessories",
     categoryCode: "accessories",
@@ -70,7 +70,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD003",
     name: "Nordic Minimalist Desk Lamp",
-    shortName: "Product 3",
+    shortName: "Nordic Desk Lamp",
     sku: "PRD003",
     category: "Home",
     categoryCode: "lifestyle",
@@ -102,7 +102,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD004",
     name: "Apex Ergonomic Executive Chair",
-    shortName: "Product 4",
+    shortName: "Apex Ergonomic Chair",
     sku: "PRD004",
     category: "Home",
     categoryCode: "furniture",
@@ -134,7 +134,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD005",
     name: "Solid Oak Motorized Standing Desk",
-    shortName: "Product 5",
+    shortName: "Oak Standing Desk",
     sku: "PRD005",
     category: "Home",
     categoryCode: "furniture",
@@ -166,7 +166,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD006",
     name: "Studio Pro Wireless Headphones",
-    shortName: "Product 6",
+    shortName: "Studio Pro Headphones",
     sku: "PRD006",
     category: "Electronics",
     categoryCode: "electronics",
@@ -198,7 +198,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD007",
     name: "Italian Leather Bifold Wallet",
-    shortName: "Product 7",
+    shortName: "Leather Bifold Wallet",
     sku: "PRD007",
     category: "Accessories",
     categoryCode: "accessories",
@@ -230,7 +230,7 @@ export const INITIAL_PRODUCTS = [
   {
     id: "PRD008",
     name: "Tailored Linen Blend Overshirt",
-    shortName: "Product 8",
+    shortName: "Linen Overshirt",
     sku: "PRD008",
     category: "Fashion",
     categoryCode: "fashion",

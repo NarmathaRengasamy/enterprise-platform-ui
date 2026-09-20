@@ -1,9 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_CONVERSATIONS } from '../data/mockData';
 
-export default function ConversationsPage() {
+export default function ConversationsPage({
+  selectedConversationId: propSelectedConvoId,
+  setSelectedConversationId: propSetSelectedConvoId
+} = {}) {
   const [conversations, setConversations] = useState(INITIAL_CONVERSATIONS);
-  const [activeConvoId, setActiveConvoId] = useState(INITIAL_CONVERSATIONS[0].id);
+  const [internalActiveConvoId, setInternalActiveConvoId] = useState(
+    propSelectedConvoId || INITIAL_CONVERSATIONS[0].id
+  );
+
+  const activeConvoId = propSelectedConvoId !== undefined && propSelectedConvoId !== null
+    ? propSelectedConvoId
+    : internalActiveConvoId;
+
+  const setActiveConvoId = (id) => {
+    if (propSetSelectedConvoId) propSetSelectedConvoId(id);
+    setInternalActiveConvoId(id);
+  };
+
+  useEffect(() => {
+    if (propSelectedConvoId) {
+      setInternalActiveConvoId(propSelectedConvoId);
+    }
+  }, [propSelectedConvoId]);
+
   const [selectedChannelFilter, setSelectedChannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [inputMessage, setInputMessage] = useState('');
@@ -16,7 +37,7 @@ export default function ConversationsPage() {
     if (activeConvo && activeConvo.channel) {
       setComposerChannel(activeConvo.channel);
     }
-  }, [activeConvoId]);
+  }, [activeConvoId, activeConvo]);
 
   const filteredConversations = conversations.filter((c) => {
     const matchesFilter = selectedChannelFilter === 'all' || c.channel === selectedChannelFilter;
