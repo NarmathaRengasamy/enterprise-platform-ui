@@ -1,49 +1,129 @@
-import React, { useState } from 'react';
-import { BRAND_LOGO_URL, USER_AVATAR_URL } from '../../data/mockData';
+import React, { useState, useEffect, useRef } from 'react';
 
-export default function AppLayout({ activeModule, setActiveModule, children, onLogout, notificationsCount = 1 }) {
+export default function AppLayout({ activeModule, setActiveModule, children, onLogout }) {
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
     activeModule === 'products' || activeModule === 'categories' || activeModule === 'add-product' || activeModule === 'product-details'
   );
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const isProductsActive = activeModule === 'products' || activeModule === 'categories' || activeModule === 'add-product' || activeModule === 'product-details';
+  // Notification state
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'notif-1',
+      title: 'Upcoming Consultation',
+      description: 'AI Agent Consultation with Marcus Vance starting at 10:00 AM',
+      time: '10m ago',
+      type: 'schedule',
+      unread: true,
+      icon: 'calendar_month',
+      iconBg: 'bg-blue-500/15 text-blue-600'
+    },
+    {
+      id: 'notif-2',
+      title: 'New WhatsApp Inquiry',
+      description: 'Elena Rostova: "Can you confirm our reorder #4891?"',
+      time: '32m ago',
+      type: 'conversations',
+      unread: true,
+      icon: 'chat',
+      iconBg: 'bg-emerald-500/15 text-emerald-600'
+    },
+    {
+      id: 'notif-3',
+      title: 'Low Inventory Alert',
+      description: 'Urban Tech Minimalist Backpack reached reorder point (18 left)',
+      time: '2h ago',
+      type: 'products',
+      unread: true,
+      icon: 'inventory_2',
+      iconBg: 'bg-amber-500/15 text-amber-600'
+    },
+    {
+      id: 'notif-4',
+      title: 'Agent Task Completed',
+      description: 'Support Bot auto-resolved 14 customer queries today',
+      time: '4h ago',
+      type: 'developer',
+      unread: false,
+      icon: 'smart_toy',
+      iconBg: 'bg-purple-500/15 text-purple-600'
+    }
+  ]);
+
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotificationsOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleMarkAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
+
+  const handleNotificationClick = (notif) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n))
+    );
+    setNotificationsOpen(false);
+    if (notif.type) {
+      setActiveModule(notif.type);
+    }
+  };
+
+  const isProductsActive =
+    activeModule === 'products' ||
+    activeModule === 'categories' ||
+    activeModule === 'add-product' ||
+    activeModule === 'product-details';
 
   return (
     <div className="bg-background font-body-md text-on-surface antialiased min-h-screen">
       {/* Persistent Collapsible Sidebar (240px Desktop) */}
-      <aside className="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none">
+      <aside className="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none border-r border-surface-container/60">
         <div className="flex flex-col">
-          {/* Logo & Brand */}
-          <div 
-            className="h-16 px-space-md flex items-center gap-space-xs cursor-pointer hover:opacity-90 transition-opacity"
+          {/* Streamlined Brand Header with Built-in High-Res Vector Mark */}
+          <div
+            className="h-16 px-4 flex items-center gap-3 cursor-pointer border-b border-surface-container/60 hover:bg-surface-container-low/40 transition-colors"
             onClick={() => setActiveModule('dashboard')}
           >
-            <img 
-              alt="OmniFlow Brand Logo" 
-              className="h-8 w-auto object-contain" 
-              src={BRAND_LOGO_URL} 
-            />
-            <div className="flex flex-col">
-              <span className="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">OmniFlow</span>
-              <span className="text-[10px] text-primary font-semibold tracking-wider uppercase -mt-1">Perfox Assistant</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
+              <span className="material-symbols-outlined text-xl">all_inclusive</span>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-headline-sm text-base text-on-surface tracking-tight font-bold leading-tight truncate">
+                OmniFlow
+              </span>
+              <span className="text-[10px] text-primary font-semibold tracking-wider uppercase">
+                Perfox Assistant
+              </span>
             </div>
           </div>
 
-          {/* Main Navigation Menu */}
-          <div className="px-space-md pt-space-xs">
-            <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider px-space-xs block mb-space-2xs">
-              Main Menu
-            </span>
+          {/* Navigation Menu */}
+          <div className="px-3 pt-3">
             <nav className="flex flex-col gap-1">
               {/* 1. Dashboard */}
               <button
                 type="button"
                 onClick={() => setActiveModule('dashboard')}
-                className={`w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'dashboard'
-                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
@@ -55,17 +135,17 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               <button
                 type="button"
                 onClick={() => setActiveModule('conversations')}
-                className={`w-full flex items-center justify-between px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'conversations'
-                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <div className="flex items-center gap-space-xs">
+                <div className="flex items-center gap-2.5">
                   <span className="material-symbols-outlined text-lg">chat</span>
                   <span>Conversations</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary">
+                <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary font-bold text-[11px]">
                   3
                 </span>
               </button>
@@ -75,17 +155,23 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                 <button
                   type="button"
                   onClick={() => setProductsSubmenuOpen(!productsSubmenuOpen)}
-                  className={`w-full flex items-center justify-between px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                     isProductsActive
                       ? 'text-on-surface font-semibold hover:bg-surface-container-high'
                       : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                   }`}
                 >
-                  <div className="flex items-center gap-space-xs">
-                    <span className={`material-symbols-outlined text-lg ${isProductsActive ? 'text-primary' : ''}`}>inventory_2</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className={`material-symbols-outlined text-lg ${isProductsActive ? 'text-primary' : ''}`}>
+                      inventory_2
+                    </span>
                     <span>Products</span>
                   </div>
-                  <span className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${productsSubmenuOpen ? 'rotate-180' : ''}`}>
+                  <span
+                    className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${
+                      productsSubmenuOpen ? 'rotate-180' : ''
+                    }`}
+                  >
                     expand_more
                   </span>
                 </button>
@@ -96,13 +182,19 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                     <button
                       type="button"
                       onClick={() => setActiveModule('products')}
-                      className={`w-full flex items-center gap-space-xs px-space-xs py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left ${
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                         activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details'
-                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                           : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                       }`}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' ? 'bg-primary-fixed-dim' : 'bg-outline/40'}`} />
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details'
+                            ? 'bg-primary-fixed-dim'
+                            : 'bg-outline/40'
+                        }`}
+                      />
                       <span>All Products</span>
                     </button>
 
@@ -110,13 +202,17 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                     <button
                       type="button"
                       onClick={() => setActiveModule('categories')}
-                      className={`w-full flex items-center gap-space-xs px-space-xs py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left ${
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                         activeModule === 'categories'
-                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                           : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                       }`}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${activeModule === 'categories' ? 'bg-primary-fixed-dim' : 'bg-outline/40'}`} />
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          activeModule === 'categories' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
+                        }`}
+                      />
                       <span>Categories</span>
                     </button>
                   </div>
@@ -127,9 +223,9 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               <button
                 type="button"
                 onClick={() => setActiveModule('schedule')}
-                className={`w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
-                  activeModule === 'schedule' || activeModule === 'calendar'
-                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  activeModule === 'schedule' || activeModule === 'calendar' || activeModule === 'appointments'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
@@ -137,27 +233,13 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                 <span>Schedule</span>
               </button>
 
-              {/* 5. Knowledge Base */}
-              <button
-                type="button"
-                onClick={() => setActiveModule('knowledge-base')}
-                className={`w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
-                  activeModule === 'knowledge-base'
-                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
-                    : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                }`}
-              >
-                <span className="material-symbols-outlined text-lg">menu_book</span>
-                <span>Knowledge Base</span>
-              </button>
-
-              {/* 6. Teams */}
+              {/* 5. Teams */}
               <button
                 type="button"
                 onClick={() => setActiveModule('teams')}
-                className={`w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'teams'
-                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
@@ -165,13 +247,27 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                 <span>Teams</span>
               </button>
 
+              {/* 6. Knowledge Base */}
+              <button
+                type="button"
+                onClick={() => setActiveModule('knowledge-base')}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  activeModule === 'knowledge-base' || activeModule === 'collections'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
+                    : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                }`}
+              >
+                <span className="material-symbols-outlined text-lg">menu_book</span>
+                <span>Knowledge Base</span>
+              </button>
+
               {/* 7. Developer */}
               <button
                 type="button"
                 onClick={() => setActiveModule('developer')}
-                className={`w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm transition-all text-left ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'developer'
-                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
@@ -182,38 +278,30 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
           </div>
         </div>
 
-        {/* Sidebar Support & Settings */}
-        <div className="p-space-md flex flex-col gap-1">
-          <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider px-space-xs block mb-space-2xs">
-            Support
-          </span>
-          <button
-            type="button"
-            onClick={() => setActiveModule('developer')}
-            className="w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all text-left"
-          >
-            <span className="material-symbols-outlined text-lg">settings</span>
-            <span>Settings</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveModule('knowledge-base')}
-            className="w-full flex items-center gap-space-xs px-space-xs py-space-xs rounded-xl font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all text-left"
-          >
-            <span className="material-symbols-outlined text-lg">help</span>
-            <span>Help &amp; Support</span>
-          </button>
+        {/* Professional Sidebar Enterprise Footer */}
+        <div className="p-3.5 border-t border-surface-container/60 bg-surface-container-low/20">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-[11px] font-semibold text-on-surface">Systems Active</span>
+            </div>
+            <span className="text-[10px] font-mono text-outline font-medium bg-surface-container px-1.5 py-0.2 rounded">v2.4.0</span>
+          </div>
+          <div className="flex flex-col gap-0.5 text-[10px] text-on-surface-variant">
+            <span className="text-outline font-medium">Skillmine Enterprise Platform</span>
+            <span className="text-outline/80">&copy; 2026 OmniFlow. All rights reserved.</span>
+          </div>
         </div>
       </aside>
 
       {/* Main Content Area (Offset 64 = 256px) */}
       <div className="pl-64 flex flex-col min-h-screen">
         {/* Top Header */}
-        <header className="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-lg">
+        <header className="fixed top-0 left-64 right-0 h-16 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)] z-40 flex items-center justify-between px-space-lg border-b border-surface-container">
           {/* Universal Search Bar */}
           <div className="flex items-center flex-1 max-w-md">
-            <div className="w-full flex items-center bg-surface-container-low px-space-sm py-space-2xs rounded-xl text-on-surface-variant shadow-inner">
-              <span className="material-symbols-outlined text-lg mr-space-xs text-outline">search</span>
+            <div className="w-full flex items-center bg-surface-container-low px-3.5 py-1.5 rounded-xl text-on-surface-variant shadow-inner border border-surface-container/60">
+              <span className="material-symbols-outlined text-lg mr-2 text-outline">search</span>
               <input
                 type="text"
                 value={searchQuery}
@@ -221,68 +309,157 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                 placeholder="Search products, messages, KB..."
                 className="bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-outline flex-1 focus:outline-none"
               />
-              <span className="font-caption text-caption bg-surface-container-highest text-on-surface-variant px-1.5 py-0.5 rounded-lg font-semibold select-none">
+              <span className="font-caption text-caption bg-surface-container text-on-surface-variant px-1.5 py-0.5 rounded-md font-semibold select-none text-[10px]">
                 ⌘K
               </span>
             </div>
           </div>
 
           {/* Right Header Utilities: Notifications & Profile */}
-          <div className="flex items-center gap-space-md relative">
-            <button
-              aria-label="Notifications"
-              type="button"
-              className="relative p-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
-            >
-              <span className="material-symbols-outlined text-xl">notifications</span>
-              {notificationsCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error ring-2 ring-surface-container-lowest"></span>
-              )}
-            </button>
+          <div className="flex items-center gap-3 relative">
+            {/* Notification Bell with Dropdown */}
+            <div className="relative" ref={notifRef}>
+              <button
+                aria-label="Notifications"
+                type="button"
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className={`relative w-9 h-9 flex items-center justify-center rounded-xl transition-all cursor-pointer border ${
+                  notificationsOpen
+                    ? 'bg-primary-container/10 text-primary border-primary/30 ring-2 ring-primary/15 shadow-xs'
+                    : 'bg-surface-container-low/80 border-surface-container text-on-surface-variant hover:bg-surface-container hover:text-primary hover:border-primary/20 shadow-2xs'
+                }`}
+                title="View notifications"
+              >
+                <span className="material-symbols-outlined text-lg">notifications</span>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error ring-2 ring-white animate-pulse"></span>
+                )}
+              </button>
 
-            {/* Profile Menu Trigger */}
-            <div className="relative">
+              {/* Notification Popover Dropdown */}
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl z-50 border border-slate-200/90 ring-1 ring-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                    <div className="flex items-center gap-2">
+                      <span className="font-title-sm text-title-sm font-bold text-on-surface">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-md bg-primary text-on-primary text-[10px] font-bold">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllRead}
+                        className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 bg-white">
+                    {notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`p-3 flex items-start gap-3 hover:bg-slate-50 transition-colors cursor-pointer ${
+                          n.unread ? 'bg-primary/[0.04]' : 'bg-white'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${n.iconBg}`}>
+                          <span className="material-symbols-outlined text-base">{n.icon}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-title-sm text-xs font-bold text-on-surface truncate">
+                              {n.title}
+                            </span>
+                            <span className="text-[10px] text-outline shrink-0">{n.time}</span>
+                          </div>
+                          <p className="text-xs text-on-surface-variant line-clamp-2 mt-0.5 leading-snug">
+                            {n.description}
+                          </p>
+                        </div>
+                        {n.unread && (
+                          <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5"></span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="p-2.5 border-t border-slate-100 bg-slate-50 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setNotificationsOpen(false)}
+                      className="text-xs font-semibold text-on-surface-variant hover:text-on-surface"
+                    >
+                      Close Notifications
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Menu Trigger & Dropdown */}
+            <div className="relative" ref={profileRef}>
               <div
-                className="flex items-center gap-space-xs cursor-pointer rounded-xl p-space-2xs hover:bg-surface-container-low transition-colors"
+                className={`flex items-center gap-2.5 cursor-pointer rounded-xl pl-1.5 pr-2.5 py-1 border transition-all shadow-2xs ${
+                  profileDropdownOpen
+                    ? 'bg-surface-container border-primary/30 ring-2 ring-primary/15'
+                    : 'bg-surface-container-low/80 border-surface-container hover:bg-surface-container hover:border-primary/20'
+                }`}
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
-                <img
-                  alt="Profile"
-                  className="w-8 h-8 rounded-full object-cover"
-                  src={USER_AVATAR_URL}
-                />
-                <div className="flex flex-col text-left">
-                  <span className="font-title-sm text-title-sm text-on-surface leading-tight">Sarah Jenkins</span>
-                  <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Admin</span>
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-primary to-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-xs ring-1 ring-primary/30">
+                  SJ
                 </div>
-                <span className="material-symbols-outlined text-base text-outline ml-1">expand_more</span>
+                <div className="flex flex-col text-left sm:flex">
+                  <span className="font-title-sm text-xs text-on-surface font-bold leading-tight">Sarah Jenkins</span>
+                  <span className="font-caption text-[9.5px] text-on-surface-variant uppercase tracking-wider font-semibold">Admin</span>
+                </div>
+                <span className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-primary' : ''}`}>
+                  expand_more
+                </span>
               </div>
 
               {/* Profile Dropdown */}
               {profileDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-surface-container-lowest rounded-xl shadow-xl z-50 py-2 border border-surface-container-high">
-                  <div className="px-4 py-2 border-b border-surface-container-low">
-                    <p className="font-title-sm text-title-sm text-on-surface">Sarah Jenkins</p>
-                    <p className="font-caption text-caption text-outline">sarah@omniflow.io</p>
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl z-50 py-2 border border-slate-200/90 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70">
+                    <p className="font-title-sm text-sm text-on-surface font-bold">Sarah Jenkins</p>
+                    <p className="font-caption text-xs text-outline">sarah@omniflow.io</p>
                   </div>
+                  <div className="py-1">
+                    <button
+                      onClick={() => {
+                        setActiveModule('teams');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base text-outline">groups</span>
+                      <span>Manage Team</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveModule('developer');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base text-outline">terminal</span>
+                      <span>Developer API</span>
+                    </button>
+                  </div>
+                  <div className="h-px bg-slate-100 my-1" />
                   <button
-                    onClick={() => { setActiveModule('teams'); setProfileDropdownOpen(false); }}
-                    className="w-full text-left px-4 py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-base text-outline">account_circle</span>
-                    <span>Manage Account</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveModule('developer'); setProfileDropdownOpen(false); }}
-                    className="w-full text-left px-4 py-2 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-base text-outline">key</span>
-                    <span>API Credentials</span>
-                  </button>
-                  <div className="h-px bg-surface-container-low my-1" />
-                  <button
-                    onClick={() => { setProfileDropdownOpen(false); onLogout?.(); }}
-                    className="w-full text-left px-4 py-2 font-body-sm text-body-sm text-error hover:bg-error-container/30 flex items-center gap-2"
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      onLogout?.();
+                    }}
+                    className="w-full text-left px-4 py-2 font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2.5 cursor-pointer font-semibold transition-colors"
                   >
                     <span className="material-symbols-outlined text-base text-error">logout</span>
                     <span>Sign Out</span>
@@ -294,10 +471,12 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
         </header>
 
         {/* Dynamic Page Container */}
-        <main className="w-full pt-16 px-space-lg pb-space-xl bg-background flex-1 flex flex-col">
+        <main className="w-full pt-[5.25rem] px-space-lg pb-space-lg bg-background flex-1 flex flex-col">
           {children}
         </main>
       </div>
     </div>
   );
 }
+
+

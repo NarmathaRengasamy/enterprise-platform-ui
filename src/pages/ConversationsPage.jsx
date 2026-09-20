@@ -104,7 +104,7 @@ export default function ConversationsPage({
   const emojis = ['👍', '👋', '✅', '📦', '💬', '🎉', '📋', '⭐'];
 
   return (
-    <div className="flex w-full h-[calc(100vh-5.5rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container">
+    <div className="flex w-full h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container">
       {/* LEFT PANEL: Conversations list */}
       <div className="w-80 md:w-96 flex flex-col bg-surface-container-lowest shrink-0 border-r border-surface-container">
         {/* Panel Header */}

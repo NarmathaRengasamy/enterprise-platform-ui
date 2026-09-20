@@ -627,10 +627,10 @@ export default function SchedulePage({
   };
 
   return (
-    <div className="flex w-full h-[calc(100vh-5.5rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container select-none">
+    <div className="flex w-full h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container select-none">
       {/* Mini Schedule Navigation Sidebar */}
-      <aside className="w-[245px] flex-shrink-0 bg-surface-container-lowest border-r border-surface-container flex flex-col h-full z-20">
-        <div className="h-14 flex items-center px-4 border-b border-surface-container">
+      <aside className="w-[260px] flex-shrink-0 bg-surface-container-lowest border-r border-surface-container flex flex-col h-full z-20 overflow-hidden">
+        <div className="h-14 flex items-center px-4 border-b border-surface-container shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
               <span className="material-symbols-outlined text-lg">calendar_month</span>
@@ -640,8 +640,8 @@ export default function SchedulePage({
         </div>
 
         {/* Mini Dynamic Calendar */}
-        <div className="px-3.5 py-3">
-          <div className="flex items-center justify-between mb-2.5">
+        <div className="px-3.5 pt-3 pb-2 shrink-0">
+          <div className="flex items-center justify-between mb-2">
             <button
               type="button"
               onClick={() => {
@@ -673,11 +673,11 @@ export default function SchedulePage({
             </div>
           </div>
 
-          <div className="grid grid-cols-7 text-center font-caption text-[11px] font-semibold text-on-surface-variant uppercase mb-1">
+          <div className="grid grid-cols-7 text-center font-caption text-xs font-semibold text-on-surface-variant uppercase mb-1">
             <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
           </div>
 
-          <div className="grid grid-cols-7 text-center font-body-sm text-[12px] font-normal leading-6 gap-y-0.5 relative">
+          <div className="grid grid-cols-7 text-center font-body-sm text-xs font-normal gap-y-0.5 relative">
             {sidebarMonthGrid.map((c, i) => {
               const isSelected = isSameDay(c.dateObj, selectedDate);
               return (
@@ -686,18 +686,18 @@ export default function SchedulePage({
                   onClick={() => {
                     setSelectedDate(c.dateObj);
                   }}
-                  className={`cursor-pointer transition-colors text-center rounded-full ${
+                  className={`cursor-pointer transition-colors text-center rounded-full flex items-center justify-center w-7 h-7 mx-auto ${
                     !c.isCurrentMonth
                       ? 'text-outline/40 hover:bg-surface-container-low'
                       : c.isToday
-                      ? 'flex items-center justify-center font-bold text-on-primary'
+                      ? 'font-bold text-on-primary'
                       : isSelected
                       ? 'bg-primary/20 text-primary font-bold'
                       : 'text-on-surface hover:bg-surface-container-low'
                   }`}
                 >
                   {c.isToday ? (
-                    <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-sm text-on-primary">
+                    <span className="w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-xs text-on-primary text-xs">
                       {c.date}
                     </span>
                   ) : (
@@ -709,128 +709,132 @@ export default function SchedulePage({
           </div>
         </div>
 
-        {/* Sidebar Filters & Actions */}
-        <div className="mt-2 pt-3 border-t border-surface-container flex-1 px-3 space-y-3 overflow-y-auto">
+        {/* Sidebar Filters & Actions with Consistent Unified Spacing */}
+        <div className="pt-3 border-t border-surface-container px-3.5 space-y-3 shrink-0">
           <button
             type="button"
             onClick={handleOpenAddModal}
-            className="flex items-center justify-center space-x-1.5 font-label-md text-label-md font-semibold text-primary bg-primary-container/15 hover:bg-primary-container/30 w-full px-3 py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
+            className="flex items-center justify-center space-x-1.5 font-label-md text-xs font-semibold text-primary bg-primary-container/15 hover:bg-primary-container/30 w-full px-3 py-2 rounded-xl transition-all cursor-pointer shadow-xs"
           >
             <span className="material-symbols-outlined text-base">add_circle</span>
             <span>New Schedule</span>
           </button>
 
-          {/* Participant Type Filters in Sidebar */}
-          <div className="space-y-1.5 pt-1">
-            <div className="flex items-center justify-between font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant px-1">
-              <span>Filter by Participant</span>
+          {/* Participant Type Filters (2x2 Grid) */}
+          <div>
+            <div className="flex items-center justify-between font-caption text-[11px] uppercase tracking-wider font-bold text-on-surface-variant px-1 mb-1.5">
+              <span>Filter Participant</span>
             </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {/* All */}
+              <button
+                type="button"
+                onClick={() => setParticipantFilter('all')}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                  participantFilter === 'all'
+                    ? 'bg-primary text-on-primary font-bold shadow-xs'
+                    : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                }`}
+              >
+                <span>All</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                  participantFilter === 'all' ? 'bg-on-primary/20 text-on-primary' : 'bg-surface-container text-on-surface-variant'
+                }`}>
+                  {getParticipantCount('all')}
+                </span>
+              </button>
 
-            {/* All Filter */}
-            <button
-              type="button"
-              onClick={() => setParticipantFilter('all')}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-body-sm text-body-sm transition-colors text-left cursor-pointer ${
-                participantFilter === 'all'
-                  ? 'bg-primary/10 text-primary font-semibold'
-                  : 'text-on-surface hover:bg-surface-container-low'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-base text-primary">select_all</span>
-                <span>All Participants</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded-md font-caption text-[11px] bg-surface-container text-on-surface-variant">
-                {getParticipantCount('all')}
-              </span>
-            </button>
+              {/* Human */}
+              <button
+                type="button"
+                onClick={() => setParticipantFilter('human')}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                  participantFilter === 'human'
+                    ? 'bg-blue-600 text-white font-bold shadow-xs'
+                    : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${participantFilter === 'human' ? 'bg-white' : 'bg-blue-500'}`}></span>
+                  <span>Staff</span>
+                </span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                  participantFilter === 'human' ? 'bg-white/20 text-white' : 'bg-surface-container text-on-surface-variant'
+                }`}>
+                  {getParticipantCount('human')}
+                </span>
+              </button>
 
-            {/* Human Filter */}
-            <button
-              type="button"
-              onClick={() => setParticipantFilter('human')}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-body-sm text-body-sm transition-colors text-left cursor-pointer ${
-                participantFilter === 'human'
-                  ? 'bg-blue-500/15 text-blue-600 font-semibold'
-                  : 'text-on-surface hover:bg-surface-container-low'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-blue-500/20 text-blue-600 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-xs">person</span>
-                </div>
-                <span>Human Staff</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded-md font-caption text-[11px] bg-surface-container text-on-surface-variant">
-                {getParticipantCount('human')}
-              </span>
-            </button>
+              {/* Agent */}
+              <button
+                type="button"
+                onClick={() => setParticipantFilter('agent')}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                  participantFilter === 'agent'
+                    ? 'bg-purple-600 text-white font-bold shadow-xs'
+                    : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${participantFilter === 'agent' ? 'bg-white' : 'bg-purple-500'}`}></span>
+                  <span>Agent</span>
+                </span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                  participantFilter === 'agent' ? 'bg-white/20 text-white' : 'bg-surface-container text-on-surface-variant'
+                }`}>
+                  {getParticipantCount('agent')}
+                </span>
+              </button>
 
-            {/* Agent Filter */}
-            <button
-              type="button"
-              onClick={() => setParticipantFilter('agent')}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-body-sm text-body-sm transition-colors text-left cursor-pointer ${
-                participantFilter === 'agent'
-                  ? 'bg-purple-500/15 text-purple-600 font-semibold'
-                  : 'text-on-surface hover:bg-surface-container-low'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-purple-500/20 text-purple-600 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-xs">smart_toy</span>
-                </div>
-                <span>AI Agent</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded-md font-caption text-[11px] bg-surface-container text-on-surface-variant">
-                {getParticipantCount('agent')}
-              </span>
-            </button>
-
-            {/* Customer Filter */}
-            <button
-              type="button"
-              onClick={() => setParticipantFilter('customer')}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-body-sm text-body-sm transition-colors text-left cursor-pointer ${
-                participantFilter === 'customer'
-                  ? 'bg-emerald-500/15 text-emerald-600 font-semibold'
-                  : 'text-on-surface hover:bg-surface-container-low'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-600 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-xs">group</span>
-                </div>
-                <span>Customer</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded-md font-caption text-[11px] bg-surface-container text-on-surface-variant">
-                {getParticipantCount('customer')}
-              </span>
-            </button>
+              {/* Customer */}
+              <button
+                type="button"
+                onClick={() => setParticipantFilter('customer')}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                  participantFilter === 'customer'
+                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                    : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${participantFilter === 'customer' ? 'bg-white' : 'bg-emerald-500'}`}></span>
+                  <span>Client</span>
+                </span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                  participantFilter === 'customer' ? 'bg-white/20 text-white' : 'bg-surface-container text-on-surface-variant'
+                }`}>
+                  {getParticipantCount('customer')}
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Schedule Summary & Activity Status */}
-          <div className="pt-3 border-t border-surface-container">
-            <div className="p-3 rounded-xl bg-surface-container-low/70 border border-surface-container text-on-surface space-y-2 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-outline uppercase tracking-wider text-[10px]">Upcoming Status</span>
-                <span className="text-emerald-700 bg-emerald-500/15 px-1.5 py-0.2 rounded font-mono text-[10px]">
-                  {events.filter((e) => e.status === 'Confirmed').length} Active
-                </span>
+          <div className="p-3 rounded-xl bg-surface-container-low/70 border border-surface-container text-on-surface space-y-2 shadow-xs">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-outline uppercase tracking-wider text-[10px]">Upcoming Status</span>
+              <span className="text-emerald-700 bg-emerald-500/15 px-2 py-0.5 rounded-md font-mono text-[10px] font-bold">
+                {events.filter((e) => e.status === 'Confirmed').length} Active
+              </span>
+            </div>
+            <div className="space-y-1.5 text-xs text-on-surface-variant pt-0.5">
+              <div className="flex items-center justify-between">
+                <span>Total Scheduled:</span>
+                <span className="font-bold text-on-surface">{events.length}</span>
               </div>
-              <div className="space-y-1 text-[11px] text-on-surface-variant">
-                <div className="flex items-center justify-between">
-                  <span>Total Scheduled:</span>
-                  <span className="font-semibold text-on-surface">{events.length}</span>
-                </div>
-                <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
                   <span>AI Agent Bookings:</span>
-                  <span className="font-semibold text-purple-700">{getParticipantCount('agent')}</span>
-                </div>
-                <div className="flex items-center justify-between">
+                </span>
+                <span className="font-bold text-purple-700">{getParticipantCount('agent')}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                   <span>Human Staff Consults:</span>
-                  <span className="font-semibold text-blue-700">{getParticipantCount('human')}</span>
-                </div>
+                </span>
+                <span className="font-bold text-blue-700">{getParticipantCount('human')}</span>
               </div>
             </div>
           </div>
