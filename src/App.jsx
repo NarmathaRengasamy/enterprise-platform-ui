@@ -11,11 +11,12 @@ import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import LoginPage from './pages/LoginPage';
-import { INITIAL_PRODUCTS } from './data/mockData';
+import { INITIAL_PRODUCTS, INITIAL_CATEGORIES } from './data/mockData';
 
 export default function App() {
   const [activeModule, setActiveModule] = useState('dashboard');
   const [selectedProduct, setSelectedProduct] = useState(INITIAL_PRODUCTS[0]);
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
   const [isAuthenticated, setIsAuthenticated] = useState(true);
 
   if (!isAuthenticated) {
@@ -46,6 +47,7 @@ export default function App() {
             setActiveModule={setActiveModule}
             selectedProduct={null}
             isEditing={false}
+            categories={categories}
           />
         );
       case 'edit-product':
@@ -54,6 +56,7 @@ export default function App() {
             setActiveModule={setActiveModule}
             selectedProduct={selectedProduct}
             isEditing={true}
+            categories={categories}
           />
         );
       case 'product-details':
@@ -64,7 +67,13 @@ export default function App() {
           />
         );
       case 'categories':
-        return <CategoriesPage setActiveModule={setActiveModule} />;
+        return (
+          <CategoriesPage
+            setActiveModule={setActiveModule}
+            categories={categories}
+            setCategories={setCategories}
+          />
+        );
       case 'schedule':
       case 'calendar':
       case 'appointments':

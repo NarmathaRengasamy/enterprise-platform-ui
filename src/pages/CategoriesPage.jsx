@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { INITIAL_CATEGORIES } from '../data/mockData';
 
-export default function CategoriesPage({ setActiveModule }) {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+export default function CategoriesPage({ setActiveModule, categories: categoriesProp, setCategories: setCategoriesProp }) {
+  const [localCategories, setLocalCategories] = useState(INITIAL_CATEGORIES);
+  const categories = categoriesProp !== undefined ? categoriesProp : localCategories;
+  const setCategories = setCategoriesProp !== undefined ? setCategoriesProp : setLocalCategories;
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);

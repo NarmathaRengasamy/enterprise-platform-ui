@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
-import { INITIAL_PRODUCTS } from '../data/mockData';
+import React, { useRef, useState } from 'react';
+import { INITIAL_PRODUCTS, INITIAL_CATEGORIES } from '../data/mockData';
+import VisualAssetsUploader, {
+  createEmptyMedia,
+  flattenMedia,
+  countMedia,
+  releasePreviews
+} from '../components/VisualAssetsUploader';
 
 // Industry-agnostic presets to accelerate setup for any business vertical
 const INDUSTRY_PRESETS = [
@@ -50,25 +56,19 @@ const INDUSTRY_PRESETS = [
   }
 ];
 
-export default function AddEditProductPage({ setActiveModule, selectedProduct, isEditing: isEditingProp }) {
+export default function AddEditProductPage({ setActiveModule, selectedProduct, isEditing: isEditingProp, categories: categoriesProp }) {
   const isEditing = isEditingProp !== undefined ? isEditingProp : Boolean(selectedProduct && selectedProduct.id);
-  const [productName, setProductName] = useState(isEditing ? (selectedProduct?.name || '') : 'Urban Tech Minimalist Backpack');
-  const [sku, setSku] = useState(isEditing ? (selectedProduct?.sku || '') : 'UT-BP-009');
-  const [category, setCategory] = useState(isEditing ? (selectedProduct?.categoryCode || 'accessories') : 'accessories');
-  const [description, setDescription] = useState(
-    isEditing
-      ? (selectedProduct?.description || '')
-      : 'Engineered with waterproof ballistic nylon and ergonomic memory-foam straps. Features an internal padded 16-inch laptop compartment, hidden passport pocket, and quick-access magnetic modular pockets for effortless daily transit.'
-  );
+  const categoriesList = categoriesProp && categoriesProp.length > 0 ? categoriesProp : INITIAL_CATEGORIES;
 
-  const [mediaList, setMediaList] = useState(
-    (isEditing && selectedProduct?.gallery)
-      ? selectedProduct.gallery
-      : [
-          { id: 0, label: "Front View", src: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80" },
-          { id: 1, label: "Side View", src: "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=800&q=80" },
-          { id: 2, label: "Angled", src: "https://images.unsplash.com/photo-1546938576-6e6a64f317cc?auto=format&fit=crop&w=800&q=80" }
-        ]
+  const [productName, setProductName] = useState(isEditing ? (selectedProduct?.name || '') : '');
+  const [sku, setSku] = useState(isEditing ? (selectedProduct?.sku || '') : '');
+  const [category, setCategory] = useState(
+    isEditing
+      ? (selectedProduct?.category || selectedProduct?.categoryCode || (categoriesList[0]?.name || ''))
+      : (categoriesList[0]?.name || '')
+  );
+  const [description, setDescription] = useState(
+    isEditing ? (selectedProduct?.description || '') : ''
   );
 
   // Business-Agnostic Variants & Combinations State
@@ -79,53 +79,33 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
           title: v.value ? `${v.option || 'Option'}: ${v.value}` : 'Standard Package',
           attributes: [{ name: v.option || 'Option', value: v.value || 'Standard' }],
           sku: `${sku}-${(v.value || 'STD').substring(0, 3).toUpperCase()}`,
-          price: Number(v.price) || 1299,
-          capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 15 : Number(v.stock) || 15,
+          price: Number(v.price) || 0,
+          capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock) || 0,
           capacityUnit: 'units',
+          media: createEmptyMedia(),
           status: String(v.stock || '').toLowerCase().includes('low') ? 'Limited' : 'Available'
         }))
-      : [
-          {
-            id: 'var-1',
-            title: 'Medium (20L) · Stealth Slate',
-            attributes: [
-              { name: 'Size', value: 'Medium (20L)' },
-              { name: 'Colorway', value: 'Stealth Slate' }
-            ],
-            sku: 'UT-BP-M-SLT',
-            price: 3499,
-            capacity: 18,
-            capacityUnit: 'units',
-            status: 'Available'
-          },
-          {
-            id: 'var-2',
-            title: 'Large (28L) · Stealth Slate',
-            attributes: [
-              { name: 'Size', value: 'Large (28L)' },
-              { name: 'Colorway', value: 'Stealth Slate' }
-            ],
-            sku: 'UT-BP-L-SLT',
-            price: 4199,
-            capacity: 12,
-            capacityUnit: 'units',
-            status: 'Available'
-          },
-          {
-            id: 'var-3',
-            title: 'Large (28L) · Obsidian Black',
-            attributes: [
-              { name: 'Size', value: 'Large (28L)' },
-              { name: 'Colorway', value: 'Obsidian Black' }
-            ],
-            sku: 'UT-BP-L-BLK',
-            price: 4199,
-            capacity: 4,
-            capacityUnit: 'units',
-            status: 'Limited'
-          }
-        ]
+      : []
   );
+
+  // Single Product vs Variants Switch State
+  const [hasVariants, setHasVariants] = useState(
+    isEditing ? Boolean(selectedProduct?.variants && selectedProduct.variants.length > 1) : false
+  );
+  const [basePrice, setBasePrice] = useState(
+    isEditing ? (selectedProduct?.price !== undefined ? selectedProduct.price : '') : ''
+  );
+  const [originalPrice, setOriginalPrice] = useState(
+    isEditing ? (selectedProduct?.originalPrice !== undefined ? selectedProduct.originalPrice : '') : ''
+  );
+  const [stock, setStock] = useState(
+    isEditing ? (selectedProduct?.stock !== undefined ? selectedProduct.stock : '') : ''
+  );
+  const [stockUnit, setStockUnit] = useState('units');
+  const [stockStatus, setStockStatus] = useState('In Stock');
+
+  // Visual assets for the offering as a whole, shown in the side rail in both modes
+  const [offeringMedia, setOfferingMedia] = useState(createEmptyMedia());
 
   // Single Item Modal State (Add / Edit Single Item)
   const [isSingleModalOpen, setIsSingleModalOpen] = useState(false);
@@ -137,14 +117,16 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
   const [singleCapacityUnit, setSingleCapacityUnit] = useState('units');
   const [singleStatus, setSingleStatus] = useState('Available');
 
+  // Visual assets for the option being edited in the dialog
+  const [singleMedia, setSingleMedia] = useState(createEmptyMedia());
+  // Flat list of the assets the option already owned when the dialog opened
+  const mediaOnOpenRef = useRef([]);
+
   // Matrix Generator Modal State (Multi-Dimension Builder)
   const [isMatrixModalOpen, setIsMatrixModalOpen] = useState(false);
   const [builderDimensions, setBuilderDimensions] = useState([
-    { id: 'dim-1', name: 'Option Dimension 1', values: ['Standard', 'Premium'], tagInput: '' },
-    { id: 'dim-2', name: 'Option Dimension 2', values: ['Tier A', 'Tier B'], tagInput: '' }
+    { id: 'dim-1', name: 'Option Dimension 1', values: [], tagInput: '' }
   ]);
-  const [matrixBasePrice, setMatrixBasePrice] = useState(2499);
-  const [matrixDefaultCapacity, setMatrixDefaultCapacity] = useState(20);
   const [matrixCapacityUnit, setMatrixCapacityUnit] = useState('units');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -152,11 +134,13 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
   const handleOpenAddSingle = () => {
     setEditingVariantIndex(null);
     setSingleTitle('');
-    setSingleSku(`${sku}-OPT-${variants.length + 1}`);
-    setSinglePrice('2499');
-    setSingleCapacity('20');
+    setSingleSku(sku ? `${sku}-OPT-${variants.length + 1}` : '');
+    setSinglePrice('');
+    setSingleCapacity('');
     setSingleCapacityUnit('units');
     setSingleStatus('Available');
+    setSingleMedia(createEmptyMedia());
+    mediaOnOpenRef.current = [];
     setIsSingleModalOpen(true);
   };
 
@@ -170,10 +154,26 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     setSingleCapacity(v.capacity !== undefined ? v.capacity : '10');
     setSingleCapacityUnit(v.capacityUnit || 'units');
     setSingleStatus(v.status || 'Available');
+    const media = v.media || createEmptyMedia();
+    setSingleMedia(media);
+    mediaOnOpenRef.current = flattenMedia(media);
     setIsSingleModalOpen(true);
   };
 
+  // Rail edits apply immediately, so a removed preview can be released at once
+  const handleOfferingMediaChange = (next) => {
+    const before = flattenMedia(offeringMedia);
+    const after = flattenMedia(next);
+    releasePreviews(before.filter((m) => !after.some((a) => a.id === m.id)));
+    setOfferingMedia(next);
+  };
+
   const handleCloseSingleModal = () => {
+    // Discarding the dialog must not leak previews for files that were never saved
+    const kept = mediaOnOpenRef.current || [];
+    releasePreviews(flattenMedia(singleMedia).filter((m) => !kept.some((k) => k.id === m.id)));
+
+    setSingleMedia(createEmptyMedia());
     setIsSingleModalOpen(false);
     setEditingVariantIndex(null);
   };
@@ -189,10 +189,16 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         ? variants[editingVariantIndex].attributes
         : [{ name: 'Configuration', value: singleTitle }],
       sku: singleSku || `${sku}-${variants.length + 1}`,
-      price: Number(singlePrice) || 0,
-      capacity: Number(singleCapacity) || 0,
+      price: singlePrice === '' ? '' : Number(singlePrice) || 0,
+      capacity: singleCapacity === '' ? '' : Number(singleCapacity) || 0,
       capacityUnit: singleCapacityUnit || 'units',
-      status: Number(singleCapacity) <= 0 ? 'Sold Out' : singleStatus
+      media: singleMedia,
+      status:
+        singlePrice === '' || singleCapacity === ''
+          ? 'Pending'
+          : Number(singleCapacity) <= 0
+          ? 'Sold Out'
+          : singleStatus
     };
 
     if (editingVariantIndex !== null) {
@@ -201,6 +207,12 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
       setVariants([...variants, updatedItem]);
     }
 
+    // Assets dropped during this edit are now orphaned and safe to release
+    const nextItems = flattenMedia(updatedItem.media);
+    releasePreviews(
+      (mediaOnOpenRef.current || []).filter((m) => !nextItems.some((n) => n.id === m.id))
+    );
+    mediaOnOpenRef.current = nextItems;
     handleCloseSingleModal();
   };
 
@@ -299,10 +311,11 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         title,
         attributes,
         sku: `${sku}-${skuSuffix}`,
-        price: Number(matrixBasePrice) || 1999,
-        capacity: Number(matrixDefaultCapacity) || 10,
+        price: '',
+        capacity: '',
         capacityUnit: matrixCapacityUnit,
-        status: 'Available'
+        media: createEmptyMedia(),
+        status: 'Pending'
       };
     });
 
@@ -310,9 +323,12 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     setIsMatrixModalOpen(false);
   };
 
-  const handleDeleteMedia = (id) => {
-    setMediaList(mediaList.filter((m) => m.id !== id));
-  };
+  // A generated row stays incomplete until both price and stock are filled in
+  const isVariantIncomplete = (v) =>
+    v.price === '' || v.price === null || v.price === undefined ||
+    v.capacity === '' || v.capacity === null || v.capacity === undefined;
+
+  const pendingVariantsCount = variants.filter(isVariantIncomplete).length;
 
   const handleSave = () => {
     setSavedSuccess(true);
@@ -366,18 +382,17 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         </div>
       </div>
 
-      {/* Main Form */}
+      {/* Main Form — details and pricing on the left, visual assets pinned on the right */}
       <form
-        className="flex flex-col gap-space-lg w-full"
+        className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg w-full items-start"
         onSubmit={(e) => {
           e.preventDefault();
           handleSave();
         }}
       >
-        {/* TOP ROW: Side-by-Side Split (General Information & Media) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg w-full items-stretch">
-          {/* Card 1: Offering Details (Left) */}
-          <div className="lg:col-span-6 bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-surface-container flex flex-col gap-space-md justify-between">
+        <div className="lg:col-span-8 flex flex-col gap-space-lg w-full min-w-0">
+        {/* Offering Details */}
+        <div className="w-full bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-surface-container flex flex-col gap-space-md justify-between">
             <div className="flex flex-col gap-space-md">
               <div className="flex items-center justify-between pb-space-2xs border-b border-surface-container-low">
                 <div className="flex items-center gap-2">
@@ -426,9 +441,18 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="offering-category">
-                    Domain / Category <span className="text-error">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="offering-category">
+                      Category <span className="text-error">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setActiveModule('categories')}
+                      className="font-caption text-caption text-primary hover:underline cursor-pointer"
+                    >
+                      + Manage Categories
+                    </button>
+                  </div>
                   <div className="relative flex items-center">
                     <select
                       id="offering-category"
@@ -436,12 +460,11 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                       onChange={(e) => setCategory(e.target.value)}
                       className="w-full h-[42px] pl-space-sm pr-10 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer transition-all"
                     >
-                      <option value="saas">Software &amp; Digital Plans</option>
-                      <option value="hospitality">Hospitality &amp; Rooms</option>
-                      <option value="services">Professional Services &amp; Consulting</option>
-                      <option value="healthcare">Healthcare &amp; Appointments</option>
-                      <option value="accessories">Products &amp; Equipment</option>
-                      <option value="education">Courses &amp; Training</option>
+                      {categoriesList.map((cat) => (
+                        <option key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))}
                     </select>
                     <span className="material-symbols-outlined absolute right-3 text-outline text-lg pointer-events-none">unfold_more</span>
                   </div>
@@ -465,295 +488,423 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                   className="w-full p-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-y transition-all"
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Card 2: Media & Visual Assets (Right) */}
-          <div className="lg:col-span-6 bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-surface-container flex flex-col gap-space-md justify-between">
-            <div className="flex flex-col gap-space-md">
-              <div className="flex items-center justify-between pb-space-2xs border-b border-surface-container-low">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary text-xl">photo_library</span>
-                  <h2 className="font-title-md text-title-md text-on-surface font-semibold">Media &amp; Documents</h2>
-                </div>
-                <span className="font-caption text-caption text-outline">
-                  {mediaList.length} assets attached
-                </span>
-              </div>
-
-              {/* Upload Drop Area */}
-              <div className="border-2 border-dashed border-outline-variant hover:border-primary rounded-xl p-5 flex flex-col items-center justify-center text-center bg-surface-container-low/30 hover:bg-surface-container-low/60 transition-all cursor-pointer group">
-                <div className="w-11 h-11 rounded-full bg-surface-container flex items-center justify-center text-primary mb-2 group-hover:scale-110 transition-transform">
-                  <span className="material-symbols-outlined text-2xl">cloud_upload</span>
-                </div>
-                <span className="font-title-sm text-title-sm text-on-surface font-semibold">
-                  Drop images, banners or docs, or <span className="text-primary underline">browse</span>
-                </span>
-                <span className="font-caption text-caption text-on-surface-variant mt-0.5">
-                  PNG, JPG, PDF, WebP up to 10MB each
-                </span>
-              </div>
-
-              {/* Thumbnails Gallery */}
-              {mediaList.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <span className="font-label-sm text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Attached Visuals
-                  </span>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-                    {mediaList.map((m, idx) => (
-                      <div
-                        key={m.id}
-                        className="relative group rounded-xl overflow-hidden aspect-square bg-surface-container-low border border-surface-container-high shadow-xs"
-                      >
-                        <img
-                          src={m.src}
-                          alt={m.label}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                        {idx === 0 && (
-                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md font-caption text-caption bg-surface-container-lowest/90 text-primary font-semibold text-[10px] shadow-sm">
-                            Primary
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMedia(m.id)}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-md bg-surface-container-lowest/90 text-error opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity hover:bg-error-container"
-                          title="Remove asset"
-                        >
-                          <span className="material-symbols-outlined text-xs">close</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* BOTTOM SECTION: Business-Agnostic Multi-Dimension Variants Matrix */}
+        {/* BOTTOM SECTION: Pricing & Variant Configuration */}
         <div className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-surface-container flex flex-col gap-space-md w-full">
-          {/* Card Header & Global Controls */}
+          {/* Card Header & Switch Toggle */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-space-xs border-b border-surface-container-low">
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5">
-                <span className="material-symbols-outlined text-2xl">dataset</span>
+                <span className="material-symbols-outlined text-2xl">sell</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
-                    Options &amp; Configuration Matrix
+                    Pricing &amp; Variant Configuration
                   </h2>
-                  <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-primary/10 text-primary font-semibold">
-                    {variants.length} packages / combinations
+                  <span className={`px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${
+                    hasVariants ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'
+                  }`}>
+                    {hasVariants ? `${variants.length} packages / combinations` : 'Single Product'}
                   </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Generate combinations across custom dimensions (e.g. Tiers × Cycles, Rooms × Meal Plans, Services × Turnaround)
+                  Set base pricing and inventory stock, or enable multi-dimensional variants for options like sizes, plans, or tiers.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+            {/* Allow Variants Switch Toggle */}
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high shrink-0">
+              <span className="font-label-md text-label-md text-on-surface font-semibold">
+                Allow Variants
+              </span>
               <button
                 type="button"
-                onClick={handleOpenMatrixModal}
-                className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl font-label-md text-label-md text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all cursor-pointer"
-                title="Open Multi-Dimension Matrix Generator"
+                role="switch"
+                aria-checked={hasVariants}
+                onClick={() => {
+                  const nextState = !hasVariants;
+                  setHasVariants(nextState);
+                  if (nextState && variants.length === 0) {
+                    setVariants([
+                      {
+                        id: `var-std-${Date.now()}`,
+                        title: 'Standard Package',
+                        attributes: [{ name: 'Option', value: 'Standard' }],
+                        sku: sku ? `${sku}-STD` : 'STD-001',
+                        price: basePrice === '' ? '' : Number(basePrice) || 0,
+                        capacity: stock === '' ? '' : Number(stock) || 0,
+                        capacityUnit: stockUnit || 'units',
+                        media: createEmptyMedia(),
+                        status:
+                          basePrice === '' || stock === ''
+                            ? 'Pending'
+                            : stockStatus || 'Available'
+                      }
+                    ]);
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  hasVariants ? 'bg-primary' : 'bg-outline-variant/60'
+                }`}
               >
-                <span className="material-symbols-outlined text-base">auto_fix_high</span>
-                <span>Matrix Generator</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenAddSingle}
-                className="inline-flex items-center gap-1.5 px-4 h-9 rounded-xl font-label-md text-label-md text-on-primary bg-primary hover:bg-primary-fixed-variant transition-all shadow-sm cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base">add</span>
-                <span>Add Single Option</span>
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    hasVariants ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
               </button>
             </div>
           </div>
 
-          {/* Quick Presets Ribbon if variants is empty */}
-          {variants.length === 0 && (
-            <div className="p-space-md rounded-xl bg-surface-container-low/60 border border-surface-container flex flex-col gap-3">
-              <div className="flex items-center gap-1.5 text-on-surface font-title-sm text-title-sm font-semibold">
-                <span className="material-symbols-outlined text-primary text-base">magic_button</span>
-                <span>Get started with an industry preset template:</span>
+          {/* IF ALLOW VARIANTS IS FALSE: Single Product View */}
+          {!hasVariants ? (
+            <div className="flex flex-col gap-space-md py-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-md pt-1">
+                {/* Price */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                    Price (₹) <span className="text-error">*</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3.5 text-outline text-sm font-semibold">₹</span>
+                    <input
+                      type="number"
+                      value={basePrice}
+                      onChange={(e) => setBasePrice(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                      required={!hasVariants}
+                    />
+                  </div>
+                </div>
+
+                {/* Original Price */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                    Original Price (₹)
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3.5 text-outline text-sm font-semibold">₹</span>
+                    <input
+                      type="number"
+                      value={originalPrice}
+                      onChange={(e) => setOriginalPrice(e.target.value)}
+                      placeholder="e.g. 1999"
+                      className="w-full h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Stock Quantity */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-label-md text-label-md text-on-surface flex items-center gap-1">
+                    Stock Quantity <span className="text-error">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
+                    placeholder="e.g. 50"
+                    className="w-full h-[42px] px-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    required={!hasVariants}
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-                {INDUSTRY_PRESETS.map((preset, idx) => (
+            </div>
+          ) : (
+            /* IF ALLOW VARIANTS IS TRUE: Multi-Dimension Matrix Builder UI */
+            <div className="flex flex-col gap-space-md w-full">
+              {/* Matrix Controls Header */}
+              <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
                   <button
-                    key={idx}
                     type="button"
-                    onClick={() => {
-                      handleApplyPreset(preset);
-                      setIsMatrixModalOpen(true);
-                    }}
-                    className="p-3 rounded-xl bg-surface-container-lowest border border-surface-container hover:border-primary hover:shadow-xs transition-all flex flex-col items-start gap-1.5 text-left cursor-pointer group"
+                    onClick={handleOpenMatrixModal}
+                    className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl font-label-md text-label-md text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all cursor-pointer"
+                    title="Open Multi-Dimension Matrix Generator"
                   >
-                    <div className="flex items-center gap-1.5 text-primary">
-                      <span className="material-symbols-outlined text-base group-hover:scale-110 transition-transform">
-                        {preset.icon}
-                      </span>
-                      <span className="font-label-md text-label-md font-bold text-on-surface">
-                        {preset.label}
-                      </span>
-                    </div>
-                    <span className="font-caption text-caption text-on-surface-variant line-clamp-1">
-                      {preset.dimensions.map((d) => d.name).join(' × ')}
-                    </span>
+                    <span className="material-symbols-outlined text-base">auto_fix_high</span>
+                    <span>Matrix Generator</span>
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={handleOpenAddSingle}
+                    className="inline-flex items-center gap-1.5 px-4 h-9 rounded-xl font-label-md text-label-md text-on-primary bg-primary hover:bg-primary-fixed-variant transition-all shadow-sm cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base">add</span>
+                    <span>Add Single Option</span>
+                  </button>
+                </div>
+
+              {/* Quick Presets Ribbon if variants is empty */}
+              {variants.length === 0 && (
+                <div className="p-space-md rounded-xl bg-surface-container-low/60 border border-surface-container flex flex-col gap-3">
+                  <div className="flex items-center gap-1.5 text-on-surface font-title-sm text-title-sm font-semibold">
+                    <span className="material-symbols-outlined text-primary text-base">magic_button</span>
+                    <span>Get started with an industry preset template:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                    {INDUSTRY_PRESETS.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          handleApplyPreset(preset);
+                          setIsMatrixModalOpen(true);
+                        }}
+                        className="p-3 rounded-xl bg-surface-container-lowest border border-surface-container hover:border-primary hover:shadow-xs transition-all flex flex-col items-start gap-1.5 text-left cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-1.5 text-primary">
+                          <span className="material-symbols-outlined text-base group-hover:scale-110 transition-transform">
+                            {preset.icon}
+                          </span>
+                          <span className="font-label-md text-label-md font-bold text-on-surface">
+                            {preset.label}
+                          </span>
+                        </div>
+                        <span className="font-caption text-caption text-on-surface-variant line-clamp-1">
+                          {preset.dimensions.map((d) => d.name).join(' × ')}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Reminder to fill in the commercials the generator deliberately left blank */}
+              {pendingVariantsCount > 0 && (
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                  <span className="material-symbols-outlined text-amber-600 text-lg mt-0.5">edit_note</span>
+                  <p className="font-body-sm text-body-sm text-on-surface">
+                    <strong className="font-semibold">
+                      {pendingVariantsCount} of {variants.length} option{variants.length === 1 ? '' : 's'} still need pricing.
+                    </strong>{' '}
+                    <span className="text-on-surface-variant">
+                      Combinations are generated without price or stock — use the
+                      <span className="material-symbols-outlined text-sm align-middle mx-0.5">edit</span>
+                      edit action on each row to set them.
+                    </span>
+                  </p>
+                </div>
+              )}
+
+              {/* Universal Combinations Table */}
+              <div className="w-full overflow-x-auto rounded-xl border border-surface-container-high shadow-xs">
+                <table className="w-full text-left text-on-surface min-w-[700px]">
+                  <thead className="bg-surface-container font-caption text-caption text-on-surface-variant uppercase tracking-wider border-b border-surface-container-high">
+                    <tr>
+                      <th className="py-3 px-space-lg font-semibold" scope="col">Option Descriptor / Dimensions</th>
+                      <th className="py-3 px-space-lg font-semibold" scope="col">Identifier / SKU</th>
+                      <th className="py-3 px-space-lg font-semibold" scope="col">Price / Rate (₹)</th>
+                      <th className="py-3 px-space-lg font-semibold" scope="col">Capacity &amp; Availability</th>
+                      <th className="py-3 px-space-lg font-semibold" scope="col">Status</th>
+                      <th className="py-3 px-space-lg font-semibold text-right" scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm bg-surface-container-lowest">
+                    {variants.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-on-surface-variant">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-outline">
+                              <span className="material-symbols-outlined text-2xl">category</span>
+                            </div>
+                            <p className="font-title-sm text-title-sm text-on-surface font-semibold">No options or combinations defined yet</p>
+                            <p className="text-body-sm text-on-surface-variant max-w-md">
+                              Use the <strong>Matrix Generator</strong> to build multiple combinations in 1-click, or add single packages manually.
+                            </p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <button
+                                type="button"
+                                onClick={handleOpenMatrixModal}
+                                className="px-4 py-2 rounded-xl bg-primary text-on-primary font-semibold text-label-md cursor-pointer hover:bg-primary-fixed-variant"
+                              >
+                                Launch Matrix Generator
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      variants.map((v, i) => (
+                        <tr key={v.id || i} className="hover:bg-surface-container-low/40 transition-colors">
+                          {/* Title & Dimension Chips */}
+                          <td className="py-3.5 px-space-lg">
+                            <div className="flex flex-col gap-1">
+                              <span className="font-title-sm text-title-sm text-on-surface font-semibold">
+                                {v.title}
+                              </span>
+                              {v.attributes && v.attributes.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {v.attributes.map((attr, attrIdx) => (
+                                    <span
+                                      key={attrIdx}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container-low text-on-surface-variant font-caption text-caption border border-surface-container"
+                                    >
+                                      <span className="text-outline font-medium">{attr.name}:</span>
+                                      <span className="font-semibold text-on-surface">{attr.value}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Visual assets attached to this option */}
+                              {countMedia(v.media) > 0 && (
+                                <div className="flex items-center gap-1.5 pt-0.5">
+                                  <div className="flex items-center -space-x-1.5">
+                                    {flattenMedia(v.media).slice(0, 3).map((m) => (
+                                      <span
+                                        key={m.id}
+                                        className="relative w-6 h-6 rounded-md overflow-hidden border border-surface-container-high bg-surface-container-low shadow-xs"
+                                        title={m.name}
+                                      >
+                                        {m.kind === 'video' ? (
+                                          <>
+                                            <video src={m.src} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                                            <span className="absolute inset-0 flex items-center justify-center text-white">
+                                              <span className="material-symbols-outlined text-[11px]">play_arrow</span>
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <img src={m.src} alt={m.name} className="w-full h-full object-cover" />
+                                        )}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <span className="font-caption text-caption text-on-surface-variant">
+                                    {(v.media.primary ? 1 : 0) + (v.media.gallery?.length || 0)} image
+                                    {(v.media.primary ? 1 : 0) + (v.media.gallery?.length || 0) === 1 ? '' : 's'}
+                                    {v.media.videos?.length > 0 && (
+                                      <> · {v.media.videos.length} video{v.media.videos.length === 1 ? '' : 's'}</>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* SKU / Code */}
+                          <td className="py-3.5 px-space-lg font-mono text-body-sm text-on-surface-variant">
+                            <span className="px-2 py-1 rounded bg-surface-container font-semibold text-on-surface text-xs tracking-wide">
+                              {v.sku}
+                            </span>
+                          </td>
+
+                          {/* Price / Commercial Rate — set via the row's edit action */}
+                          <td className="py-3.5 px-space-lg">
+                            {v.price === '' || v.price === null || v.price === undefined ? (
+                              <span className="font-body-sm text-body-sm text-outline italic">Not set</span>
+                            ) : (
+                              <span className="font-bold text-on-surface text-base">
+                                ₹ {Number(v.price).toLocaleString()}.00
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Capacity & Allocation — set via the row's edit action */}
+                          <td className="py-3.5 px-space-lg">
+                            {v.capacity === '' || v.capacity === null || v.capacity === undefined ? (
+                              <span className="font-body-sm text-body-sm text-outline italic">Not set</span>
+                            ) : (
+                              <span className="font-semibold text-on-surface">
+                                {v.capacity}{' '}
+                                <span className="font-normal text-on-surface-variant text-xs">
+                                  {v.capacityUnit || 'units'}
+                                </span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Status Badge — derived from what has been entered so far */}
+                          <td className="py-3.5 px-space-lg">
+                            {isVariantIncomplete(v) ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm font-semibold bg-surface-container-high text-on-surface-variant">
+                                <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
+                                Awaiting details
+                              </span>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm font-semibold ${
+                                  v.status === 'Sold Out' || Number(v.capacity) <= 0
+                                    ? 'bg-rose-500/15 text-rose-600'
+                                    : v.status === 'Limited' || Number(v.capacity) <= 5
+                                    ? 'bg-amber-500/15 text-amber-600'
+                                    : 'bg-emerald-500/15 text-emerald-600'
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    v.status === 'Sold Out' || Number(v.capacity) <= 0
+                                      ? 'bg-rose-500'
+                                      : v.status === 'Limited' || Number(v.capacity) <= 5
+                                      ? 'bg-amber-500'
+                                      : 'bg-emerald-500'
+                                  }`}
+                                ></span>
+                                {v.status === 'Sold Out' || Number(v.capacity) <= 0
+                                  ? 'Unavailable'
+                                  : v.status === 'Limited' || Number(v.capacity) <= 5
+                                  ? 'Limited'
+                                  : 'Available'}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Action Buttons */}
+                          <td className="py-3.5 px-space-lg text-right">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSingle(i)}
+                                className="p-1.5 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer"
+                                title="Edit option details"
+                              >
+                                <span className="material-symbols-outlined text-lg">edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
+                                className="p-1.5 rounded-lg text-error hover:bg-error-container/40 transition-colors cursor-pointer"
+                                title="Delete option"
+                              >
+                                <span className="material-symbols-outlined text-lg">delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
-
-          {/* Universal Combinations Table */}
-          <div className="w-full overflow-x-auto rounded-xl border border-surface-container-high shadow-xs">
-            <table className="w-full text-left text-on-surface min-w-[700px]">
-              <thead className="bg-surface-container font-caption text-caption text-on-surface-variant uppercase tracking-wider border-b border-surface-container-high">
-                <tr>
-                  <th className="py-3 px-space-lg font-semibold" scope="col">Option Descriptor / Dimensions</th>
-                  <th className="py-3 px-space-lg font-semibold" scope="col">Identifier / SKU</th>
-                  <th className="py-3 px-space-lg font-semibold" scope="col">Price / Rate (₹)</th>
-                  <th className="py-3 px-space-lg font-semibold" scope="col">Capacity &amp; Availability</th>
-                  <th className="py-3 px-space-lg font-semibold" scope="col">Status</th>
-                  <th className="py-3 px-space-lg font-semibold text-right" scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm bg-surface-container-lowest">
-                {variants.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-on-surface-variant">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-outline">
-                          <span className="material-symbols-outlined text-2xl">category</span>
-                        </div>
-                        <p className="font-title-sm text-title-sm text-on-surface font-semibold">No options or combinations defined yet</p>
-                        <p className="text-body-sm text-on-surface-variant max-w-md">
-                          Use the <strong>Matrix Generator</strong> to build multiple combinations in 1-click, or add single packages manually.
-                        </p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <button
-                            type="button"
-                            onClick={handleOpenMatrixModal}
-                            className="px-4 py-2 rounded-xl bg-primary text-on-primary font-semibold text-label-md cursor-pointer hover:bg-primary-fixed-variant"
-                          >
-                            Launch Matrix Generator
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  variants.map((v, i) => (
-                    <tr key={v.id || i} className="hover:bg-surface-container-low/40 transition-colors">
-                      {/* Title & Dimension Chips */}
-                      <td className="py-3.5 px-space-lg">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-title-sm text-title-sm text-on-surface font-semibold">
-                            {v.title}
-                          </span>
-                          {v.attributes && v.attributes.length > 0 && (
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {v.attributes.map((attr, attrIdx) => (
-                                <span
-                                  key={attrIdx}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container-low text-on-surface-variant font-caption text-caption border border-surface-container"
-                                >
-                                  <span className="text-outline font-medium">{attr.name}:</span>
-                                  <span className="font-semibold text-on-surface">{attr.value}</span>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* SKU / Code */}
-                      <td className="py-3.5 px-space-lg font-mono text-body-sm text-on-surface-variant">
-                        <span className="px-2 py-1 rounded bg-surface-container font-semibold text-on-surface text-xs tracking-wide">
-                          {v.sku}
-                        </span>
-                      </td>
-
-                      {/* Price / Commercial Rate */}
-                      <td className="py-3.5 px-space-lg">
-                        <span className="font-bold text-on-surface text-base">
-                          ₹ {Number(v.price).toLocaleString()}.00
-                        </span>
-                      </td>
-
-                      {/* Capacity & Allocation */}
-                      <td className="py-3.5 px-space-lg">
-                        <span className="font-semibold text-on-surface">
-                          {v.capacity}{' '}
-                          <span className="font-normal text-on-surface-variant text-xs">
-                            {v.capacityUnit || 'units'}
-                          </span>
-                        </span>
-                      </td>
-
-                      {/* Status Badge */}
-                      <td className="py-3.5 px-space-lg">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm font-semibold ${
-                            v.status === 'Sold Out' || Number(v.capacity) <= 0
-                              ? 'bg-rose-500/15 text-rose-600'
-                              : v.status === 'Limited' || Number(v.capacity) <= 5
-                              ? 'bg-amber-500/15 text-amber-600'
-                              : 'bg-emerald-500/15 text-emerald-600'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              v.status === 'Sold Out' || Number(v.capacity) <= 0
-                                ? 'bg-rose-500'
-                                : v.status === 'Limited' || Number(v.capacity) <= 5
-                                ? 'bg-amber-500'
-                                : 'bg-emerald-500'
-                            }`}
-                          ></span>
-                          {v.status === 'Sold Out' || Number(v.capacity) <= 0
-                            ? 'Unavailable'
-                            : v.status === 'Limited' || Number(v.capacity) <= 5
-                            ? 'Limited'
-                            : 'Available'}
-                        </span>
-                      </td>
-
-                      {/* Action Buttons */}
-                      <td className="py-3.5 px-space-lg text-right">
-                        <div className="inline-flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleEditSingle(i)}
-                            className="p-1.5 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer"
-                            title="Edit option details"
-                          >
-                            <span className="material-symbols-outlined text-lg">edit</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
-                            className="p-1.5 rounded-lg text-error hover:bg-error-container/40 transition-colors cursor-pointer"
-                            title="Delete option"
-                          >
-                            <span className="material-symbols-outlined text-lg">delete</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
+        </div>
+
+        {/* Visual assets rail — stays in view while the form is filled in */}
+        <aside className="lg:col-span-4 w-full lg:sticky lg:top-20">
+          <div className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-surface-container flex flex-col gap-space-md w-full lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            <VisualAssetsUploader
+              media={offeringMedia}
+              onChange={handleOfferingMediaChange}
+              largePrimary
+            />
+
+            {hasVariants && (
+              <p className="flex items-start gap-2 p-2.5 rounded-xl bg-surface-container-low/60 border border-surface-container font-caption text-caption text-on-surface-variant">
+                <span className="material-symbols-outlined text-primary text-base shrink-0">info</span>
+                <span>
+                  These apply to the whole offering. An individual option can carry its own
+                  assets via its edit action.
+                </span>
+              </p>
+            )}
+          </div>
+        </aside>
       </form>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -907,49 +1058,14 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
               ))}
             </div>
 
-            {/* Defaults for Generated Matrix */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
-              <div className="flex flex-col gap-1">
-                <label className="font-label-sm text-label-sm text-on-surface-variant font-medium">
-                  Base Price (₹)
-                </label>
-                <input
-                  type="number"
-                  value={matrixBasePrice}
-                  onChange={(e) => setMatrixBasePrice(Number(e.target.value))}
-                  className="h-10 px-3 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container text-body-sm focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-label-sm text-label-sm text-on-surface-variant font-medium">
-                  Default Capacity / Limit
-                </label>
-                <input
-                  type="number"
-                  value={matrixDefaultCapacity}
-                  onChange={(e) => setMatrixDefaultCapacity(Number(e.target.value))}
-                  className="h-10 px-3 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container text-body-sm focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-label-sm text-label-sm text-on-surface-variant font-medium">
-                  Capacity Unit
-                </label>
-                <select
-                  value={matrixCapacityUnit}
-                  onChange={(e) => setMatrixCapacityUnit(e.target.value)}
-                  className="h-10 px-3 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container text-body-sm focus:outline-none focus:border-primary cursor-pointer"
-                >
-                  <option value="units">units (Items / Physical)</option>
-                  <option value="slots">slots (Services / Consulting)</option>
-                  <option value="licenses">licenses (SaaS / Software)</option>
-                  <option value="rooms">rooms (Hospitality / Stay)</option>
-                  <option value="appointments">appointments (Healthcare)</option>
-                  <option value="hours">hours (Hourly Booking)</option>
-                </select>
-              </div>
+            {/* Pricing is intentionally not collected here — it is entered per combination afterwards */}
+            <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+              <span className="material-symbols-outlined text-primary text-lg mt-0.5">info</span>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                <strong className="font-semibold text-on-surface">No pricing needed here.</strong>{' '}
+                The generator only builds the combinations — you set the price and stock for each
+                one individually in the table once they are created.
+              </p>
             </div>
 
             {/* Modal Footer */}
@@ -989,7 +1105,7 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
             if (e.target === e.currentTarget) handleCloseSingleModal();
           }}
         >
-          <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-surface-container-high p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-200">
+          <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-surface-container-high p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-surface-container-low">
               <div className="flex items-center gap-3">
@@ -1003,7 +1119,7 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                     {editingVariantIndex !== null ? 'Edit Package / Option' : 'Add Single Option'}
                   </h3>
                   <p className="font-caption text-caption text-on-surface-variant">
-                    Configure descriptor, code, commercial rate and capacity
+                    Configure descriptor, code, rate, capacity and visuals
                   </p>
                 </div>
               </div>
@@ -1063,53 +1179,27 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Capacity <span className="text-error">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="e.g. 25"
-                    value={singleCapacity}
-                    onChange={(e) => setSingleCapacity(e.target.value)}
-                    className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md"
-                  />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="font-label-md text-label-md text-on-surface font-medium">
+                  Stock / Capacity <span className="text-error">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  placeholder="e.g. 25"
+                  value={singleCapacity}
+                  onChange={(e) => setSingleCapacity(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md"
+                />
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Unit
-                  </label>
-                  <select
-                    value={singleCapacityUnit}
-                    onChange={(e) => setSingleCapacityUnit(e.target.value)}
-                    className="w-full h-11 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md cursor-pointer"
-                  >
-                    <option value="units">units</option>
-                    <option value="slots">slots</option>
-                    <option value="licenses">licenses</option>
-                    <option value="rooms">rooms</option>
-                    <option value="appointments">appointments</option>
-                    <option value="hours">hours</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Status
-                  </label>
-                  <select
-                    value={singleStatus}
-                    onChange={(e) => setSingleStatus(e.target.value)}
-                    className="w-full h-11 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md cursor-pointer"
-                  >
-                    <option value="Available">Available</option>
-                    <option value="Limited">Limited</option>
-                    <option value="Sold Out">Unavailable</option>
-                  </select>
-                </div>
+              {/* Visual assets specific to this option */}
+              <div className="pt-1 border-t border-surface-container-low">
+                <VisualAssetsUploader
+                  media={singleMedia}
+                  onChange={setSingleMedia}
+                  heading="Option Visual Assets"
+                />
               </div>
 
               {/* Modal Footer */}
