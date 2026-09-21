@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { INITIAL_ARTICLES, INITIAL_COLLECTIONS } from '../data/mockData';
 
 export default function KnowledgeBasePage() {
@@ -50,6 +50,35 @@ export default function KnowledgeBasePage() {
   const [isCreateArticleOpen, setIsCreateArticleOpen] = useState(false);
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
 
+  // Selection state
+  const [selectedArticleIds, setSelectedArticleIds] = useState([]);
+
+  // Table Options state
+  const [isTableOptionsOpen, setIsTableOptionsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({
+    category: true,
+    views: true,
+    updated: true,
+    actions: true
+  });
+  const [tableDensity, setTableDensity] = useState('comfortable'); // 'comfortable' | 'compact'
+  const [tableSortBy, setTableSortBy] = useState('default'); // 'default' | 'title-asc' | 'views-desc' | 'updated-desc'
+
+  const tableOptionsRef = useRef(null);
+
+  // Close table options dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (tableOptionsRef.current && !tableOptionsRef.current.contains(e.target)) {
+        setIsTableOptionsOpen(false);
+      }
+    };
+    if (isTableOptionsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isTableOptionsOpen]);
+
   // New Article Form
   const [newTitle, setNewTitle] = useState('');
   const [newCat, setNewCat] = useState('Orders');
@@ -63,13 +92,51 @@ export default function KnowledgeBasePage() {
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false);
   const [generationSuccess, setGenerationSuccess] = useState(false);
 
-  const filteredArticles = articles.filter((a) => {
-    const matchesSearch =
-      a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || a.category.toLowerCase() === selectedCategory.toLowerCase();
-    return matchesSearch && matchesCategory;
-  });
+  // Filtered & Sorted Articles
+  const filteredArticles = articles
+    .filter((a) => {
+      const matchesSearch =
+        a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        a.category.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        a.category.toLowerCase() === selectedCategory.toLowerCase();
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => {
+      if (tableSortBy === 'title-asc') return a.title.localeCompare(b.title);
+      if (tableSortBy === 'views-desc') {
+        const vA = parseInt((a.views || '0').replace(/,/g, ''), 10);
+        const vB = parseInt((b.views || '0').replace(/,/g, ''), 10);
+        return vB - vA;
+      }
+      return 0;
+    });
+
+  // Select All handlers
+  const isAllArticlesSelected =
+    filteredArticles.length > 0 &&
+    filteredArticles.every((a) => selectedArticleIds.includes(a.id));
+  const isSomeArticlesSelected = selectedArticleIds.length > 0 && !isAllArticlesSelected;
+
+  const handleToggleSelectAllArticles = () => {
+    if (isAllArticlesSelected) {
+      setSelectedArticleIds([]);
+    } else {
+      setSelectedArticleIds(filteredArticles.map((a) => a.id));
+    }
+  };
+
+  const handleToggleSelectArticle = (id) => {
+    setSelectedArticleIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDeleteArticles = () => {
+    setArticles((prev) => prev.filter((a) => !selectedArticleIds.includes(a.id)));
+    setSelectedArticleIds([]);
+  };
 
   const handleCreateArticleSubmit = (e) => {
     e.preventDefault();
@@ -196,10 +263,10 @@ export default function KnowledgeBasePage() {
             </div>
           </div>
 
-          {/* Main Table Container */}
-          <div className="bg-surface-container-lowest rounded-xl shadow-sm flex flex-col overflow-hidden">
+          {/* Main Table Container (relative without overflow-hidden so table options dropdown is never clipped) */}
+          <div className="bg-surface-container-lowest rounded-xl shadow-sm flex flex-col relative">
             {/* Table Header & Action Section */}
-            <div className="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+            <div className="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md rounded-t-xl">
               <div className="flex flex-col">
                 <h1 className="font-headline-md text-headline-md text-on-surface font-bold tracking-tight">
                   Knowledge Base
@@ -229,7 +296,7 @@ export default function KnowledgeBasePage() {
             </div>
 
             {/* Search and Filter Bar */}
-            <div className="px-space-lg pb-space-md flex items-center justify-between gap-space-md">
+            <div className="px-space-lg pb-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
               <div className="relative w-full max-w-sm">
                 <span className="material-symbols-outlined absolute left-space-sm top-1/2 -translate-y-1/2 text-outline text-lg pointer-events-none">
                   search
@@ -239,34 +306,143 @@ export default function KnowledgeBasePage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search articles..."
-                  className="w-full pl-9 pr-space-md py-2 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-colors shadow-inner"
+                  className="w-full h-10 pl-9 pr-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-colors shadow-inner border border-transparent focus:border-surface-container"
                 />
               </div>
-              <div className="flex items-center gap-space-xs">
+
+              {/* Exact Uniform Height Category Select & Table Options Trigger */}
+              <div className="flex items-center gap-space-xs self-end sm:self-auto relative">
+                {/* Category Filter Select Box */}
                 <div className="relative">
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="flex items-center gap-space-2xs pl-space-sm pr-7 py-2 rounded-xl bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm border-0 focus:outline-none appearance-none cursor-pointer"
+                    className="h-10 flex items-center pl-3.5 pr-8 rounded-xl bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm border border-transparent hover:border-surface-container focus:outline-none appearance-none cursor-pointer"
                   >
                     <option value="All">All Categories</option>
                     <option value="Orders">Orders</option>
                     <option value="Shipping">Shipping</option>
                     <option value="General">General</option>
                   </select>
-                  <span className="material-symbols-outlined text-xs text-outline absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <span className="material-symbols-outlined text-xs text-outline absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                     expand_more
                   </span>
                 </div>
-                <button
-                  type="button"
-                  className="p-2 rounded-xl bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant transition-colors"
-                  title="Table options"
-                >
-                  <span className="material-symbols-outlined text-base">view_column</span>
-                </button>
+
+                {/* Table Options Dropdown Trigger Button */}
+                <div className="relative" ref={tableOptionsRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsTableOptionsOpen(!isTableOptionsOpen)}
+                    className={`h-10 w-10 flex items-center justify-center rounded-xl transition-all cursor-pointer border ${
+                      isTableOptionsOpen
+                        ? 'bg-primary/10 text-primary border-primary/30 ring-2 ring-primary/15'
+                        : 'bg-surface-container-low border-transparent hover:bg-surface-container hover:text-on-surface text-on-surface-variant'
+                    }`}
+                    title="Table options & columns"
+                  >
+                    <span className="material-symbols-outlined text-base">view_column</span>
+                  </button>
+
+                  {/* Short & Clean Table Options Menu */}
+                  {isTableOptionsOpen && (
+                    <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-2xl shadow-2xl z-50 py-2 border border-slate-200 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1 flex items-center justify-between">
+                        <span className="text-[10.5px] font-bold text-outline uppercase tracking-wider">
+                          Visible Columns
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVisibleColumns({ category: true, views: true, updated: true, actions: true });
+                            setTableDensity('comfortable');
+                            setTableSortBy('default');
+                          }}
+                          className="text-[10.5px] text-primary hover:underline font-semibold cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      </div>
+
+                      <div className="space-y-0.5 px-1 py-1">
+                        <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-on-surface hover:bg-slate-50 cursor-pointer">
+                          <span>Category</span>
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns.category}
+                            onChange={(e) => setVisibleColumns({ ...visibleColumns, category: e.target.checked })}
+                            className="accent-primary cursor-pointer"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-on-surface hover:bg-slate-50 cursor-pointer">
+                          <span>Views Counter</span>
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns.views}
+                            onChange={(e) => setVisibleColumns({ ...visibleColumns, views: e.target.checked })}
+                            className="accent-primary cursor-pointer"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-on-surface hover:bg-slate-50 cursor-pointer">
+                          <span>Updated Date</span>
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns.updated}
+                            onChange={(e) => setVisibleColumns({ ...visibleColumns, updated: e.target.checked })}
+                            className="accent-primary cursor-pointer"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="h-px bg-slate-100 my-1" />
+
+                      <div className="px-3 py-1 text-[10.5px] font-bold text-outline uppercase tracking-wider">
+                        Row Density
+                      </div>
+                      <div className="px-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setTableDensity(tableDensity === 'compact' ? 'comfortable' : 'compact')}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between text-on-surface hover:bg-slate-50 cursor-pointer"
+                        >
+                          <span>Compact Rows</span>
+                          <span className={`material-symbols-outlined text-base ${tableDensity === 'compact' ? 'text-primary' : 'text-outline/40'}`}>
+                            {tableDensity === 'compact' ? 'check_box' : 'check_box_outline_blank'}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Bulk Action Bar (When Articles Selected) */}
+            {selectedArticleIds.length > 0 && (
+              <div className="px-space-lg py-2 bg-primary-container/10 border-y border-primary/20 flex items-center justify-between animate-in fade-in duration-150">
+                <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                  <span className="material-symbols-outlined text-base">check_circle</span>
+                  <span>{selectedArticleIds.length} {selectedArticleIds.length === 1 ? 'article' : 'articles'} selected</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBulkDeleteArticles}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-error bg-error-container/30 hover:bg-error-container transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">delete</span>
+                    <span>Delete Selected</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedArticleIds([])}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Structured Data Table */}
             <div className="w-full overflow-x-auto">
@@ -274,91 +450,149 @@ export default function KnowledgeBasePage() {
                 <thead>
                   <tr className="bg-surface-container-low">
                     <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold w-12" scope="col">
-                      <input className="rounded accent-primary cursor-pointer" type="checkbox" />
+                      <input
+                        className="w-4 h-4 rounded accent-primary cursor-pointer"
+                        type="checkbox"
+                        checked={isAllArticlesSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = isSomeArticlesSelected;
+                        }}
+                        onChange={handleToggleSelectAllArticles}
+                        title={isAllArticlesSelected ? "Deselect all" : "Select all"}
+                      />
                     </th>
                     <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
                       Title
                     </th>
-                    <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
-                      Category
-                    </th>
-                    <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
-                      Updated
-                    </th>
-                    <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold text-right" scope="col">
-                      Actions
-                    </th>
+                    {visibleColumns.category && (
+                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
+                        Category
+                      </th>
+                    )}
+                    {visibleColumns.views && (
+                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
+                        Views
+                      </th>
+                    )}
+                    {visibleColumns.updated && (
+                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
+                        Updated
+                      </th>
+                    )}
+                    {visibleColumns.actions && (
+                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold text-right" scope="col">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y-0">
-                  {filteredArticles.map((art) => (
-                    <tr key={art.id} className="article-row hover:bg-surface-container-low/70 transition-colors group">
-                      <td className="py-3 px-space-lg">
-                        <input className="rounded accent-primary cursor-pointer" type="checkbox" />
-                      </td>
-                      <td className="py-3 px-space-lg">
-                        <div className="flex items-center gap-space-xs">
-                          <div className={`w-8 h-8 rounded-xl ${art.iconBg} flex items-center justify-center shrink-0`}>
-                            <span className="material-symbols-outlined text-base">{art.icon}</span>
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="article-title font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors cursor-pointer truncate">
-                              {art.title}
-                            </span>
-                            <span className="font-caption text-caption text-on-surface-variant">
-                              {art.visibility} • {art.readTime}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-space-lg">
-                        <span className={`article-cat inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-sm text-label-sm ${art.catBg} font-medium`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${art.category === 'Orders' ? 'bg-primary' : art.category === 'Shipping' ? 'bg-secondary' : 'bg-tertiary'}`}></span>
-                          {art.category}
-                        </span>
-                      </td>
-                      <td className="py-3 px-space-lg font-body-sm text-body-sm text-on-surface-variant">
-                        {art.updated}
-                      </td>
-                      <td className="py-3 px-space-lg text-right relative">
-                        <button
-                          type="button"
-                          onClick={() => setOpenActionMenuId(openActionMenuId === art.id ? null : art.id)}
-                          className="action-trigger p-1.5 rounded-xl hover:bg-surface-container-high text-outline hover:text-on-surface transition-colors focus:outline-none cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-lg leading-none">more_horiz</span>
-                        </button>
-                        {openActionMenuId === art.id && (
-                          <div className="action-dropdown absolute right-space-lg top-10 w-40 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1 flex flex-col text-left border border-surface-container-high">
-                            <button
-                              type="button"
-                              onClick={() => { alert(`Editing ${art.title}`); setOpenActionMenuId(null); }}
-                              className="px-space-sm py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-space-xs transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-sm">edit</span> Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { alert(`Previewing ${art.title}`); setOpenActionMenuId(null); }}
-                              className="px-space-sm py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-space-xs transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-sm">visibility</span> Preview
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setArticles(articles.filter(a => a.id !== art.id));
-                                setOpenActionMenuId(null);
-                              }}
-                              className="px-space-sm py-1.5 font-body-sm text-body-sm text-error hover:bg-error-container/30 flex items-center gap-space-xs transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-sm">delete</span> Delete
-                            </button>
-                          </div>
-                        )}
+                <tbody className="divide-y divide-surface-container-low/40">
+                  {filteredArticles.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-outline text-xs">
+                        No articles found matching your criteria.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredArticles.map((art) => {
+                      const isSelected = selectedArticleIds.includes(art.id);
+                      const paddingClass = tableDensity === 'compact' ? 'py-2 px-space-lg' : 'py-3.5 px-space-lg';
+
+                      return (
+                        <tr
+                          key={art.id}
+                          className={`hover:bg-surface-container-low/70 transition-colors group ${
+                            isSelected ? 'bg-primary/[0.04]' : ''
+                          }`}
+                        >
+                          <td className={paddingClass}>
+                            <input
+                              className="w-4 h-4 rounded accent-primary cursor-pointer"
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectArticle(art.id)}
+                            />
+                          </td>
+                          <td className={paddingClass}>
+                            <div className="flex items-center gap-space-xs">
+                              <div className={`w-8 h-8 rounded-xl ${art.iconBg} flex items-center justify-center shrink-0`}>
+                                <span className="material-symbols-outlined text-base">{art.icon}</span>
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="article-title font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors cursor-pointer truncate">
+                                  {art.title}
+                                </span>
+                                <span className="font-caption text-caption text-on-surface-variant">
+                                  {art.visibility} • {art.readTime}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          {visibleColumns.category && (
+                            <td className={paddingClass}>
+                              <span className={`article-cat inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-sm text-label-sm ${art.catBg} font-medium`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${art.category === 'Orders' ? 'bg-primary' : art.category === 'Shipping' ? 'bg-secondary' : 'bg-tertiary'}`}></span>
+                                {art.category}
+                              </span>
+                            </td>
+                          )}
+                          {visibleColumns.views && (
+                            <td className={`${paddingClass} font-body-sm text-body-sm text-on-surface-variant`}>
+                              <div className="flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs text-outline">visibility</span>
+                                <span>{art.views || '1,200'}</span>
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.updated && (
+                            <td className={`${paddingClass} font-body-sm text-body-sm text-on-surface-variant`}>
+                              {art.updated}
+                            </td>
+                          )}
+                          {visibleColumns.actions && (
+                            <td className={`${paddingClass} text-right relative`}>
+                              <button
+                                type="button"
+                                onClick={() => setOpenActionMenuId(openActionMenuId === art.id ? null : art.id)}
+                                className="action-trigger p-1.5 rounded-xl hover:bg-surface-container-high text-outline hover:text-on-surface transition-colors focus:outline-none cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-lg leading-none">more_horiz</span>
+                              </button>
+                              {openActionMenuId === art.id && (
+                                <div className="action-dropdown absolute right-space-lg top-10 w-40 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1 flex flex-col text-left border border-surface-container-high">
+                                  <button
+                                    type="button"
+                                    onClick={() => { alert(`Editing ${art.title}`); setOpenActionMenuId(null); }}
+                                    className="px-space-sm py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-space-xs transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">edit</span> Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { alert(`Previewing ${art.title}`); setOpenActionMenuId(null); }}
+                                    className="px-space-sm py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-space-xs transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">visibility</span> Preview
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setArticles(articles.filter(a => a.id !== art.id));
+                                      setSelectedArticleIds((prev) => prev.filter(item => item !== art.id));
+                                      setOpenActionMenuId(null);
+                                    }}
+                                    className="px-space-sm py-1.5 font-body-sm text-body-sm text-error hover:bg-error-container/30 flex items-center gap-space-xs transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">delete</span> Delete
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

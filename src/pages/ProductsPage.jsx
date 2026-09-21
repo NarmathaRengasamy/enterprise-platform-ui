@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { INITIAL_PRODUCTS } from '../data/mockData';
 
 export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
@@ -6,7 +6,10 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
 
+  // Filter products based on search and category
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -15,6 +18,23 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory]);
+
+  // Compute pagination
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+  const startItem = filteredProducts.length === 0 ? 0 : startIndex + 1;
+  const endItem = Math.min(startIndex + itemsPerPage, filteredProducts.length);
+
+  const inStockCount = products.filter((p) => p.stockStatus === 'In Stock').length;
+  const lowStockCount = products.filter((p) => p.stockStatus !== 'In Stock').length;
+  const uniqueCategoriesCount = new Set(products.map((p) => p.category)).size;
 
   const handleExportCSV = () => {
     const headers = "ID,Product Name,SKU,Category,Price,Stock Status,Stock\n";
@@ -52,9 +72,9 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
         <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Total Catalog</span>
-            <span className="font-headline-md text-headline-md text-on-surface font-bold mt-1">12</span>
+            <span className="font-headline-md text-headline-md text-on-surface font-bold mt-1">{products.length}</span>
             <span className="font-label-sm text-label-sm text-secondary flex items-center gap-0.5 mt-0.5 font-medium">
-              <span className="material-symbols-outlined text-xs">trending_up</span> +3 this week
+              <span className="material-symbols-outlined text-xs">trending_up</span> 100% active
             </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-primary">
@@ -65,9 +85,9 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
         <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">In Stock</span>
-            <span className="font-headline-md text-headline-md text-on-surface font-bold mt-1">10</span>
+            <span className="font-headline-md text-headline-md text-on-surface font-bold mt-1">{inStockCount}</span>
             <span className="font-label-sm text-label-sm text-secondary flex items-center gap-0.5 mt-0.5 font-medium">
-              <span className="material-symbols-outlined text-xs">check_circle</span> 83% Healthy
+              <span className="material-symbols-outlined text-xs">check_circle</span> {Math.round((inStockCount / Math.max(1, products.length)) * 100)}% Healthy
             </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-secondary-fixed/30 flex items-center justify-center text-secondary">
@@ -78,7 +98,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
         <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Low Stock Warning</span>
-            <span className="font-headline-md text-headline-md text-tertiary font-bold mt-1">2</span>
+            <span className="font-headline-md text-headline-md text-tertiary font-bold mt-1">{lowStockCount}</span>
             <span className="font-label-sm text-label-sm text-tertiary flex items-center gap-0.5 mt-0.5 font-medium">
               <span className="material-symbols-outlined text-xs">priority_high</span> Action required
             </span>
@@ -94,7 +114,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
         >
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Categories</span>
-            <span className="font-headline-md text-headline-md text-on-surface font-bold mt-1">4 Active</span>
+            <span className="font-headline-md text-headline-md text-on-surface font-bold mt-1">{uniqueCategoriesCount} Active</span>
             <span className="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-0.5 mt-0.5 font-medium">
               Across all sales channels
             </span>
@@ -175,93 +195,112 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container-low/40">
-              {filteredProducts.map((p) => (
-                <tr
-                  key={p.id}
-                  onClick={() => {
-                    if (setSelectedProduct) setSelectedProduct(p);
-                    setActiveModule('product-details');
-                  }}
-                  className="hover:bg-surface-container-low/50 transition-colors group cursor-pointer"
-                >
-                  <td className="py-3 px-space-md">
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-surface-container-high flex items-center justify-center relative shadow-sm">
-                      <img
-                        alt={p.name}
-                        src={p.image}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                      />
-                    </div>
-                  </td>
-                  <td className="py-3 px-space-md font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors">
-                    {p.name}
-                  </td>
-                  <td className="py-3 px-space-md font-body-sm text-body-sm text-outline">
-                    {p.sku}
-                  </td>
-                  <td className="py-3 px-space-md">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-surface-container font-label-sm text-label-sm text-on-surface font-medium">
-                      {p.category}
-                    </span>
-                  </td>
-                  <td className="py-3 px-space-md font-title-sm text-title-sm text-on-surface font-bold">
-                    ₹{p.price.toLocaleString()}
-                  </td>
-                  <td className="py-3 px-space-md">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-semibold ${
-                        p.stockStatus === 'In Stock'
-                          ? 'bg-secondary-fixed/40 text-on-secondary-fixed'
-                          : 'bg-tertiary-fixed/60 text-on-tertiary-fixed'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${p.stockStatus === 'In Stock' ? 'bg-secondary' : 'bg-tertiary'}`}></span>
-                      {p.stockStatus}
-                    </span>
-                  </td>
-                  <td className="py-3 px-space-md text-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (setSelectedProduct) setSelectedProduct(p);
-                        setActiveModule('edit-product');
-                      }}
-                      title="Edit Product"
-                      className="p-1 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-lg leading-none">edit</span>
-                    </button>
+              {paginatedProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-outline text-xs">
+                    No products found matching your search.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedProducts.map((p) => (
+                  <tr
+                    key={p.id}
+                    onClick={() => {
+                      if (setSelectedProduct) setSelectedProduct(p);
+                      setActiveModule('product-details');
+                    }}
+                    className="hover:bg-surface-container-low/50 transition-colors group cursor-pointer"
+                  >
+                    <td className="py-3 px-space-md">
+                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-surface-container-high flex items-center justify-center relative shadow-sm">
+                        <img
+                          alt={p.name}
+                          src={p.image}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      </div>
+                    </td>
+                    <td className="py-3 px-space-md font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors">
+                      {p.name}
+                    </td>
+                    <td className="py-3 px-space-md font-body-sm text-body-sm text-outline">
+                      {p.sku}
+                    </td>
+                    <td className="py-3 px-space-md">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-surface-container font-label-sm text-label-sm text-on-surface font-medium">
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-space-md font-title-sm text-title-sm text-on-surface font-bold">
+                      ₹{p.price.toLocaleString()}
+                    </td>
+                    <td className="py-3 px-space-md">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-semibold ${
+                          p.stockStatus === 'In Stock'
+                            ? 'bg-secondary-fixed/40 text-on-secondary-fixed'
+                            : 'bg-tertiary-fixed/60 text-on-tertiary-fixed'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${p.stockStatus === 'In Stock' ? 'bg-secondary' : 'bg-tertiary'}`}></span>
+                        {p.stockStatus}
+                      </span>
+                    </td>
+                    <td className="py-3 px-space-md text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (setSelectedProduct) setSelectedProduct(p);
+                          setActiveModule('edit-product');
+                        }}
+                        title="Edit Product"
+                        className="p-1 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-lg leading-none">edit</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination & Footer */}
+        {/* Dynamic Pagination & Footer */}
         <div className="p-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm bg-surface-container-lowest border-t border-surface-container-low">
           <span className="font-body-sm text-body-sm text-on-surface-variant order-2 sm:order-1">
-            Showing <span className="font-semibold text-on-surface">1</span> to <span className="font-semibold text-on-surface">{filteredProducts.length}</span> of <span className="font-semibold text-on-surface">12</span> products
+            Showing <span className="font-semibold text-on-surface">{startItem}</span> to <span className="font-semibold text-on-surface">{endItem}</span> of <span className="font-semibold text-on-surface">{filteredProducts.length}</span> products
           </span>
           <div className="flex items-center gap-1 order-1 sm:order-2">
             <button
               type="button"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+              title="Previous page"
             >
               <span className="material-symbols-outlined text-lg">chevron_left</span>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-on-primary font-semibold text-sm">
-              1
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container text-sm">
-              2
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container text-sm">
-              3
-            </button>
+            {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                  safeCurrentPage === pageNum
+                    ? 'bg-primary text-on-primary shadow-xs'
+                    : 'text-on-surface-variant hover:bg-surface-container'
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
             <button
               type="button"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+              title="Next page"
             >
               <span className="material-symbols-outlined text-lg">chevron_right</span>
             </button>
