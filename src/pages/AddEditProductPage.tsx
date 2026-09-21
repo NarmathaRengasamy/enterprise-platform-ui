@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { INITIAL_PRODUCTS } from '../data/mockData';
 import { DESCRIPTION_ACCEPT, extractTextFromFile } from '../utils/documentText';
+import { Button } from '../components/common';
 
 // Industry-agnostic presets to accelerate setup for any business vertical
 const INDUSTRY_PRESETS = [
@@ -142,30 +143,30 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     setVariants(variants.map((v, idx) => (idx === index ? { ...v, [field]: value } : v)));
   };
 
-  const handleVariantImages = (index, files) => {
-    const picked = Array.from(files || []).filter(Boolean);
+  const handleVariantImages = (index: number, files: FileList | File[] | null) => {
+    const picked: File[] = Array.from(files || []).filter(Boolean) as File[];
     if (picked.length === 0) return;
     const current = variants[index]?.images || [];
     handleVariantField(index, 'images', [
       ...current,
-      ...picked.map((file) => URL.createObjectURL(file))
+      ...picked.map((file: File) => URL.createObjectURL(file))
     ]);
   };
 
-  const handleRemoveVariantImage = (index, imageIndex) => {
+  const handleRemoveVariantImage = (index: number, imageIndex: number) => {
     const current = variants[index]?.images || [];
     const target = current[imageIndex];
     if (target) URL.revokeObjectURL(target);
     handleVariantField(index, 'images', current.filter((_, idx) => idx !== imageIndex));
   };
 
-  const handleVariantVideos = (index, files) => {
-    const picked = Array.from(files || []).filter(Boolean);
+  const handleVariantVideos = (index: number, files: FileList | File[] | null) => {
+    const picked: File[] = Array.from(files || []).filter(Boolean) as File[];
     if (picked.length === 0) return;
     const current = variants[index]?.videos || [];
     handleVariantField(index, 'videos', [
       ...current,
-      ...picked.map((file) => ({ src: URL.createObjectURL(file), name: file.name }))
+      ...picked.map((file: File) => ({ src: URL.createObjectURL(file), name: file.name }))
     ]);
   };
 
@@ -362,12 +363,12 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     setIsMatrixModalOpen(false);
   };
 
-  const handleAddMedia = (files) => {
-    const picked = Array.from(files || []).filter((f) => f);
+  const handleAddMedia = (files: FileList | File[] | null) => {
+    const picked: File[] = Array.from(files || []).filter(Boolean) as File[];
     if (picked.length === 0) return;
     setMediaList([
       ...mediaList,
-      ...picked.map((file, idx) => ({
+      ...picked.map((file: File, idx: number) => ({
         id: `media-${Date.now()}-${idx}`,
         src: URL.createObjectURL(file),
         label: file.name
@@ -375,18 +376,18 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     ]);
   };
 
-  const handleDeleteMedia = (id) => {
+  const handleDeleteMedia = (id: string | number) => {
     const target = mediaList.find((m) => m.id === id);
     if (target?.src?.startsWith('blob:')) URL.revokeObjectURL(target.src);
     setMediaList(mediaList.filter((m) => m.id !== id));
   };
 
-  const handleAddVideos = (files) => {
-    const picked = Array.from(files || []).filter((f) => f);
+  const handleAddVideos = (files: FileList | File[] | null) => {
+    const picked: File[] = Array.from(files || []).filter(Boolean) as File[];
     if (picked.length === 0) return;
     setVideoList([
       ...videoList,
-      ...picked.map((file, idx) => ({
+      ...picked.map((file: File, idx: number) => ({
         id: `vid-${Date.now()}-${idx}`,
         src: URL.createObjectURL(file),
         label: file.name,
@@ -486,21 +487,21 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
               {saveError}
             </span>
           )}
-          <button
-            type="button"
+          <Button
+            variant="hover"
+            size="md"
             onClick={() => setActiveModule('products')}
-            className="px-space-md h-[38px] rounded-xl font-label-md text-label-md text-on-surface-variant bg-surface-container-lowest shadow-sm hover:bg-surface-container-high transition-colors cursor-pointer"
           >
             Discard Draft
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            startIcon="save"
             onClick={handleSave}
-            className="px-space-md h-[38px] rounded-xl font-label-md text-label-md text-on-primary bg-primary-container hover:bg-primary shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-base">save</span>
-            <span>{savedSuccess ? 'Saved!' : 'Save Offering'}</span>
-          </button>
+            {savedSuccess ? 'Saved!' : 'Save Offering'}
+          </Button>
         </div>
       </div>
 
@@ -1194,20 +1195,20 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-surface-container-low">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={() => setIsDiscardVariantsOpen(false)}
-                className="px-4 py-2 text-body-sm rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
               >
                 Keep variants
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
                 onClick={handleConfirmDiscardVariants}
-                className="px-5 py-2 text-body-sm rounded-xl bg-error text-on-error font-semibold shadow-sm hover:bg-error/90 transition-colors cursor-pointer"
               >
                 Remove all
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1239,14 +1240,13 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={() => setIsMatrixModalOpen(false)}
-                className="p-1.5 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
-                title="Close modal"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
             {/* Presets Quick-Select */}
@@ -1371,21 +1371,21 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                 ✨ Ready to generate {totalCombinationsCount} combinations
               </span>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsMatrixModalOpen(false)}
-                  className="px-4 py-2 text-body-sm rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   onClick={handleGenerateMatrix}
                   disabled={totalCombinationsCount === 0}
-                  className="px-6 py-2 text-body-sm rounded-xl bg-primary text-on-primary font-semibold shadow-sm hover:bg-primary-fixed-variant disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   Generate {totalCombinationsCount} Combinations
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1420,14 +1420,13 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={handleCloseSingleModal}
-                className="p-1.5 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
-                title="Close modal"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
             {/* Modal Form */}
@@ -1648,19 +1647,20 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
 
               {/* Modal Footer */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-surface-container-low">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={handleCloseSingleModal}
-                  className="px-4 py-2 text-body-sm rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   type="submit"
-                  className="px-6 py-2 text-body-sm rounded-xl bg-primary text-on-primary font-semibold shadow-sm hover:bg-primary-fixed-variant transition-colors cursor-pointer"
                 >
                   {editingVariantIndex !== null ? 'Save Changes' : 'Add Option'}
-                </button>
+                </Button>
               </div>
             </form>
           </div>

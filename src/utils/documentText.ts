@@ -4,12 +4,12 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
    The PDF and Word parsers are heavy, so they are imported on demand — a plain
    .txt or .md import never pays for them. */
 
-export const DESCRIPTION_ACCEPT =
+export const DESCRIPTION_ACCEPT: string =
   '.txt,.md,.markdown,.pdf,.docx,.doc,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-const extensionOf = (name) => (name.includes('.') ? name.split('.').pop().toLowerCase() : '');
+const extensionOf = (name: string): string => (name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : '');
 
-const readAsText = (file) =>
+const readAsText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
@@ -17,19 +17,19 @@ const readAsText = (file) =>
     reader.readAsText(file);
   });
 
-const readPdf = async (file) => {
+const readPdf = async (file: File): Promise<string> => {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
   const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
   const doc = await task.promise;
-  const pages = [];
+  const pages: string[] = [];
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo += 1) {
     const page = await doc.getPage(pageNo);
     const content = await page.getTextContent();
     /* pdf.js hands back positioned runs, so rebuild line breaks from its own
        end-of-line markers rather than gluing every run together. */
-    const text = content.items
+    const text = (content.items as Array<{ str?: string; hasEOL?: boolean }>)
       .map((item) => (item.str || '') + (item.hasEOL ? '\n' : ''))
       .join('')
       .replace(/[ \t]+\n/g, '\n');
@@ -39,7 +39,7 @@ const readPdf = async (file) => {
   return pages.filter(Boolean).join('\n\n');
 };
 
-const readDocx = async (file) => {
+const readDocx = async (file: File): Promise<string> => {
   const mammoth = await import('mammoth');
   const result = await (mammoth.default || mammoth).extractRawText({
     arrayBuffer: await file.arrayBuffer()
@@ -48,7 +48,7 @@ const readDocx = async (file) => {
 };
 
 /* Returns the file's text, or throws an Error whose message is safe to show. */
-export async function extractTextFromFile(file) {
+export async function extractTextFromFile(file: File): Promise<string> {
   const ext = extensionOf(file.name);
 
   if (ext === 'doc') {
