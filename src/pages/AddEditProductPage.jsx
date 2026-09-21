@@ -95,9 +95,6 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
   const [basePrice, setBasePrice] = useState(
     isEditing ? (selectedProduct?.price !== undefined ? selectedProduct.price : '') : ''
   );
-  const [originalPrice, setOriginalPrice] = useState(
-    isEditing ? (selectedProduct?.originalPrice !== undefined ? selectedProduct.originalPrice : '') : ''
-  );
   const [stock, setStock] = useState(
     isEditing ? (selectedProduct?.stock !== undefined ? selectedProduct.stock : '') : ''
   );
@@ -495,25 +492,16 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         <div className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-surface-container flex flex-col gap-space-md w-full">
           {/* Card Header & Switch Toggle */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-space-xs border-b border-surface-container-low">
-            <div className="flex items-start gap-3">
-              <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5">
-                <span className="material-symbols-outlined text-2xl">sell</span>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-xl">sell</span>
               </div>
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
-                    Pricing &amp; Variant Configuration
-                  </h2>
-                  <span className={`px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${
-                    hasVariants ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'
-                  }`}>
-                    {hasVariants ? `${variants.length} packages / combinations` : 'Single Product'}
-                  </span>
-                </div>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Set base pricing and inventory stock, or enable multi-dimensional variants for options like sizes, plans, or tiers.
-                </p>
-              </div>
+              <h2 className="font-title-lg text-title-lg text-on-surface font-bold">Pricing</h2>
+              {hasVariants && (
+                <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold bg-primary/10 text-primary">
+                  {variants.length} option{variants.length === 1 ? '' : 's'}
+                </span>
+              )}
             </div>
 
             {/* Allow Variants Switch Toggle */}
@@ -563,7 +551,7 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
           {/* IF ALLOW VARIANTS IS FALSE: Single Product View */}
           {!hasVariants ? (
             <div className="flex flex-col gap-space-md py-1">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-md pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md pt-1">
                 {/* Price */}
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface flex items-center gap-1">
@@ -578,23 +566,6 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                       placeholder="0.00"
                       className="w-full h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                       required={!hasVariants}
-                    />
-                  </div>
-                </div>
-
-                {/* Original Price */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-label-md text-label-md text-on-surface flex items-center gap-1">
-                    Original Price (₹)
-                  </label>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3.5 text-outline text-sm font-semibold">₹</span>
-                    <input
-                      type="number"
-                      value={originalPrice}
-                      onChange={(e) => setOriginalPrice(e.target.value)}
-                      placeholder="e.g. 1999"
-                      className="w-full h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     />
                   </div>
                 </div>
