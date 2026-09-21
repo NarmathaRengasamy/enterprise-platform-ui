@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_SCHEDULE_EVENTS } from '../data/mockData';
+import { Button } from '../components/common';
 
 // Format Date object to "YYYY-MM-DD"
 const formatDateKey = (d) => {
@@ -131,10 +132,15 @@ const generateMonthGrid = (year, month, todayDate, selectedDate) => {
   return cells;
 };
 
+interface SchedulePageProps {
+  selectedEvent?: any;
+  setSelectedEvent?: (event: any) => void;
+}
+
 export default function SchedulePage({
   selectedEvent: propSelectedEvent,
   setSelectedEvent: propSetSelectedEvent
-} = {}) {
+}: SchedulePageProps = {}) {
   const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
   const [activeView, setActiveView] = useState('Week'); // 'Day' | 'Week' | 'Month'
 
@@ -711,14 +717,15 @@ export default function SchedulePage({
 
         {/* Sidebar Filters & Actions with Consistent Unified Spacing */}
         <div className="pt-3 border-t border-surface-container px-3.5 space-y-3 shrink-0">
-          <button
-            type="button"
+          <Button
+            variant="soft"
+            size="md"
+            fullWidth
+            startIcon="add_circle"
             onClick={handleOpenAddModal}
-            className="flex items-center justify-center space-x-1.5 font-label-md text-xs font-semibold text-primary bg-primary-container/15 hover:bg-primary-container/30 w-full px-3 py-2 rounded-xl transition-all cursor-pointer shadow-xs"
           >
-            <span className="material-symbols-outlined text-base">add_circle</span>
-            <span>New Schedule</span>
-          </button>
+            New Schedule
+          </Button>
 
           {/* Participant Type Filters (2x2 Grid) */}
           <div>
@@ -744,7 +751,7 @@ export default function SchedulePage({
                 </span>
               </button>
 
-              {/* Human */}
+              {/* Human / Staff */}
               <button
                 type="button"
                 onClick={() => setParticipantFilter('human')}
@@ -786,7 +793,7 @@ export default function SchedulePage({
                 </span>
               </button>
 
-              {/* Customer */}
+              {/* Customer / Client */}
               <button
                 type="button"
                 onClick={() => setParticipantFilter('customer')}
@@ -920,29 +927,29 @@ export default function SchedulePage({
           <div className="flex items-center gap-3 min-w-0 flex-nowrap shrink-0">
             {/* Unified Navigation Button Group */}
             <div className="inline-flex items-center bg-surface-container-low rounded-xl border border-surface-container p-0.5 shadow-xs shrink-0">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="chevron_left"
                 onClick={handleNavPrev}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-lowest text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
                 title={`Previous ${activeView.toLowerCase()}`}
-              >
-                <span className="material-symbols-outlined text-lg">chevron_left</span>
-              </button>
-              <button
-                type="button"
+                aria-label={`Previous ${activeView.toLowerCase()}`}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleNavToday}
-                className="px-3 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-lowest text-on-surface font-label-md text-xs font-semibold transition-colors cursor-pointer"
               >
                 Today
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="chevron_right"
                 onClick={handleNavNext}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-lowest text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
                 title={`Next ${activeView.toLowerCase()}`}
-              >
-                <span className="material-symbols-outlined text-lg">chevron_right</span>
-              </button>
+                aria-label={`Next ${activeView.toLowerCase()}`}
+              />
             </div>
 
             {renderHeaderTitle()}
@@ -951,18 +958,15 @@ export default function SchedulePage({
           {/* Right: Active Filter Badge (when filtered) + View Switcher + Action CTA */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap">
             {participantFilter !== 'all' && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-surface-container-low border border-surface-container text-xs text-on-surface whitespace-nowrap shadow-xs">
-                <span className="text-on-surface-variant">Filter:</span>
-                <span className="font-semibold capitalize text-primary">{participantFilter}</span>
-                <button
-                  type="button"
-                  onClick={() => setParticipantFilter('all')}
-                  className="text-outline hover:text-on-surface ml-0.5 cursor-pointer flex items-center"
-                  title="Clear filter"
-                >
-                  <span className="material-symbols-outlined text-xs">close</span>
-                </button>
-              </div>
+              <Button
+                variant="soft"
+                size="sm"
+                endIcon="close"
+                onClick={() => setParticipantFilter('all')}
+                title="Click to clear filter"
+              >
+                <span>Filter: <span className="font-bold capitalize">{participantFilter === 'customer' ? 'Client' : participantFilter === 'human' ? 'Staff' : 'Agent'}</span></span>
+              </Button>
             )}
 
             {/* View switcher: Day, Week, Month */}
@@ -984,14 +988,14 @@ export default function SchedulePage({
             </div>
 
             {/* Action CTA */}
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="md"
+              startIcon="add"
               onClick={handleOpenAddModal}
-              className="px-3.5 py-1.5 bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold rounded-xl flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap shrink-0"
             >
-              <span className="material-symbols-outlined text-base">add</span>
-              <span>New Schedule</span>
-            </button>
+              New Schedule
+            </Button>
           </div>
         </header>
 
@@ -1476,13 +1480,13 @@ export default function SchedulePage({
                   <p className="text-[11px] text-on-surface-variant">Custom time &amp; client contact booking</p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={() => setIsAddEventOpen(false)}
-                className="w-7 h-7 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
             {/* Modal Form Content */}
@@ -1834,21 +1838,22 @@ export default function SchedulePage({
 
               {/* Form Action Buttons */}
               <div className="flex items-center justify-between pt-3 border-t border-surface-container mt-1">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsAddEventOpen(false)}
-                  className="px-4 py-2 font-label-md text-label-md font-semibold rounded-xl text-on-surface-variant hover:bg-surface-container cursor-pointer transition-colors"
                 >
                   Discard
-                </button>
+                </Button>
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    variant="primary"
+                    size="md"
                     type="submit"
-                    className="px-5 py-2.5 font-label-md text-label-md font-semibold rounded-xl bg-primary text-on-primary hover:bg-primary-container shadow-sm cursor-pointer transition-all flex items-center gap-1.5"
+                    startIcon="send"
                   >
-                    <span className="material-symbols-outlined text-base">send</span>
-                    <span>Save &amp; Schedule</span>
-                  </button>
+                    Save &amp; Schedule
+                  </Button>
                 </div>
               </div>
             </form>
@@ -1885,12 +1890,13 @@ export default function SchedulePage({
                   {selectedEvent.status}
                 </span>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={() => setSelectedEvent(null)}
-                className="w-7 h-7 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
             <div>
@@ -1951,21 +1957,21 @@ export default function SchedulePage({
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-2 border-t border-surface-container">
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                size="md"
+                startIcon="delete"
                 onClick={() => handleDeleteEvent(selectedEvent.id)}
-                className="px-3 py-2 font-label-md text-label-md font-semibold text-error hover:bg-error/10 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-base">delete</span>
-                <span>Delete</span>
-              </button>
-              <button
-                type="button"
+                Delete
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
                 onClick={() => setSelectedEvent(null)}
-                className="px-5 py-2 bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>

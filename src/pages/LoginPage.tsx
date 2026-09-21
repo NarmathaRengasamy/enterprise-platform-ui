@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { BRAND_LOGO_URL } from '../data/mockData';
+import { Button, Icon } from '../components/common';
 
-export default function LoginPage({ onLoginSuccess }) {
+interface LoginPageProps {
+  onLoginSuccess?: () => void;
+}
+
+export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('sarah@omniflow.io');
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onLoginSuccess?.();
   };
@@ -47,8 +52,8 @@ export default function LoginPage({ onLoginSuccess }) {
                 Email address
               </label>
               <div className="relative flex items-center">
-                <span className="material-symbols-outlined text-outline absolute left-3 text-[20px] pointer-events-none select-none">
-                  mail
+                <span className="absolute left-3 pointer-events-none select-none flex items-center">
+                  <Icon name="mail" size="md" color="outline" />
                 </span>
                 <input
                   id="email"
@@ -57,7 +62,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="sarah@omniflow.io"
-                  className="w-full h-[40px] pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             </div>
@@ -69,8 +74,8 @@ export default function LoginPage({ onLoginSuccess }) {
                 </label>
               </div>
               <div className="relative flex items-center">
-                <span className="material-symbols-outlined text-outline absolute left-3 text-[20px] pointer-events-none select-none">
-                  lock
+                <span className="absolute left-3 pointer-events-none select-none flex items-center">
+                  <Icon name="lock" size="md" color="outline" />
                 </span>
                 <input
                   id="password"
@@ -79,7 +84,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
-                  className="w-full h-[40px] pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <button
                   type="button"
@@ -87,9 +92,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   aria-label="Toggle password visibility"
                   className="absolute right-2 p-1.5 rounded text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors flex items-center justify-center cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[20px]">
-                    {showPassword ? 'visibility_off' : 'visibility'}
-                  </span>
+                  <Icon name={showPassword ? 'visibility_off' : 'visibility'} size="md" />
                 </button>
               </div>
             </div>
@@ -115,13 +118,16 @@ export default function LoginPage({ onLoginSuccess }) {
               </a>
             </div>
 
-            <button
+            <Button
               type="submit"
-              className="mt-space-xs w-full h-[42px] bg-primary text-on-primary font-title-sm text-title-sm rounded-xl hover:bg-on-primary-fixed-variant active:bg-on-primary-fixed shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              variant="primary"
+              size="lg"
+              fullWidth
+              endIcon="arrow_forward"
+              className="mt-space-xs"
             >
-              <span>Login to Dashboard</span>
-              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-            </button>
+              Login to Dashboard
+            </Button>
           </form>
 
           {/* Social SSO Divider */}
@@ -134,32 +140,35 @@ export default function LoginPage({ onLoginSuccess }) {
 
           {/* SSO Buttons */}
           <div className="grid grid-cols-2 gap-space-sm">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="md"
               onClick={onLoginSuccess}
-              className="h-[40px] px-space-sm bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-label-md rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm border border-surface-container-high"
+              className="w-full gap-2"
             >
-              <svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" fill="#4285F4"></path>
                 <path d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" fill="#34A853"></path>
                 <path d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" fill="#FBBC05"></path>
                 <path d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" fill="#EA4335"></path>
               </svg>
               <span>Google</span>
-            </button>
-            <button
-              type="button"
+            </Button>
+
+            <Button
+              variant="outline"
+              size="md"
               onClick={onLoginSuccess}
-              className="h-[40px] px-space-sm bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-label-md rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm border border-surface-container-high"
+              className="w-full gap-2"
             >
-              <svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 23 23">
+              <svg aria-hidden="true" className="w-4 h-4 shrink-0" viewBox="0 0 23 23">
                 <path d="M1 1h10v10H1z" fill="#f35325"></path>
                 <path d="M12 1h10v10H12z" fill="#81bc06"></path>
                 <path d="M1 12h10v10H1z" fill="#05a6f0"></path>
                 <path d="M12 12h10v10H12z" fill="#ffba08"></path>
               </svg>
               <span>Microsoft</span>
-            </button>
+            </Button>
           </div>
         </div>
 

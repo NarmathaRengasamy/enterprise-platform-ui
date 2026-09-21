@@ -1,8 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { INITIAL_ARTICLES, INITIAL_COLLECTIONS } from '../data/mockData';
+import {
+  Button,
+  MetricsCard,
+  Pagination,
+  Icon,
+  SearchInput
+} from '../components/common';
 
 export default function KnowledgeBasePage() {
-  const [activeTab, setActiveTab] = useState('kb'); // 'kb' or 'collections'
+  const [activeTab, setActiveTab] = useState<'kb' | 'collections'>('kb');
   const [articles, setArticles] = useState([
     {
       id: 'art-1',
@@ -48,10 +55,10 @@ export default function KnowledgeBasePage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCreateArticleOpen, setIsCreateArticleOpen] = useState(false);
-  const [openActionMenuId, setOpenActionMenuId] = useState(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   // Selection state
-  const [selectedArticleIds, setSelectedArticleIds] = useState([]);
+  const [selectedArticleIds, setSelectedArticleIds] = useState<string[]>([]);
 
   // Table Options state
   const [isTableOptionsOpen, setIsTableOptionsOpen] = useState(false);
@@ -61,15 +68,15 @@ export default function KnowledgeBasePage() {
     updated: true,
     actions: true
   });
-  const [tableDensity, setTableDensity] = useState('comfortable'); // 'comfortable' | 'compact'
-  const [tableSortBy, setTableSortBy] = useState('default'); // 'default' | 'title-asc' | 'views-desc' | 'updated-desc'
+  const [tableDensity, setTableDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [tableSortBy, setTableSortBy] = useState('default');
 
-  const tableOptionsRef = useRef(null);
+  const tableOptionsRef = useRef<HTMLDivElement>(null);
 
   // Close table options dropdown on outside click
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (tableOptionsRef.current && !tableOptionsRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tableOptionsRef.current && !tableOptionsRef.current.contains(e.target as Node)) {
         setIsTableOptionsOpen(false);
       }
     };
@@ -98,107 +105,140 @@ export default function KnowledgeBasePage() {
       const matchesSearch =
         a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         a.category.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        selectedCategory === 'All' ||
-        a.category.toLowerCase() === selectedCategory.toLowerCase();
+      const matchesCategory = selectedCategory === 'All' || a.category === selectedCategory;
       return matchesSearch && matchesCategory;
     })
     .sort((a, b) => {
       if (tableSortBy === 'title-asc') return a.title.localeCompare(b.title);
       if (tableSortBy === 'views-desc') {
-        const vA = parseInt((a.views || '0').replace(/,/g, ''), 10);
-        const vB = parseInt((b.views || '0').replace(/,/g, ''), 10);
-        return vB - vA;
+        const aViews = parseInt(a.views.replace(/,/g, ''), 10) || 0;
+        const bViews = parseInt(b.views.replace(/,/g, ''), 10) || 0;
+        return bViews - aViews;
       }
       return 0;
     });
 
-  // Select All handlers
-  const isAllArticlesSelected =
+  // Select All Handlers
+  const isAllSelected =
     filteredArticles.length > 0 &&
     filteredArticles.every((a) => selectedArticleIds.includes(a.id));
-  const isSomeArticlesSelected = selectedArticleIds.length > 0 && !isAllArticlesSelected;
+  const isSomeSelected = selectedArticleIds.length > 0 && !isAllSelected;
 
-  const handleToggleSelectAllArticles = () => {
-    if (isAllArticlesSelected) {
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
       setSelectedArticleIds([]);
     } else {
       setSelectedArticleIds(filteredArticles.map((a) => a.id));
     }
   };
 
-  const handleToggleSelectArticle = (id) => {
+  const handleToggleSelectArticle = (id: string) => {
     setSelectedArticleIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  const handleBulkDeleteArticles = () => {
+  const handleBulkDelete = () => {
     setArticles((prev) => prev.filter((a) => !selectedArticleIds.includes(a.id)));
     setSelectedArticleIds([]);
   };
 
-  const handleCreateArticleSubmit = (e) => {
+  const handleCreateArticleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle) return;
-    const newArt = {
+
+    const newArticle = {
       id: `art-${Date.now()}`,
       title: newTitle,
       category: newCat,
-      categoryColor: 'primary',
+      categoryColor: newCat === 'Orders' ? 'primary' : newCat === 'Shipping' ? 'secondary' : 'tertiary',
       readTime: '3 min read',
       visibility: 'Public article',
       updated: 'Just now',
-      icon: 'description',
-      iconBg: 'bg-primary-container/10 text-primary',
-      catBg: 'bg-surface-container text-primary',
-      views: '1',
-      content: newContent
+      icon: newCat === 'Orders' ? 'shopping_bag' : newCat === 'Shipping' ? 'local_shipping' : 'quiz',
+      iconBg: newCat === 'Orders' ? 'bg-primary-container/10 text-primary' : newCat === 'Shipping' ? 'bg-secondary-container/20 text-secondary' : 'bg-tertiary-fixed/40 text-tertiary',
+      catBg: newCat === 'Orders' ? 'bg-surface-container text-primary' : newCat === 'Shipping' ? 'bg-secondary-container/30 text-on-secondary-container' : 'bg-tertiary-fixed/30 text-tertiary',
+      views: '0'
     };
-    setArticles([newArt, ...articles]);
+
+    setArticles([newArticle, ...articles]);
     setNewTitle('');
     setNewContent('');
     setIsCreateArticleOpen(false);
   };
 
+  const handleDeleteArticle = (id: string) => {
+    setArticles(articles.filter((a) => a.id !== id));
+    setSelectedArticleIds((prev) => prev.filter((item) => item !== id));
+    setOpenActionMenuId(null);
+  };
+
   const handleGenerateImportDocs = () => {
     setIsGeneratingDocs(true);
     setTimeout(() => {
+      const generated = [
+        {
+          id: `gen-1`,
+          title: 'Product Catalog: Urban Tech Minimalist Backpack Overview',
+          category: 'Orders',
+          categoryColor: 'primary',
+          readTime: '5 min read',
+          visibility: 'Public article',
+          updated: 'Just now',
+          icon: 'inventory_2',
+          iconBg: 'bg-primary-container/10 text-primary',
+          catBg: 'bg-surface-container text-primary',
+          views: '0'
+        },
+        {
+          id: `gen-2`,
+          title: 'Shipping and Return Policies for Electronics',
+          category: 'Shipping',
+          categoryColor: 'secondary',
+          readTime: '3 min read',
+          visibility: 'Public article',
+          updated: 'Just now',
+          icon: 'local_shipping',
+          iconBg: 'bg-secondary-container/20 text-secondary',
+          catBg: 'bg-secondary-container/30 text-on-secondary-container',
+          views: '0'
+        }
+      ];
+      setArticles((prev) => [...generated, ...prev]);
       setIsGeneratingDocs(false);
       setGenerationSuccess(true);
       setTimeout(() => {
-        setGenerationSuccess(false);
         setIsImportModalOpen(false);
+        setGenerationSuccess(false);
       }, 1200);
-    }, 1000);
+    }, 1500);
   };
 
   return (
-    <div className="flex flex-col w-full pt-space-xs">
-      {/* Top Segmented Tab Navigation */}
-      <div className="w-full bg-surface-container-lowest rounded-xl shadow-sm px-space-md pt-space-xs mb-space-lg flex items-center gap-space-lg select-none">
+    <div className="flex flex-col w-full pb-space-2xl">
+      {/* Module Navigation Tabs */}
+      <div className="flex items-center gap-space-lg border-b border-surface-container-low mb-space-lg">
         <button
           type="button"
           onClick={() => setActiveTab('kb')}
-          className={`relative pb-space-sm font-title-sm text-title-sm transition-colors flex items-center gap-space-2xs focus:outline-none cursor-pointer ${
+          className={`pb-space-sm font-title-sm text-title-sm flex items-center gap-space-xs transition-colors relative cursor-pointer ${
             activeTab === 'kb' ? 'text-primary font-semibold' : 'text-on-surface-variant hover:text-on-surface'
           }`}
         >
-          <span className="material-symbols-outlined text-lg">menu_book</span>
+          <Icon name="library_books" size="md" />
           <span>Knowledge Base</span>
           {activeTab === 'kb' && (
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           )}
         </button>
-
         <button
           type="button"
           onClick={() => setActiveTab('collections')}
-          className={`relative pb-space-sm font-title-sm text-title-sm transition-colors flex items-center gap-space-2xs focus:outline-none cursor-pointer ${
+          className={`pb-space-sm font-title-sm text-title-sm flex items-center gap-space-xs transition-colors relative cursor-pointer ${
             activeTab === 'collections' ? 'text-primary font-semibold' : 'text-on-surface-variant hover:text-on-surface'
           }`}
         >
-          <span className="material-symbols-outlined text-lg">collections_bookmark</span>
+          <Icon name="collections_bookmark" size="md" />
           <span>Collections</span>
           {activeTab === 'collections' && (
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
@@ -209,62 +249,38 @@ export default function KnowledgeBasePage() {
       {activeTab === 'kb' ? (
         /* KNOWLEDGE BASE VIEW */
         <div className="flex flex-col w-full space-y-space-lg">
-          {/* Top KPI Micro-Cards */}
+          {/* Top KPI Standardized Metrics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-            <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">
-                  Total Articles
-                </span>
-                <span className="font-headline-lg text-headline-lg text-on-surface mt-1 font-bold">
-                  24
-                </span>
-                <span className="font-label-sm text-label-sm text-secondary flex items-center gap-0.5 mt-0.5 font-medium">
-                  <span className="material-symbols-outlined text-xs">trending_up</span> +3 this week
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-xl">description</span>
-              </div>
-            </div>
+            <MetricsCard
+              title="Total Articles"
+              value={articles.length}
+              trend="+3 this week"
+              trendType="positive"
+              icon="description"
+              variant="primary"
+            />
 
-            <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">
-                  Total Views
-                </span>
-                <span className="font-headline-lg text-headline-lg text-on-surface mt-1 font-bold">
-                  14.2k
-                </span>
-                <span className="font-label-sm text-label-sm text-secondary flex items-center gap-0.5 mt-0.5 font-medium">
-                  <span className="material-symbols-outlined text-xs">visibility</span> 98.4% helpful rating
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-xl">insights</span>
-              </div>
-            </div>
+            <MetricsCard
+              title="Total Views"
+              value="14.2k"
+              trend="98.4% helpful rating"
+              trendType="positive"
+              trendIcon="visibility"
+              icon="insights"
+              variant="secondary"
+            />
 
-            <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">
-                  Active Categories
-                </span>
-                <span className="font-headline-lg text-headline-lg text-on-surface mt-1 font-bold">
-                  6
-                </span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-0.5 mt-0.5 font-medium">
-                  Across 2 workspaces
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-xl">folder_open</span>
-              </div>
-            </div>
+            <MetricsCard
+              title="Active Categories"
+              value="6"
+              subtitle="Across 2 workspaces"
+              icon="folder_open"
+              variant="neutral"
+            />
           </div>
 
-          {/* Main Table Container (relative without overflow-hidden so table options dropdown is never clipped) */}
-          <div className="bg-surface-container-lowest rounded-xl shadow-sm flex flex-col relative">
+          {/* Main Table Container */}
+          <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 flex flex-col relative">
             {/* Table Header & Action Section */}
             <div className="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md rounded-t-xl">
               <div className="flex flex-col">
@@ -276,139 +292,122 @@ export default function KnowledgeBasePage() {
                 </p>
               </div>
               <div className="flex items-center gap-space-xs self-start md:self-auto">
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="md"
+                  startIcon="file_upload"
                   onClick={() => setIsImportModalOpen(true)}
-                  className="bg-surface-container text-on-surface hover:bg-surface-container-high px-space-md py-2 rounded-xl font-label-md text-label-md font-semibold transition-all flex items-center gap-space-2xs cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-base">file_upload</span>
-                  <span>Import</span>
-                </button>
-                <button
-                  type="button"
+                  Import
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="md"
+                  startIcon="add"
                   onClick={() => setIsCreateArticleOpen(true)}
-                  className="bg-primary-container text-on-primary hover:bg-primary px-space-md py-2 rounded-xl font-label-md text-label-md font-semibold shadow-sm transition-all flex items-center gap-space-2xs cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-base">add</span>
-                  <span>Create Article</span>
-                </button>
+                  Create Article
+                </Button>
               </div>
             </div>
 
             {/* Search and Filter Bar */}
             <div className="px-space-lg pb-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
-              <div className="relative w-full max-w-sm">
-                <span className="material-symbols-outlined absolute left-space-sm top-1/2 -translate-y-1/2 text-outline text-lg pointer-events-none">
-                  search
-                </span>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search articles..."
-                  className="w-full h-10 pl-9 pr-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-colors shadow-inner border border-transparent focus:border-surface-container"
-                />
-              </div>
+              <SearchInput
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search articles..."
+              />
 
-              {/* Exact Uniform Height Category Select & Table Options Trigger */}
               <div className="flex items-center gap-space-xs self-end sm:self-auto relative">
-                {/* Category Filter Select Box */}
+                {/* Category Filter */}
                 <div className="relative">
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="h-10 flex items-center pl-3.5 pr-8 rounded-xl bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm border border-transparent hover:border-surface-container focus:outline-none appearance-none cursor-pointer"
+                    className="h-10 bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm py-2 pl-3 pr-8 rounded-xl border border-transparent focus:border-surface-container focus:outline-none appearance-none cursor-pointer transition-colors"
                   >
                     <option value="All">All Categories</option>
                     <option value="Orders">Orders</option>
                     <option value="Shipping">Shipping</option>
                     <option value="General">General</option>
                   </select>
-                  <span className="material-symbols-outlined text-xs text-outline absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <span className="material-symbols-outlined text-sm text-outline absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                     expand_more
                   </span>
                 </div>
 
-                {/* Table Options Dropdown Trigger Button */}
+                {/* Table Options Dropdown */}
                 <div className="relative" ref={tableOptionsRef}>
-                  <button
-                    type="button"
+                  <Button
+                    variant={isTableOptionsOpen ? 'soft' : 'hover'}
+                    size="md"
+                    startIcon="tune"
                     onClick={() => setIsTableOptionsOpen(!isTableOptionsOpen)}
-                    className={`h-10 w-10 flex items-center justify-center rounded-xl transition-all cursor-pointer border ${
-                      isTableOptionsOpen
-                        ? 'bg-primary/10 text-primary border-primary/30 ring-2 ring-primary/15'
-                        : 'bg-surface-container-low border-transparent hover:bg-surface-container hover:text-on-surface text-on-surface-variant'
-                    }`}
-                    title="Table options & columns"
                   >
-                    <span className="material-symbols-outlined text-base">view_column</span>
-                  </button>
+                    Table Options
+                  </Button>
 
-                  {/* Short & Clean Table Options Menu */}
+                  {/* Clean Table Options Popover */}
                   {isTableOptionsOpen && (
-                    <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-2xl shadow-2xl z-50 py-2 border border-slate-200 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
-                      <div className="px-3 py-1 flex items-center justify-between">
-                        <span className="text-[10.5px] font-bold text-outline uppercase tracking-wider">
-                          Visible Columns
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setVisibleColumns({ category: true, views: true, updated: true, actions: true });
-                            setTableDensity('comfortable');
-                            setTableSortBy('default');
-                          }}
-                          className="text-[10.5px] text-primary hover:underline font-semibold cursor-pointer"
-                        >
-                          Reset
-                        </button>
+                    <div className="absolute right-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-2xl z-50 p-3 border border-slate-200 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-outline mb-2">
+                        Visible Columns
                       </div>
-
-                      <div className="space-y-0.5 px-1 py-1">
-                        <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-on-surface hover:bg-slate-50 cursor-pointer">
+                      <div className="space-y-1.5 mb-3">
+                        <label className="flex items-center justify-between text-xs text-on-surface hover:bg-slate-50 p-1 rounded-lg cursor-pointer">
                           <span>Category</span>
                           <input
                             type="checkbox"
                             checked={visibleColumns.category}
                             onChange={(e) => setVisibleColumns({ ...visibleColumns, category: e.target.checked })}
-                            className="accent-primary cursor-pointer"
+                            className="accent-primary rounded"
                           />
                         </label>
-                        <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-on-surface hover:bg-slate-50 cursor-pointer">
-                          <span>Views Counter</span>
+                        <label className="flex items-center justify-between text-xs text-on-surface hover:bg-slate-50 p-1 rounded-lg cursor-pointer">
+                          <span>Views</span>
                           <input
                             type="checkbox"
                             checked={visibleColumns.views}
                             onChange={(e) => setVisibleColumns({ ...visibleColumns, views: e.target.checked })}
-                            className="accent-primary cursor-pointer"
+                            className="accent-primary rounded"
                           />
                         </label>
-                        <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-on-surface hover:bg-slate-50 cursor-pointer">
+                        <label className="flex items-center justify-between text-xs text-on-surface hover:bg-slate-50 p-1 rounded-lg cursor-pointer">
                           <span>Updated Date</span>
                           <input
                             type="checkbox"
                             checked={visibleColumns.updated}
                             onChange={(e) => setVisibleColumns({ ...visibleColumns, updated: e.target.checked })}
-                            className="accent-primary cursor-pointer"
+                            className="accent-primary rounded"
                           />
                         </label>
                       </div>
 
-                      <div className="h-px bg-slate-100 my-1" />
+                      <div className="h-px bg-slate-100 my-2" />
 
-                      <div className="px-3 py-1 text-[10.5px] font-bold text-outline uppercase tracking-wider">
-                        Row Density
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-outline mb-2">
+                        Row Spacing
                       </div>
-                      <div className="px-1 py-0.5">
+                      <div className="grid grid-cols-2 gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setTableDensity(tableDensity === 'compact' ? 'comfortable' : 'compact')}
-                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between text-on-surface hover:bg-slate-50 cursor-pointer"
+                          onClick={() => setTableDensity('comfortable')}
+                          className={`py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer ${
+                            tableDensity === 'comfortable' ? 'bg-primary/10 text-primary font-semibold' : 'bg-slate-50 text-on-surface-variant hover:bg-slate-100'
+                          }`}
                         >
-                          <span>Compact Rows</span>
-                          <span className={`material-symbols-outlined text-base ${tableDensity === 'compact' ? 'text-primary' : 'text-outline/40'}`}>
-                            {tableDensity === 'compact' ? 'check_box' : 'check_box_outline_blank'}
-                          </span>
+                          Comfortable
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTableDensity('compact')}
+                          className={`py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer ${
+                            tableDensity === 'compact' ? 'bg-primary/10 text-primary font-semibold' : 'bg-slate-50 text-on-surface-variant hover:bg-slate-100'
+                          }`}
+                        >
+                          Compact
                         </button>
                       </div>
                     </div>
@@ -417,176 +416,133 @@ export default function KnowledgeBasePage() {
               </div>
             </div>
 
-            {/* Bulk Action Bar (When Articles Selected) */}
+            {/* Bulk Actions Banner */}
             {selectedArticleIds.length > 0 && (
               <div className="px-space-lg py-2 bg-primary-container/10 border-y border-primary/20 flex items-center justify-between animate-in fade-in duration-150">
                 <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                  <span className="material-symbols-outlined text-base">check_circle</span>
+                  <Icon name="check_circle" size="sm" color="primary" />
                   <span>{selectedArticleIds.length} {selectedArticleIds.length === 1 ? 'article' : 'articles'} selected</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleBulkDeleteArticles}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-error bg-error-container/30 hover:bg-error-container transition-colors cursor-pointer flex items-center gap-1"
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    startIcon="delete"
+                    onClick={handleBulkDelete}
                   >
-                    <span className="material-symbols-outlined text-sm">delete</span>
-                    <span>Delete Selected</span>
-                  </button>
-                  <button
-                    type="button"
+                    Delete Selected
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setSelectedArticleIds([])}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors cursor-pointer"
                   >
                     Clear Selection
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* Structured Data Table */}
+            {/* Articles Table */}
             <div className="w-full overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-surface-container-low">
-                    <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold w-12" scope="col">
+                  <tr className="bg-surface-container-low text-on-surface-variant font-caption text-caption uppercase tracking-wider">
+                    <th className="py-3 px-space-lg font-semibold w-12">
                       <input
-                        className="w-4 h-4 rounded accent-primary cursor-pointer"
                         type="checkbox"
-                        checked={isAllArticlesSelected}
+                        checked={isAllSelected}
                         ref={(el) => {
-                          if (el) el.indeterminate = isSomeArticlesSelected;
+                          if (el) el.indeterminate = isSomeSelected;
                         }}
-                        onChange={handleToggleSelectAllArticles}
-                        title={isAllArticlesSelected ? "Deselect all" : "Select all"}
+                        onChange={handleToggleSelectAll}
+                        className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
+                        title={isAllSelected ? "Deselect all" : "Select all"}
                       />
                     </th>
-                    <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
-                      Title
-                    </th>
-                    {visibleColumns.category && (
-                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
-                        Category
-                      </th>
-                    )}
-                    {visibleColumns.views && (
-                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
-                        Views
-                      </th>
-                    )}
-                    {visibleColumns.updated && (
-                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold" scope="col">
-                        Updated
-                      </th>
-                    )}
-                    {visibleColumns.actions && (
-                      <th className="py-space-xs px-space-lg font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold text-right" scope="col">
-                        Actions
-                      </th>
-                    )}
+                    <th className="py-3 px-space-md font-semibold">Title</th>
+                    {visibleColumns.category && <th className="py-3 px-space-md font-semibold">Category</th>}
+                    {visibleColumns.views && <th className="py-3 px-space-md font-semibold">Views</th>}
+                    {visibleColumns.updated && <th className="py-3 px-space-md font-semibold">Updated</th>}
+                    {visibleColumns.actions && <th className="py-3 px-space-lg font-semibold text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-container-low/40">
                   {filteredArticles.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-outline text-xs">
-                        No articles found matching your criteria.
+                        No knowledge base articles found.
                       </td>
                     </tr>
                   ) : (
                     filteredArticles.map((art) => {
                       const isSelected = selectedArticleIds.includes(art.id);
-                      const paddingClass = tableDensity === 'compact' ? 'py-2 px-space-lg' : 'py-3.5 px-space-lg';
-
                       return (
                         <tr
                           key={art.id}
-                          className={`hover:bg-surface-container-low/70 transition-colors group ${
+                          className={`hover:bg-surface-container-low/50 transition-colors group ${
                             isSelected ? 'bg-primary/[0.04]' : ''
                           }`}
                         >
-                          <td className={paddingClass}>
+                          <td className={`px-space-lg ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
                             <input
-                              className="w-4 h-4 rounded accent-primary cursor-pointer"
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => handleToggleSelectArticle(art.id)}
+                              className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
                             />
                           </td>
-                          <td className={paddingClass}>
-                            <div className="flex items-center gap-space-xs">
-                              <div className={`w-8 h-8 rounded-xl ${art.iconBg} flex items-center justify-center shrink-0`}>
-                                <span className="material-symbols-outlined text-base">{art.icon}</span>
+                          <td className={`px-space-md ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${art.iconBg}`}>
+                                <Icon name={art.icon} size="md" />
                               </div>
                               <div className="flex flex-col min-w-0">
-                                <span className="article-title font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors cursor-pointer truncate">
+                                <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors truncate">
                                   {art.title}
                                 </span>
                                 <span className="font-caption text-caption text-on-surface-variant">
-                                  {art.visibility} • {art.readTime}
+                                  {art.readTime} • {art.visibility}
                                 </span>
                               </div>
                             </div>
                           </td>
                           {visibleColumns.category && (
-                            <td className={paddingClass}>
-                              <span className={`article-cat inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-sm text-label-sm ${art.catBg} font-medium`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${art.category === 'Orders' ? 'bg-primary' : art.category === 'Shipping' ? 'bg-secondary' : 'bg-tertiary'}`}></span>
+                            <td className={`px-space-md ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${art.catBg}`}>
                                 {art.category}
                               </span>
                             </td>
                           )}
                           {visibleColumns.views && (
-                            <td className={`${paddingClass} font-body-sm text-body-sm text-on-surface-variant`}>
-                              <div className="flex items-center gap-1">
-                                <span className="material-symbols-outlined text-xs text-outline">visibility</span>
-                                <span>{art.views || '1,200'}</span>
-                              </div>
+                            <td className={`px-space-md font-body-sm text-body-sm text-on-surface ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
+                              {art.views}
                             </td>
                           )}
                           {visibleColumns.updated && (
-                            <td className={`${paddingClass} font-body-sm text-body-sm text-on-surface-variant`}>
+                            <td className={`px-space-md font-caption text-caption text-outline ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
                               {art.updated}
                             </td>
                           )}
                           {visibleColumns.actions && (
-                            <td className={`${paddingClass} text-right relative`}>
-                              <button
-                                type="button"
-                                onClick={() => setOpenActionMenuId(openActionMenuId === art.id ? null : art.id)}
-                                className="action-trigger p-1.5 rounded-xl hover:bg-surface-container-high text-outline hover:text-on-surface transition-colors focus:outline-none cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-lg leading-none">more_horiz</span>
-                              </button>
-                              {openActionMenuId === art.id && (
-                                <div className="action-dropdown absolute right-space-lg top-10 w-40 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1 flex flex-col text-left border border-surface-container-high">
-                                  <button
-                                    type="button"
-                                    onClick={() => { alert(`Editing ${art.title}`); setOpenActionMenuId(null); }}
-                                    className="px-space-sm py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-space-xs transition-colors"
-                                  >
-                                    <span className="material-symbols-outlined text-sm">edit</span> Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => { alert(`Previewing ${art.title}`); setOpenActionMenuId(null); }}
-                                    className="px-space-sm py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-space-xs transition-colors"
-                                  >
-                                    <span className="material-symbols-outlined text-sm">visibility</span> Preview
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setArticles(articles.filter(a => a.id !== art.id));
-                                      setSelectedArticleIds((prev) => prev.filter(item => item !== art.id));
-                                      setOpenActionMenuId(null);
-                                    }}
-                                    className="px-space-sm py-1.5 font-body-sm text-body-sm text-error hover:bg-error-container/30 flex items-center gap-space-xs transition-colors"
-                                  >
-                                    <span className="material-symbols-outlined text-sm">delete</span> Delete
-                                  </button>
-                                </div>
-                              )}
+                            <td className={`px-space-lg text-right ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
+                              <div className="inline-flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  startIcon="edit"
+                                  title="Edit Article"
+                                  aria-label="Edit Article"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  startIcon="delete"
+                                  onClick={() => handleDeleteArticle(art.id)}
+                                  title="Delete Article"
+                                  aria-label="Delete Article"
+                                />
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -597,34 +553,22 @@ export default function KnowledgeBasePage() {
               </table>
             </div>
 
-            {/* Pagination Footer */}
-            <div className="px-space-lg py-space-sm bg-surface-container-lowest flex items-center justify-between border-t border-surface-container-low">
-              <span className="font-body-sm text-body-sm text-on-surface-variant">
-                Showing 1 to {filteredArticles.length} of {filteredArticles.length} articles
-              </span>
-              <div className="flex items-center gap-space-2xs select-none">
-                <button className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none disabled:opacity-40" disabled>
-                  <span className="material-symbols-outlined text-base">chevron_left</span>
-                </button>
-                <button className="w-8 h-8 rounded-lg flex items-center justify-center font-label-md text-label-md font-semibold bg-primary-container text-on-primary shadow-sm focus:outline-none">
-                  1
-                </button>
-                <button className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none">
-                  <span className="material-symbols-outlined text-base">chevron_right</span>
-                </button>
-              </div>
-            </div>
+            {/* Standardized Reusable Pagination */}
+            <Pagination
+              currentPage={1}
+              totalPages={1}
+              totalItems={filteredArticles.length}
+              itemsPerPage={10}
+              itemLabel="articles"
+              onPageChange={() => {}}
+            />
           </div>
 
-          {/* Secondary Context / Reference Banner */}
+          {/* Secondary Context / Reference Banner with Themed Icon */}
           <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md">
             <div className="flex items-center gap-space-md">
-              <div className="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary shrink-0 overflow-hidden shadow-sm">
-                <img
-                  alt="Reference Interface Visual"
-                  className="w-full h-full object-cover"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsCCwOK2lTWvLWddFm6N23-T4x4iqI-xMWW3CCSo7ksxTL6y24zV5qSviYL7b84XNx2HhmL8DeAemy-BO63jvbthSvRQgPIPXWDm0eT6t5uCHSturIjRARkkpGK8clItFrGpI4BJZdVN5xLiMXuSc2Qayk4jXmkqyRcl2FZYVzd1gcEGipBMSd9_jswQdL-w_JDf8JgycFG3lJqFwHNtxFbED5m1ssAavrNIt-1NitFp2dxE8orJCxfWy8qmLJj7ZkrA"
-                />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center text-primary shrink-0 shadow-sm">
+                <Icon name="collections_bookmark" size="xl" color="primary" />
               </div>
               <div className="flex flex-col">
                 <span className="font-title-sm text-title-sm text-on-surface font-semibold">
@@ -635,19 +579,19 @@ export default function KnowledgeBasePage() {
                 </span>
               </div>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="hover"
+              size="md"
               onClick={() => setActiveTab('collections')}
-              className="bg-surface-container-lowest text-primary hover:bg-surface-container-high px-space-md py-2 rounded-xl font-label-md text-label-md font-semibold transition-all shadow-sm shrink-0 cursor-pointer"
             >
               Browse Collections
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
         /* COLLECTIONS VIEW (Secondary Tab Content) */
         <div className="flex flex-col w-full space-y-space-lg">
-          <div className="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+          <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
             <div className="flex flex-col">
               <h2 className="font-headline-md text-headline-md text-on-surface font-bold tracking-tight">
                 Article Collections
@@ -656,14 +600,14 @@ export default function KnowledgeBasePage() {
                 Group articles into browseable subject folders for your support site
               </p>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="md"
+              startIcon="create_new_folder"
               onClick={() => alert("Create New Collection dialog")}
-              className="bg-primary-container text-on-primary hover:bg-primary px-space-md py-2 rounded-xl font-label-md text-label-md font-semibold shadow-sm transition-all flex items-center gap-space-2xs cursor-pointer"
             >
-              <span className="material-symbols-outlined text-base">create_new_folder</span>
-              <span>New Collection</span>
-            </button>
+              New Collection
+            </Button>
           </div>
 
           {/* Collections Grid */}
@@ -673,7 +617,7 @@ export default function KnowledgeBasePage() {
               <div>
                 <div className="flex items-center justify-between mb-space-sm">
                   <div className="w-10 h-10 rounded-xl bg-primary-container/10 text-primary flex items-center justify-center">
-                    <span className="material-symbols-outlined text-xl">shopping_cart</span>
+                    <Icon name="shopping_cart" size="lg" color="primary" />
                   </div>
                   <span className="font-label-sm text-label-sm px-2.5 py-0.5 rounded-full bg-surface-container text-primary font-semibold">
                     12 Articles
@@ -684,13 +628,14 @@ export default function KnowledgeBasePage() {
               </div>
               <div className="mt-space-md pt-space-sm flex items-center justify-between border-t border-surface-container-low">
                 <span className="font-caption text-caption text-outline">Updated 2 days ago</span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  endIcon="arrow_forward"
                   onClick={() => { setActiveTab('kb'); }}
-                  className="text-primary hover:text-on-primary-fixed-variant font-label-sm text-label-sm font-semibold flex items-center gap-0.5 cursor-pointer"
                 >
-                  Manage <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                </button>
+                  Manage
+                </Button>
               </div>
             </div>
 
@@ -699,7 +644,7 @@ export default function KnowledgeBasePage() {
               <div>
                 <div className="flex items-center justify-between mb-space-sm">
                   <div className="w-10 h-10 rounded-xl bg-secondary-container/20 text-secondary flex items-center justify-center">
-                    <span className="material-symbols-outlined text-xl">flight_takeoff</span>
+                    <Icon name="flight_takeoff" size="lg" color="secondary" />
                   </div>
                   <span className="font-label-sm text-label-sm px-2.5 py-0.5 rounded-full bg-secondary-container/30 text-on-secondary-container font-semibold">
                     8 Articles
@@ -710,13 +655,14 @@ export default function KnowledgeBasePage() {
               </div>
               <div className="mt-space-md pt-space-sm flex items-center justify-between border-t border-surface-container-low">
                 <span className="font-caption text-caption text-outline">Updated 5 days ago</span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  endIcon="arrow_forward"
                   onClick={() => { setActiveTab('kb'); }}
-                  className="text-primary hover:text-on-primary-fixed-variant font-label-sm text-label-sm font-semibold flex items-center gap-0.5 cursor-pointer"
                 >
-                  Manage <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                </button>
+                  Manage
+                </Button>
               </div>
             </div>
 
@@ -725,7 +671,7 @@ export default function KnowledgeBasePage() {
               <div>
                 <div className="flex items-center justify-between mb-space-sm">
                   <div className="w-10 h-10 rounded-xl bg-tertiary-fixed/40 text-tertiary flex items-center justify-center">
-                    <span className="material-symbols-outlined text-xl">live_help</span>
+                    <Icon name="live_help" size="lg" color="tertiary" />
                   </div>
                   <span className="font-label-sm text-label-sm px-2.5 py-0.5 rounded-full bg-tertiary-fixed/30 text-tertiary font-semibold">
                     4 Articles
@@ -736,20 +682,21 @@ export default function KnowledgeBasePage() {
               </div>
               <div className="mt-space-md pt-space-sm flex items-center justify-between border-t border-surface-container-low">
                 <span className="font-caption text-caption text-outline">Updated 1 week ago</span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  endIcon="arrow_forward"
                   onClick={() => { setActiveTab('kb'); }}
-                  className="text-primary hover:text-on-primary-fixed-variant font-label-sm text-label-sm font-semibold flex items-center gap-0.5 cursor-pointer"
                 >
-                  Manage <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                </button>
+                  Manage
+                </Button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* EXACT DEDICATED STANDALONE MODAL OVERLAY (From 10b._knowledge_base_import_sources_catalog_md_generator/code.html) */}
+      {/* Standalone Import Modal Overlay */}
       {isImportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-space-lg backdrop-blur-md bg-on-surface/35 select-none" id="import-articles-modal">
           <div className="relative bg-surface-container-lowest rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-[920px] overflow-hidden z-10 flex flex-col max-h-[92vh] border border-surface-container-highest/60">
@@ -757,7 +704,7 @@ export default function KnowledgeBasePage() {
             <div className="px-space-lg py-space-md bg-surface-container-lowest flex items-center justify-between border-b border-surface-container">
               <div className="flex items-center gap-space-sm">
                 <div className="w-10 h-10 rounded-xl bg-primary-container/10 text-primary flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-2xl text-primary">upload_file</span>
+                  <Icon name="upload_file" size="xl" color="primary" />
                 </div>
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
@@ -773,20 +720,19 @@ export default function KnowledgeBasePage() {
                   </p>
                 </div>
               </div>
-              <button
-                aria-label="Close modal"
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={() => setIsImportModalOpen(false)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
-            {/* Modal Body: 2 Options Side-by-Side */}
+            {/* Modal Body */}
             <div className="p-space-lg overflow-y-auto space-y-space-lg">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg items-stretch">
-                {/* OPTION A: Files & Cloud Storage */}
+                {/* OPTION A */}
                 <div className="bg-surface-container-lowest rounded-xl p-space-md ring-2 ring-primary shadow-sm flex flex-col justify-between relative pt-5">
                   <div className="absolute -top-3 right-space-md">
                     <span className="bg-primary text-on-primary font-label-sm text-caption px-3 py-0.5 rounded-full uppercase tracking-wider font-semibold shadow-sm">
@@ -795,7 +741,7 @@ export default function KnowledgeBasePage() {
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-space-xs mb-1">
-                      <span className="material-symbols-outlined text-primary text-xl">cloud_upload</span>
+                      <Icon name="cloud_upload" size="lg" color="primary" />
                       <h3 className="font-title-md text-title-md text-on-surface font-bold">
                         Option A: Files &amp; Cloud Storage
                       </h3>
@@ -810,45 +756,45 @@ export default function KnowledgeBasePage() {
                         CONNECT CLOUD PROVIDERS
                       </span>
                       <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          startIcon="add_to_drive"
                           onClick={() => alert("Connecting Google Drive cloud sync...")}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm transition-colors border border-outline-variant/30 cursor-pointer"
                         >
-                          <span className="material-symbols-outlined text-base text-primary">add_to_drive</span>
-                          <span className="font-medium">Google Drive</span>
-                        </button>
-                        <button
-                          type="button"
+                          Google Drive
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          startIcon="cloud_queue"
                           onClick={() => alert("Connecting Dropbox cloud sync...")}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm transition-colors border border-outline-variant/30 cursor-pointer"
                         >
-                          <span className="material-symbols-outlined text-base text-primary">cloud_queue</span>
-                          <span className="font-medium">Dropbox</span>
-                        </button>
-                        <button
-                          type="button"
+                          Dropbox
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          startIcon="cloud_sync"
                           onClick={() => alert("Connecting OneDrive cloud sync...")}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm transition-colors border border-outline-variant/30 cursor-pointer"
                         >
-                          <span className="material-symbols-outlined text-base text-primary">cloud_sync</span>
-                          <span className="font-medium">OneDrive</span>
-                        </button>
-                        <button
-                          type="button"
+                          OneDrive
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          startIcon="devices"
                           onClick={() => alert("Selecting files from Local PC...")}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm transition-colors border border-outline-variant/30 cursor-pointer"
                         >
-                          <span className="material-symbols-outlined text-base text-outline">devices</span>
-                          <span className="font-medium">Local PC</span>
-                        </button>
+                          Local PC
+                        </Button>
                       </div>
                     </div>
 
                     {/* Drag & Drop Zone */}
                     <div className="p-space-lg rounded-xl bg-surface-container-low/60 border-2 border-dashed border-outline-variant/80 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-surface-container/50 transition-colors mb-space-sm py-7">
                       <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary mb-2 shadow-inner">
-                        <span className="material-symbols-outlined text-xl">upload</span>
+                        <Icon name="upload" size="lg" color="primary" />
                       </div>
                       <span className="font-title-sm text-title-sm text-on-surface font-bold">
                         Drag &amp; drop files here
@@ -890,7 +836,7 @@ export default function KnowledgeBasePage() {
                   </div>
                 </div>
 
-                {/* EXACT OPTION B: Generate .md from Catalog */}
+                {/* OPTION B */}
                 <div className="bg-surface-container-lowest rounded-xl p-space-md ring-1 ring-surface-container-highest shadow-sm flex flex-col justify-between relative pt-5">
                   <div className="absolute -top-3 right-space-md">
                     <span className="bg-secondary text-on-secondary font-label-sm text-caption px-3 py-0.5 rounded-full uppercase tracking-wider font-semibold shadow-sm">
@@ -899,7 +845,7 @@ export default function KnowledgeBasePage() {
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-space-xs mb-1">
-                      <span className="material-symbols-outlined text-secondary text-xl">auto_stories</span>
+                      <Icon name="auto_stories" size="lg" color="secondary" />
                       <h3 className="font-title-md text-title-md text-on-surface font-bold">
                         Option B: Generate .md from Catalog
                       </h3>
@@ -979,7 +925,7 @@ export default function KnowledgeBasePage() {
 
                     {/* Preview Alert Box */}
                     <div className="p-2.5 rounded-xl bg-secondary-container/20 border border-secondary/20 flex items-center gap-2 mt-auto">
-                      <span className="material-symbols-outlined text-secondary text-base shrink-0">check_circle</span>
+                      <Icon name="check_circle" size="sm" color="secondary" />
                       <span className="font-caption text-caption text-on-secondary-container font-semibold leading-tight">
                         Generates 12 Product MDs + 4 Category Guides ready to publish into Knowledge Base
                       </span>
@@ -992,27 +938,26 @@ export default function KnowledgeBasePage() {
             {/* Modal Footer Actions */}
             <div className="px-space-lg py-space-md bg-surface-container-low/80 flex items-center justify-between border-t border-surface-container">
               <span className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-base text-primary">info</span>
+                <Icon name="info" size="sm" color="primary" />
                 Articles are created as drafts for your review before publishing
               </span>
               <div className="flex items-center gap-space-xs">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsImportModalOpen(false)}
-                  className="bg-surface-container text-on-surface hover:bg-surface-container-high px-space-md py-2.5 rounded-xl font-label-md text-label-md font-semibold transition-all focus:outline-none cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  startIcon="auto_awesome"
+                  loading={isGeneratingDocs}
                   onClick={handleGenerateImportDocs}
-                  className="bg-primary-container text-on-primary hover:bg-primary px-space-md py-2.5 rounded-xl font-label-md text-label-md font-semibold shadow-sm transition-all flex items-center gap-space-2xs focus:outline-none cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-base">auto_awesome</span>
-                  <span>
-                    {isGeneratingDocs ? 'Compiling Markdown...' : generationSuccess ? 'Docs Imported Successfully!' : 'Generate & Import Markdown Docs'}
-                  </span>
-                </button>
+                  {generationSuccess ? 'Docs Imported Successfully!' : 'Generate & Import Markdown Docs'}
+                </Button>
               </div>
             </div>
           </div>
@@ -1025,9 +970,13 @@ export default function KnowledgeBasePage() {
           <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-surface-container-high flex flex-col gap-4">
             <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
               <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Create Article</h2>
-              <button onClick={() => setIsCreateArticleOpen(false)} className="text-outline hover:text-on-surface cursor-pointer">
-                <span className="material-symbols-outlined">close</span>
-              </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
+                onClick={() => setIsCreateArticleOpen(false)}
+                aria-label="Close modal"
+              />
             </div>
 
             <form onSubmit={handleCreateArticleSubmit} className="flex flex-col gap-3">
@@ -1068,19 +1017,20 @@ export default function KnowledgeBasePage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-surface-container-low">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsCreateArticleOpen(false)}
-                  className="px-4 py-2 text-xs rounded-xl text-on-surface-variant hover:bg-surface-container cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   type="submit"
-                  className="px-4 py-2 text-xs rounded-xl bg-primary text-on-primary font-semibold shadow-sm hover:bg-primary-container cursor-pointer"
                 >
                   Publish Article
-                </button>
+                </Button>
               </div>
             </form>
           </div>

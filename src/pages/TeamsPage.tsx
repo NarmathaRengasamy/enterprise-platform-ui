@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { INITIAL_TEAM } from '../data/mockData';
+import { Button, MetricsCard, Icon } from '../components/common';
 
 export default function TeamsPage() {
   const [team, setTeam] = useState(INITIAL_TEAM);
@@ -66,23 +67,23 @@ export default function TeamsPage() {
             Manage your team, seat assignments, and security roles across workspace environments.
           </p>
         </div>
-        <div className="flex items-center gap-space-sm">
-          <button
-            type="button"
+        <div className="flex items-center gap-space-xs">
+          <Button
+            variant="hover"
+            size="md"
+            startIcon="file_upload"
             onClick={() => alert("CSV Import template downloaded")}
-            className="inline-flex items-center justify-center gap-2 px-space-md h-10 rounded-xl bg-surface-container-lowest text-on-surface font-title-sm text-title-sm shadow-sm hover:bg-surface-container-low transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-lg text-outline">file_upload</span>
-            <span>Import CSV</span>
-          </button>
-          <button
-            type="button"
+            Import CSV
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            startIcon="person_add"
             onClick={() => setIsAddMemberOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-space-md h-10 rounded-xl bg-primary-container text-on-primary font-title-sm text-title-sm shadow-md hover:bg-primary transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-lg">person_add</span>
-            <span>Add Member</span>
-          </button>
+            Add Member
+          </Button>
         </div>
       </div>
 
@@ -291,9 +292,13 @@ export default function TeamsPage() {
           <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-6 w-full max-w-md border border-surface-container-high flex flex-col gap-4">
             <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
               <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Add Team Member</h2>
-              <button onClick={() => setIsAddMemberOpen(false)} className="text-outline hover:text-on-surface">
-                <span className="material-symbols-outlined">close</span>
-              </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
+                onClick={() => setIsAddMemberOpen(false)}
+                aria-label="Close modal"
+              />
             </div>
 
             <form onSubmit={handleAddMemberSubmit} className="flex flex-col gap-3">
@@ -347,19 +352,20 @@ export default function TeamsPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-surface-container-low">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsAddMemberOpen(false)}
-                  className="px-4 py-2 text-xs rounded-xl text-on-surface-variant hover:bg-surface-container"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   type="submit"
-                  className="px-4 py-2 text-xs rounded-xl bg-primary text-on-primary font-semibold shadow-sm hover:bg-primary-container"
                 >
                   Send Invitation
-                </button>
+                </Button>
               </div>
             </form>
           </div>

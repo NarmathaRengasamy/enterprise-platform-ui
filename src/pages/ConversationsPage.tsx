@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_CONVERSATIONS } from '../data/mockData';
+import { Button } from '../components/common';
+
+interface ConversationsPageProps {
+  selectedConversationId?: string | null;
+  setSelectedConversationId?: (id: string | null) => void;
+}
 
 export default function ConversationsPage({
   selectedConversationId: propSelectedConvoId,
   setSelectedConversationId: propSetSelectedConvoId
-} = {}) {
+}: ConversationsPageProps = {}) {
   const [conversations, setConversations] = useState(INITIAL_CONVERSATIONS);
   const [internalActiveConvoId, setInternalActiveConvoId] = useState(
     propSelectedConvoId || INITIAL_CONVERSATIONS[0].id
@@ -58,21 +64,6 @@ export default function ConversationsPage({
     }
   };
 
-  const getChannelChipClass = (channelKey) => {
-    if (composerChannel === channelKey) {
-      if (channelKey === 'whatsapp') {
-        return 'bg-emerald-500 text-white font-semibold shadow-sm';
-      } else if (channelKey === 'sms') {
-        return 'bg-amber-500 text-white font-semibold shadow-sm';
-      } else if (channelKey === 'email') {
-        return 'bg-sky-600 text-white font-semibold shadow-sm';
-      } else {
-        return 'bg-purple-600 text-white font-semibold shadow-sm';
-      }
-    }
-    return 'bg-surface-container hover:bg-surface-container-high text-on-surface font-medium';
-  };
-
   const handleSendMessage = (e) => {
     if (e) e.preventDefault();
     if (!inputMessage.trim()) return;
@@ -113,14 +104,14 @@ export default function ConversationsPage({
             <h1 className="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">
               Conversations
             </h1>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="edit_square"
               onClick={() => alert("Start new conversation thread")}
-              className="p-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors cursor-pointer"
               title="New conversation"
-            >
-              <span className="material-symbols-outlined text-[18px]">edit_square</span>
-            </button>
+              aria-label="New conversation"
+            />
           </div>
 
           {/* Search Input */}
@@ -146,18 +137,14 @@ export default function ConversationsPage({
               { key: 'sms', label: 'SMS' },
               { key: 'email', label: 'Email' }
             ].map((tab) => (
-              <button
+              <Button
                 key={tab.key}
-                type="button"
+                variant={selectedChannelFilter === tab.key ? 'primary' : 'hover'}
+                size="xs"
                 onClick={() => setSelectedChannelFilter(tab.key)}
-                className={`px-3 py-1 rounded-full font-label-sm text-label-sm transition-all cursor-pointer ${
-                  selectedChannelFilter === tab.key
-                    ? 'bg-primary text-on-primary font-medium shadow-sm'
-                    : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant'
-                }`}
               >
                 {tab.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -258,32 +245,32 @@ export default function ConversationsPage({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
+            <Button
+              variant="soft"
+              size="sm"
+              startIcon="call"
               onClick={() => {
                 setComposerChannel('voice');
                 alert(`Starting voice call / logging call with ${activeConvo.name} (${activeConvo.phone})`);
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 font-label-sm text-label-sm font-semibold transition-colors cursor-pointer mr-1"
               title="Call via Phone"
             >
-              <span className="material-symbols-outlined text-[18px]">call</span>
               <span className="hidden sm:inline">Call</span>
-            </button>
-            <button
-              type="button"
-              className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="search"
               title="Search messages"
-            >
-              <span className="material-symbols-outlined text-[20px]">search</span>
-            </button>
-            <button
-              type="button"
-              className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
+              aria-label="Search messages"
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="more_vert"
               title="Options"
-            >
-              <span className="material-symbols-outlined text-[20px]">more_vert</span>
-            </button>
+              aria-label="Options"
+            />
           </div>
         </div>
 
@@ -360,27 +347,27 @@ export default function ConversationsPage({
             <span className="text-on-surface-variant font-label-sm text-label-sm mr-1 font-medium">
               Send via:
             </span>
-            <button
-              type="button"
+            <Button
+              variant={composerChannel === 'whatsapp' ? 'primary' : 'hover'}
+              size="xs"
               onClick={() => setComposerChannel('whatsapp')}
-              className={`channel-chip px-3 py-1 rounded-full font-label-sm text-label-sm transition-all cursor-pointer ${getChannelChipClass('whatsapp')}`}
             >
               WhatsApp {composerChannel === 'whatsapp' ? '(Active)' : ''}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant={composerChannel === 'sms' ? 'primary' : 'hover'}
+              size="xs"
               onClick={() => setComposerChannel('sms')}
-              className={`channel-chip px-3 py-1 rounded-full font-label-sm text-label-sm transition-all cursor-pointer ${getChannelChipClass('sms')}`}
             >
               SMS {composerChannel === 'sms' ? '(Active)' : ''}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant={composerChannel === 'email' ? 'primary' : 'hover'}
+              size="xs"
               onClick={() => setComposerChannel('email')}
-              className={`channel-chip px-3 py-1 rounded-full font-label-sm text-label-sm transition-all cursor-pointer ${getChannelChipClass('email')}`}
             >
               Email {composerChannel === 'email' ? '(Active)' : ''}
-            </button>
+            </Button>
           </div>
 
           {/* Quick Emoji Picker Popover */}
@@ -404,22 +391,22 @@ export default function ConversationsPage({
 
           {/* Input Container */}
           <form onSubmit={handleSendMessage} className="flex items-center gap-2 bg-surface-container-low rounded-xl px-3 py-2 focus-within:bg-surface-container focus-within:ring-1 focus-within:ring-primary transition-all">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="sentiment_satisfied"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
               title="Add emoji"
-            >
-              <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
-            </button>
-            <button
-              type="button"
+              aria-label="Add emoji"
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="attach_file"
               onClick={() => alert("Attach product quote, catalog sheet, or image")}
-              className="p-1 rounded-lg text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
               title="Attach file"
-            >
-              <span className="material-symbols-outlined text-[20px]">attach_file</span>
-            </button>
+              aria-label="Attach file"
+            />
 
             <input
               type="text"
@@ -429,14 +416,15 @@ export default function ConversationsPage({
               className="flex-1 bg-transparent text-on-surface placeholder:text-on-surface-variant font-body-md text-body-md focus:outline-none px-1"
             />
 
-            <button
+            <Button
+              variant="primary"
+              size="md"
               type="submit"
+              endIcon="send"
               disabled={!inputMessage.trim()}
-              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
             >
-              <span>Send</span>
-              <span className="material-symbols-outlined text-[16px]">send</span>
-            </button>
+              Send
+            </Button>
           </form>
         </div>
       </div>

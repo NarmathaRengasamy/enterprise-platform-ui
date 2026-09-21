@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_PRODUCTS } from '../data/mockData';
+import { Product } from '../types';
+import { Button, Icon, StatusBadge } from '../components/common';
 
-export default function ProductDetailsPage({ setActiveModule, selectedProduct }) {
-  const product = selectedProduct || INITIAL_PRODUCTS[0];
+interface ProductDetailsPageProps {
+  setActiveModule: (module: string) => void;
+  selectedProduct?: Product | null;
+}
+
+export default function ProductDetailsPage({ setActiveModule, selectedProduct }: ProductDetailsPageProps) {
+  const product = selectedProduct || (INITIAL_PRODUCTS[0] as Product);
   const [selectedThumbIndex, setSelectedThumbIndex] = useState(0);
-  const [mediaTab, setMediaTab] = useState('images');
+  const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [selectedVariant, setSelectedVariant] = useState('');
   const [copiedSku, setCopiedSku] = useState(false);
 
@@ -17,7 +24,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
     }
   }, [product.id]);
 
-  const gallery = product.gallery || [
+  const gallery = (product as any).gallery || [
     { id: 0, label: "Front", src: product.image },
     { id: 1, label: "Side", src: product.image },
     { id: 2, label: "Angled", src: product.image },
@@ -41,44 +48,44 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
       {/* Sub-Header / Utility Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-space-md mb-space-lg">
         <div className="flex items-center gap-space-xs">
-          <button
-            type="button"
+          <Button
+            variant="hover"
+            size="md"
+            startIcon="arrow_back"
             onClick={() => setActiveModule('products')}
-            className="inline-flex items-center gap-space-2xs text-on-surface-variant hover:text-primary font-body-sm text-body-sm transition-colors py-space-2xs px-space-xs rounded-lg hover:bg-surface-container-high cursor-pointer"
           >
-            <span className="material-symbols-outlined text-base">arrow_back</span>
-            <span className="font-title-sm text-title-sm">Back to Products</span>
-          </button>
+            Back to Products
+          </Button>
           <span className="text-outline text-xs">/</span>
-          <span className="font-caption text-caption uppercase tracking-wider text-outline px-1.5 py-0.5 rounded bg-surface-container-high font-semibold">
+          <span className="font-caption text-caption uppercase tracking-wider text-outline px-2 py-1 rounded bg-surface-container-high font-semibold">
             SKU: {product.sku}
           </span>
         </div>
-        <div className="flex items-center gap-space-sm">
-          <button
-            type="button"
+        <div className="flex items-center gap-space-xs">
+          <Button
+            variant="hover"
+            size="md"
+            startIcon="content_copy"
             onClick={() => alert(`Duplicated product ${product.name}`)}
-            className="inline-flex items-center gap-space-2xs px-3.5 py-2 rounded-xl bg-surface-container-lowest shadow-sm hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-lg text-outline">content_copy</span>
-            <span>Duplicate</span>
-          </button>
-          <button
-            type="button"
+            Duplicate
+          </Button>
+          <Button
+            variant="hover"
+            size="md"
+            startIcon="share"
             onClick={() => alert(`Share link generated for ${product.name}`)}
-            className="inline-flex items-center gap-space-2xs px-3.5 py-2 rounded-xl bg-surface-container-lowest shadow-sm hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-lg text-outline">share</span>
-            <span>Share</span>
-          </button>
-          <button
-            type="button"
+            Share
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            startIcon="edit"
             onClick={() => setActiveModule('edit-product')}
-            className="inline-flex items-center gap-space-xs px-5 py-2 rounded-xl bg-primary-container text-on-primary-container font-title-sm text-title-sm shadow-sm hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-lg">edit</span>
-            <span>Edit Product</span>
-          </button>
+            Edit Product
+          </Button>
         </div>
       </div>
 
@@ -87,10 +94,10 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
         {/* LEFT COLUMN: Media Display (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-space-lg min-w-0">
           {/* Primary Showcase Card */}
-          <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm relative group overflow-hidden">
+          <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm border border-surface-container-low/60 relative group overflow-hidden">
             <div className="absolute top-space-md left-space-md z-10 flex gap-space-2xs">
               <span className="px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur text-on-surface font-caption text-caption shadow-sm flex items-center gap-1 font-semibold">
-                <span className="material-symbols-outlined text-sm text-primary">verified</span>
+                <Icon name="verified" size="xs" color="primary" />
                 High Resolution
               </span>
             </div>
@@ -106,9 +113,9 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
 
             {/* Thumbnail Selector Ribbon */}
             <div className="mt-space-md grid grid-cols-4 gap-space-sm">
-              {gallery.map((thumb, idx) => (
+              {gallery.map((thumb: any, idx: number) => (
                 <button
-                  key={thumb.id}
+                  key={thumb.id || idx}
                   type="button"
                   onClick={() => setSelectedThumbIndex(idx)}
                   className={`group/thumb relative rounded-lg overflow-hidden aspect-[4/3] bg-surface-container-low transition-all cursor-pointer ${
@@ -127,12 +134,12 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
           </div>
 
           {/* Media Management Section / Gallery Tabs */}
-          <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
-            <div className="flex items-center justify-between pb-space-sm mb-space-md">
+          <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm border border-surface-container-low/60">
+            <div className="flex items-center justify-between pb-space-sm mb-space-md border-b border-surface-container-low">
               <div className="flex items-center gap-space-xs">
-                <span className="font-title-md text-title-md text-on-surface">Media Gallery</span>
-                <span className="font-caption text-caption text-outline px-1.5 py-0.5 rounded-full bg-surface-container-high">
-                  {gallery.length + (product.videos?.length || 0)} items
+                <span className="font-title-md text-title-md text-on-surface font-semibold">Media Gallery</span>
+                <span className="font-caption text-caption text-outline px-2 py-0.5 rounded-full bg-surface-container-high font-medium">
+                  {gallery.length + ((product as any).videos?.length || 0)} items
                 </span>
               </div>
               {/* Tab Bar */}
@@ -142,11 +149,11 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   onClick={() => setMediaTab('images')}
                   className={`px-3 py-1 rounded-lg font-title-sm text-title-sm transition-all flex items-center gap-1.5 cursor-pointer ${
                     mediaTab === 'images'
-                      ? 'bg-surface-container-lowest text-primary shadow-sm'
+                      ? 'bg-surface-container-lowest text-primary shadow-sm font-semibold'
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-sm">photo_library</span>
+                  <Icon name="photo_library" size="xs" />
                   <span>Images ({gallery.length})</span>
                 </button>
                 <button
@@ -154,12 +161,12 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   onClick={() => setMediaTab('videos')}
                   className={`px-3 py-1 rounded-lg font-title-sm text-title-sm transition-all flex items-center gap-1.5 cursor-pointer ${
                     mediaTab === 'videos'
-                      ? 'bg-surface-container-lowest text-primary shadow-sm'
+                      ? 'bg-surface-container-lowest text-primary shadow-sm font-semibold'
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-sm">videocam</span>
-                  <span>Videos ({product.videos?.length || 0})</span>
+                  <Icon name="videocam" size="xs" />
+                  <span>Videos ({(product as any).videos?.length || 0})</span>
                 </button>
               </div>
             </div>
@@ -167,7 +174,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
             {/* Media Grid: Images */}
             {mediaTab === 'images' ? (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
-                {gallery.map((img, i) => (
+                {gallery.map((img: any, i: number) => (
                   <div key={i} className="relative group rounded-lg overflow-hidden aspect-square bg-surface-container-low shadow-sm">
                     <img alt="Gallery item" src={img.src} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     {i === 0 && (
@@ -181,12 +188,12 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
             ) : (
               /* Media Grid: Videos */
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
-                {(product.videos || []).map((vid) => (
+                {((product as any).videos || []).map((vid: any) => (
                   <div key={vid.id} className="relative group rounded-lg overflow-hidden aspect-square bg-surface-container-low shadow-sm">
                     <img alt="Video thumbnail" src={vid.thumbnail} className="w-full h-full object-cover opacity-90" />
                     <div className="absolute inset-0 bg-on-surface/30 flex items-center justify-center">
                       <div className="w-9 h-9 rounded-full bg-surface-container-lowest/90 backdrop-blur flex items-center justify-center shadow-md">
-                        <span className="material-symbols-outlined text-primary text-xl ml-0.5">play_arrow</span>
+                        <Icon name="play_arrow" size="lg" color="primary" className="ml-0.5" />
                       </div>
                     </div>
                     <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded font-caption text-caption bg-on-surface/80 text-surface-container-lowest text-[10px]">
@@ -201,21 +208,14 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
 
         {/* RIGHT COLUMN: Product Specifications (5 Cols) */}
         <div className="lg:col-span-5 flex flex-col gap-space-lg min-w-0">
-          <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+          <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm border border-surface-container-low/60 flex flex-col gap-space-md">
             {/* Title & Stock Status */}
             <div className="flex flex-col gap-space-2xs">
               <div className="flex items-start justify-between gap-space-sm">
                 <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">
                   {product.name}
                 </h1>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm font-semibold shrink-0 ${
-                  product.stockStatus === 'In Stock'
-                    ? 'bg-secondary-container/50 text-on-secondary-container'
-                    : 'bg-tertiary-fixed/60 text-on-tertiary-fixed'
-                }`}>
-                  <span className={`w-2 h-2 rounded-full ${product.stockStatus === 'In Stock' ? 'bg-secondary animate-pulse' : 'bg-tertiary'}`}></span>
-                  {product.stockStatus}
-                </span>
+                <StatusBadge status={product.stockStatus} />
               </div>
               {/* SKU Meta Tag */}
               <div className="flex items-center gap-space-2xs">
@@ -228,10 +228,9 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   onClick={handleCopySku}
                   className="ml-1 text-outline hover:text-primary transition-colors cursor-pointer"
                   title="Copy SKU"
+                  aria-label="Copy SKU"
                 >
-                  <span className="material-symbols-outlined text-sm">
-                    {copiedSku ? 'check' : 'content_copy'}
-                  </span>
+                  <Icon name={copiedSku ? 'check' : 'content_copy'} size="xs" color={copiedSku ? 'secondary' : 'outline'} />
                 </button>
               </div>
             </div>
@@ -244,20 +243,26 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
                   <span className="font-display-lg text-display-lg text-primary font-bold tracking-tight">
                     ₹{product.price.toLocaleString()}
                   </span>
-                  <span className="font-body-sm text-body-sm text-outline line-through">
-                    ₹{product.originalPrice?.toLocaleString()}
-                  </span>
-                  <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                    {product.discount}
-                  </span>
+                  {(product as any).originalPrice && (
+                    <span className="font-body-sm text-body-sm text-outline line-through">
+                      ₹{(product as any).originalPrice?.toLocaleString()}
+                    </span>
+                  )}
+                  {(product as any).discount && (
+                    <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                      {(product as any).discount}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="flex flex-col items-end">
-                <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Margin</span>
-                <span className="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5">
-                  {product.margin}
-                </span>
-              </div>
+              {(product as any).margin && (
+                <div className="flex flex-col items-end">
+                  <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Margin</span>
+                  <span className="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5">
+                    {(product as any).margin}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Category Row */}
@@ -265,7 +270,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
               <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Category</span>
               <div className="flex items-center gap-space-2xs flex-wrap">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold">
-                  <span className="material-symbols-outlined text-sm text-primary">category</span>
+                  <Icon name="category" size="xs" color="primary" />
                   {product.category}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption text-caption">
@@ -286,23 +291,19 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
             <div className="flex flex-col gap-space-2xs pt-space-xs">
               <div className="flex items-center justify-between">
                 <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Variants</span>
-                <span className="font-caption text-caption text-primary cursor-pointer hover:underline">Size & Option Guide</span>
+                <span className="font-caption text-caption text-primary cursor-pointer hover:underline">Size &amp; Option Guide</span>
               </div>
               <div className="flex items-center gap-space-sm flex-wrap mt-1">
-                {variantsList.map((v) => (
-                  <button
+                {variantsList.map((v: any) => (
+                  <Button
                     key={v.value}
-                    type="button"
+                    variant={selectedVariant === v.value ? 'primary' : 'hover'}
+                    size="md"
+                    startIcon={selectedVariant === v.value ? 'check' : undefined}
                     onClick={() => setSelectedVariant(v.value)}
-                    className={`px-4 py-2 rounded-xl font-title-sm text-title-sm transition-all flex items-center gap-1.5 cursor-pointer ${
-                      selectedVariant === v.value
-                        ? 'bg-primary text-on-primary shadow-sm'
-                        : 'bg-surface-container-low hover:bg-surface-container text-on-surface'
-                    }`}
                   >
-                    {selectedVariant === v.value && <span className="material-symbols-outlined text-sm">check</span>}
-                    <span>{v.value}</span>
-                  </button>
+                    {v.value}
+                  </Button>
                 ))}
               </div>
             </div>
@@ -319,14 +320,14 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct })
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Committed</span>
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1">
-                  {product.committed}
+                  {(product as any).committed || 0}
                 </span>
                 <span className="font-caption text-caption text-outline font-medium">In Orders</span>
               </div>
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Reorder Point</span>
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1">
-                  {product.reorderPoint}
+                  {(product as any).reorderPoint || 0}
                 </span>
                 <span className="font-caption text-caption text-outline font-medium">Safety stock</span>
               </div>

@@ -12,13 +12,14 @@ import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import LoginPage from './pages/LoginPage';
 import { INITIAL_PRODUCTS } from './data/mockData';
+import { Product, ScheduleEvent } from './types';
 
-export default function App() {
-  const [activeModule, setActiveModule] = useState('dashboard');
-  const [selectedProduct, setSelectedProduct] = useState(INITIAL_PRODUCTS[0]);
-  const [selectedScheduleEvent, setSelectedScheduleEvent] = useState(null);
-  const [selectedConversationId, setSelectedConversationId] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+export default function App(): JSX.Element {
+  const [activeModule, setActiveModule] = useState<string>('dashboard');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(INITIAL_PRODUCTS[0] as Product);
+  const [selectedScheduleEvent, setSelectedScheduleEvent] = useState<ScheduleEvent | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
 
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={() => setIsAuthenticated(true)} />;

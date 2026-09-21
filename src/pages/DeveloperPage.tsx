@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { INITIAL_DEVELOPER_AGENTS, INITIAL_DEVELOPER_ENDPOINTS } from '../data/mockData';
+import { Button } from '../components/common';
 
 export default function DeveloperPage() {
   const [agents, setAgents] = useState(INITIAL_DEVELOPER_AGENTS);
@@ -197,7 +198,7 @@ export default function DeveloperPage() {
     const id = `ep-${endpoints.length + 1}`;
 
     // Construct authConfig based on chosen authType
-    const authConfig = {};
+    const authConfig: Record<string, any> = {};
     if (newEndpointAuthType === 'bearer') {
       authConfig.bearerToken = newEndpointBearerToken;
     } else if (newEndpointAuthType === 'apiKey') {
@@ -308,24 +309,24 @@ export default function DeveloperPage() {
         </div>
 
         {/* Action CTAs */}
-        <div className="flex items-center flex-wrap gap-2.5 self-start md:self-auto">
-          <button
-            type="button"
+        <div className="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
+          <Button
+            variant="secondary"
+            size="md"
+            startIcon="add_link"
             onClick={() => setIsAddEndpointModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md text-label-md font-semibold border border-surface-container transition-all cursor-pointer shadow-xs"
           >
-            <span className="material-symbols-outlined text-base text-primary">add_link</span>
-            <span>Add Endpoint</span>
-          </button>
+            Add Endpoint
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
+            startIcon="smart_toy"
             onClick={() => setIsAddAgentModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold transition-all cursor-pointer shadow-sm"
           >
-            <span className="material-symbols-outlined text-base">smart_toy</span>
-            <span>Connect New Agent</span>
-          </button>
+            Connect New Agent
+          </Button>
         </div>
       </div>
 
@@ -421,14 +422,14 @@ export default function DeveloperPage() {
             </div>
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="soft"
+            size="md"
+            startIcon="add"
             onClick={() => setIsAddAgentModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary font-label-md text-label-md font-semibold rounded-xl transition-all cursor-pointer self-start md:self-auto"
           >
-            <span className="material-symbols-outlined text-base">add</span>
-            <span>Connect Another Agent</span>
-          </button>
+            Connect Another Agent
+          </Button>
         </div>
 
         {/* Multi-Agent Cards Grid */}
@@ -745,14 +746,14 @@ export default function DeveloperPage() {
             </div>
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="soft"
+            size="md"
+            startIcon="add"
             onClick={() => setIsAddEndpointModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 font-label-md text-label-md font-semibold rounded-xl transition-all cursor-pointer self-start md:self-auto"
           >
-            <span className="material-symbols-outlined text-base">add</span>
-            <span>Register New Endpoint</span>
-          </button>
+            Register New Endpoint
+          </Button>
         </div>
 
         {/* Endpoints List */}
@@ -822,21 +823,16 @@ export default function DeveloperPage() {
                     </span>
                   )}
 
-                  <button
-                    type="button"
+                  <Button
+                    variant="hover"
+                    size="sm"
+                    startIcon={isPinging ? 'sync' : 'network_ping'}
+                    loading={isPinging}
                     disabled={isPinging}
                     onClick={() => handleTestPingEndpoint(ep.id)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                      isPinging
-                        ? 'bg-primary/20 text-primary border-primary/40'
-                        : 'bg-surface-container hover:bg-surface-container-high text-on-surface border-surface-container-high'
-                    }`}
                   >
-                    <span className={`material-symbols-outlined text-base ${isPinging ? 'animate-spin' : ''}`}>
-                      {isPinging ? 'sync' : 'network_ping'}
-                    </span>
-                    <span>{isPinging ? 'Pinging Gateway...' : 'Test Ping'}</span>
-                  </button>
+                    {isPinging ? 'Pinging Gateway...' : 'Test Ping'}
+                  </Button>
                 </div>
               </div>
             );
@@ -862,13 +858,13 @@ export default function DeveloperPage() {
                   <p className="text-[11px] text-on-surface-variant">Register a new multi-agent worker and generate API credentials</p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={() => setIsAddAgentModalOpen(false)}
-                className="w-7 h-7 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container flex items-center justify-center cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
             <form onSubmit={handleAddAgentSubmit} className="p-5 flex flex-col gap-4 overflow-y-auto">
@@ -967,20 +963,21 @@ export default function DeveloperPage() {
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-surface-container mt-1">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsAddAgentModalOpen(false)}
-                  className="px-4 py-2 font-label-md text-label-md font-semibold rounded-xl text-on-surface-variant hover:bg-surface-container cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   type="submit"
-                  className="px-5 py-2.5 font-label-md text-label-md font-semibold rounded-xl bg-primary text-on-primary hover:bg-primary-container shadow-sm cursor-pointer flex items-center gap-1.5"
+                  startIcon="add_circle"
                 >
-                  <span className="material-symbols-outlined text-base">add_circle</span>
-                  <span>Create &amp; Connect Agent</span>
-                </button>
+                  Create &amp; Connect Agent
+                </Button>
               </div>
             </form>
           </div>
@@ -1006,13 +1003,13 @@ export default function DeveloperPage() {
                   <p className="text-[11px] text-on-surface-variant">Configure method, URL, authentication and request payload</p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
                 onClick={() => setIsAddEndpointModalOpen(false)}
-                className="w-7 h-7 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container flex items-center justify-center cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
+                aria-label="Close modal"
+              />
             </div>
 
             {/* Modal Form Content */}
@@ -1376,20 +1373,21 @@ export default function DeveloperPage() {
 
               {/* Form Action Buttons */}
               <div className="flex items-center justify-between pt-3 border-t border-surface-container mt-1">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsAddEndpointModalOpen(false)}
-                  className="px-4 py-2 font-label-md text-label-md font-semibold rounded-xl text-on-surface-variant hover:bg-surface-container cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
                   type="submit"
-                  className="px-5 py-2.5 font-label-md text-label-md font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-sm cursor-pointer flex items-center gap-1.5"
+                  startIcon="add_link"
                 >
-                  <span className="material-symbols-outlined text-base">add_link</span>
-                  <span>Register Endpoint</span>
-                </button>
+                  Register Endpoint
+                </Button>
               </div>
             </form>
           </div>
