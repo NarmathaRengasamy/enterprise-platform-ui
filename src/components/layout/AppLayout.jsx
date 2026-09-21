@@ -2,11 +2,27 @@ import React, { useState, useEffect, useRef } from 'react';
 
 export default function AppLayout({ activeModule, setActiveModule, children, onLogout }) {
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
-    activeModule === 'products' || activeModule === 'categories' || activeModule === 'add-product' || activeModule === 'product-details'
+    activeModule === 'products' ||
+    activeModule === 'categories' ||
+    activeModule === 'add-product' ||
+    activeModule === 'product-details' ||
+    activeModule === 'edit-product'
   );
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Automatically open products submenu for product/category modules and close it for other modules
+  useEffect(() => {
+    const isProductRelated =
+      activeModule === 'products' ||
+      activeModule === 'categories' ||
+      activeModule === 'add-product' ||
+      activeModule === 'product-details' ||
+      activeModule === 'edit-product';
+
+    setProductsSubmenuOpen(isProductRelated);
+  }, [activeModule]);
 
   // Notification state
   const [notifications, setNotifications] = useState([
@@ -89,7 +105,8 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
     activeModule === 'products' ||
     activeModule === 'categories' ||
     activeModule === 'add-product' ||
-    activeModule === 'product-details';
+    activeModule === 'product-details' ||
+    activeModule === 'edit-product';
 
   return (
     <div className="bg-background font-body-md text-on-surface antialiased min-h-screen">
@@ -183,14 +200,14 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                       type="button"
                       onClick={() => setActiveModule('products')}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
-                        activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details'
+                        activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
                           ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                           : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                       }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
-                          activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details'
+                          activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
                             ? 'bg-primary-fixed-dim'
                             : 'bg-outline/40'
                         }`}

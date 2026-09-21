@@ -1266,6 +1266,13 @@ export default function SchedulePage({
                               ? 'bg-emerald-500/10 border-l-4 border-emerald-600 text-emerald-950 hover:bg-emerald-500/20'
                               : 'bg-blue-500/10 border-l-4 border-blue-600 text-blue-950 hover:bg-blue-500/20';
 
+                          const dotColor =
+                            pType === 'agent'
+                              ? 'bg-purple-600'
+                              : pType === 'customer'
+                              ? 'bg-emerald-600'
+                              : 'bg-blue-600';
+
                           const badgeStyle =
                             pType === 'agent'
                               ? 'bg-purple-500/20 text-purple-700'
@@ -1275,6 +1282,8 @@ export default function SchedulePage({
 
                           const iconName =
                             pType === 'agent' ? 'smart_toy' : pType === 'customer' ? 'group' : 'person';
+
+                          const isTall = ev.height >= 68;
 
                           return (
                             <div
@@ -1287,28 +1296,32 @@ export default function SchedulePage({
                                 e.stopPropagation();
                                 setSelectedEvent(ev);
                               }}
-                              style={{ top: `${ev.topOffset}px`, height: `${ev.height}px` }}
-                              className={`absolute inset-x-1 rounded-xl p-2.5 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
+                              style={{ top: `${ev.topOffset}px`, height: `${Math.max(46, ev.height)}px` }}
+                              title={`${ev.title}\nTime: ${ev.time}\nClient: ${ev.client}\nType: ${ev.type || pType}\nLocation: ${ev.location}`}
+                              className={`absolute inset-x-1 rounded-xl p-2 shadow-xs cursor-pointer hover:shadow-md transition-all overflow-hidden z-10 flex flex-col justify-between ${cardStyle}`}
                             >
-                              <div className="flex items-start justify-between gap-1">
-                                <span className="font-title-sm text-title-sm font-bold block truncate leading-tight">
-                                  {ev.title}
-                                </span>
-                                <span
-                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md font-caption text-[10px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}
-                                >
-                                  <span className="material-symbols-outlined text-[11px]">{iconName}</span>
-                                  <span>{pType}</span>
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between font-body-sm text-[11px] opacity-90 truncate mt-1">
-                                <span className="truncate">{ev.time} • {ev.client}</span>
-                                {ev.location && (
-                                  <span className="text-[10px] text-outline font-medium truncate ml-1">
-                                    {ev.location.includes('Teams') ? 'Teams' : ev.location}
+                              <div className="w-full min-w-0">
+                                <div className="flex items-center gap-1.5 w-full min-w-0">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}></span>
+                                  <span className="font-title-sm text-xs font-bold text-on-surface truncate block min-w-0 flex-1 leading-tight">
+                                    {ev.title}
                                   </span>
-                                )}
+                                </div>
+                                <div className="text-[10.5px] font-medium text-on-surface-variant truncate mt-0.5 block min-w-0 w-full">
+                                  <span>{ev.startTime || ev.time?.split(' - ')[0]}</span>
+                                  {ev.client && <span className="opacity-80"> • {ev.client}</span>}
+                                </div>
                               </div>
+
+                              {isTall && (
+                                <div className="w-full min-w-0 flex items-center justify-between text-[10px] text-outline pt-1 mt-auto border-t border-black/5">
+                                  <span className="truncate max-w-[70px]">{ev.location ? (ev.location.includes('Teams') ? 'Teams' : ev.location) : 'Online'}</span>
+                                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded font-caption text-[9.5px] font-semibold uppercase tracking-wider shrink-0 ${badgeStyle}`}>
+                                    <span className="material-symbols-outlined text-[10px]">{iconName}</span>
+                                    <span>{pType}</span>
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1416,11 +1429,11 @@ export default function SchedulePage({
                               setSelectedEvent(ev);
                             }}
                             title={`${ev.title} (${ev.time}) - ${ev.client}`}
-                            className={`px-2 py-1 rounded-lg border text-[11px] font-medium truncate flex items-center gap-1 cursor-pointer transition-all shadow-2xs ${pillBg}`}
+                            className={`px-2 py-1 rounded-lg border text-[11px] font-medium w-full min-w-0 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs ${pillBg}`}
                           >
-                            <span className="material-symbols-outlined text-[12px] shrink-0">{iconName}</span>
-                            <span className="font-bold shrink-0">{ev.startTime || ev.time.split('-')[0]}</span>
-                            <span className="truncate">{ev.title}</span>
+                            <span className="material-symbols-outlined text-[12px] shrink-0 opacity-80">{iconName}</span>
+                            <span className="font-bold shrink-0 text-[10.5px]">{ev.startTime || ev.time?.split('-')[0]}</span>
+                            <span className="truncate min-w-0 flex-1 font-semibold text-on-surface">{ev.title}</span>
                           </div>
                         );
                       })}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { INITIAL_CATEGORIES } from '../data/mockData';
 
 export default function CategoriesPage({ setActiveModule }) {
@@ -7,17 +7,92 @@ export default function CategoriesPage({ setActiveModule }) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
 
+  // Selection state
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+
+  // Filter & Refresh states
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filterType, setFilterType] = useState('all'); // 'all' | 'with-products' | 'empty'
+  const [sortBy, setSortBy] = useState('default'); // 'default' | 'name-asc' | 'products-desc'
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const filterRef = useRef(null);
+
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isFilterOpen]);
+
   // New Category Form State
   const [newCatName, setNewCatName] = useState('');
   const [newCatCode, setNewCatCode] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('category');
 
-  const filteredCategories = categories.filter((c) =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtered & Sorted Categories
+  const filteredCategories = categories
+    .filter((c) => {
+      const matchesSearch =
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.id.toLowerCase().includes(searchQuery.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      if (filterType === 'with-products') return c.productsCount > 0;
+      if (filterType === 'empty') return c.productsCount === 0;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'products-desc') return b.productsCount - a.productsCount;
+      return 0;
+    });
+
+  // Select All handlers
+  const isAllSelected =
+    filteredCategories.length > 0 &&
+    filteredCategories.every((c) => selectedCategoryIds.includes(c.id));
+  const isSomeSelected = selectedCategoryIds.length > 0 && !isAllSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedCategoryIds([]);
+    } else {
+      setSelectedCategoryIds(filteredCategories.map((c) => c.id));
+    }
+  };
+
+  const handleToggleSelectCategory = (id) => {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = () => {
+    setCategories((prev) => prev.filter((c) => !selectedCategoryIds.includes(c.id)));
+    setSelectedCategoryIds([]);
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setSearchQuery('');
+    setFilterType('all');
+    setSortBy('default');
+    setSelectedCategoryIds([]);
+    setTimeout(() => {
+      setCategories(INITIAL_CATEGORIES);
+      setIsRefreshing(false);
+    }, 400);
+  };
 
   const handleAddCategorySubmit = (e) => {
     e.preventDefault();
@@ -40,6 +115,7 @@ export default function CategoriesPage({ setActiveModule }) {
 
   const handleDeleteCategory = (id) => {
     setCategories(categories.filter((c) => c.id !== id));
+    setSelectedCategoryIds((prev) => prev.filter((item) => item !== id));
     setOpenDropdownId(null);
   };
 
@@ -155,10 +231,10 @@ export default function CategoriesPage({ setActiveModule }) {
         </div>
       </div>
 
-      {/* Primary Content Card & Table Container */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+      {/* Primary Content Card & Table Container (relative without overflow-hidden so popovers are never clipped) */}
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm flex flex-col relative">
         {/* Filter and Search Header */}
-        <div className="p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm bg-surface-container-lowest">
+        <div className="p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm bg-surface-container-lowest rounded-t-xl">
           <div className="relative flex-1 max-w-md">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">
               search
@@ -168,24 +244,142 @@ export default function CategoriesPage({ setActiveModule }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search categories..."
-              className="w-full h-10 pl-10 pr-space-md bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm rounded-xl outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all"
+              className="w-full h-10 pl-10 pr-space-md bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm rounded-xl outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:border-surface-container"
             />
           </div>
-          <div className="flex items-center gap-space-xs self-end sm:self-auto">
-            <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm cursor-pointer hover:bg-surface-container hover:text-on-surface transition-colors">
-              <span className="material-symbols-outlined text-base">filter_list</span>
-              <span>Filter</span>
+          <div className="flex items-center gap-space-xs self-end sm:self-auto relative">
+            {/* Filter Dropdown */}
+            <div className="relative" ref={filterRef}>
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className={`inline-flex items-center gap-1.5 px-3.5 h-10 rounded-xl font-label-sm text-label-sm cursor-pointer transition-all border ${
+                  isFilterOpen || filterType !== 'all' || sortBy !== 'default'
+                    ? 'bg-primary/10 text-primary border-primary/30 ring-2 ring-primary/15 font-semibold'
+                    : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface border-transparent'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">filter_list</span>
+                <span>
+                  {filterType === 'with-products'
+                    ? 'With Products'
+                    : filterType === 'empty'
+                    ? 'Empty (0)'
+                    : sortBy === 'name-asc'
+                    ? 'Name A-Z'
+                    : sortBy === 'products-desc'
+                    ? 'Most Products'
+                    : 'Filter'}
+                </span>
+                <span className="material-symbols-outlined text-xs text-outline ml-0.5">expand_more</span>
+              </button>
+
+              {/* Short & Clean Filter Menu */}
+              {isFilterOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-2xl shadow-2xl z-50 py-1.5 border border-slate-200 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 text-[10.5px] font-bold text-outline uppercase tracking-wider">
+                    Filter By Status
+                  </div>
+                  {[
+                    { id: 'all', label: 'All Categories' },
+                    { id: 'with-products', label: 'With Products (>0)' },
+                    { id: 'empty', label: 'Empty (0 Products)' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setFilterType(item.id);
+                        setIsFilterOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                        filterType === item.id
+                          ? 'bg-primary/10 text-primary font-semibold'
+                          : 'text-on-surface hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {filterType === item.id && (
+                        <span className="material-symbols-outlined text-sm text-primary">check</span>
+                      )}
+                    </button>
+                  ))}
+
+                  <div className="h-px bg-slate-100 my-1" />
+
+                  <div className="px-3 py-1.5 text-[10.5px] font-bold text-outline uppercase tracking-wider">
+                    Sort By
+                  </div>
+                  {[
+                    { id: 'default', label: 'Default Order' },
+                    { id: 'name-asc', label: 'Name (A to Z)' },
+                    { id: 'products-desc', label: 'Most Products' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSortBy(item.id);
+                        setIsFilterOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                        sortBy === item.id
+                          ? 'bg-primary/10 text-primary font-semibold'
+                          : 'text-on-surface hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {sortBy === item.id && (
+                        <span className="material-symbols-outlined text-sm text-primary">check</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {/* Refresh Button with Spin Action */}
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
-              title="Reload data"
-              className="p-2 rounded-xl text-outline hover:bg-surface-container-low hover:text-on-surface transition-colors"
+              onClick={handleRefresh}
+              title="Reload categories"
+              className={`p-2 rounded-xl text-outline hover:bg-surface-container-low hover:text-on-surface transition-colors cursor-pointer ${
+                isRefreshing ? 'bg-surface-container-low text-primary' : ''
+              }`}
             >
-              <span className="material-symbols-outlined text-lg">refresh</span>
+              <span className={`material-symbols-outlined text-lg ${isRefreshing ? 'animate-spin text-primary' : ''}`}>
+                refresh
+              </span>
             </button>
           </div>
         </div>
+
+        {/* Bulk Action Bar (When Rows Selected) */}
+        {selectedCategoryIds.length > 0 && (
+          <div className="px-space-md py-2 bg-primary-container/10 border-y border-primary/20 flex items-center justify-between animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+              <span className="material-symbols-outlined text-base">check_circle</span>
+              <span>{selectedCategoryIds.length} {selectedCategoryIds.length === 1 ? 'category' : 'categories'} selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-error bg-error-container/30 hover:bg-error-container transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-sm">delete</span>
+                <span>Delete Selected</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryIds([])}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors cursor-pointer"
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Data Table */}
         <div className="overflow-x-auto w-full">
@@ -194,7 +388,16 @@ export default function CategoriesPage({ setActiveModule }) {
               <tr className="bg-surface-container-low/70">
                 <th className="py-3 px-space-md font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold" scope="col">
                   <div className="flex items-center gap-2">
-                    <input className="w-4 h-4 rounded text-primary accent-primary cursor-pointer" type="checkbox" />
+                    <input
+                      className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
+                      type="checkbox"
+                      checked={isAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = isSomeSelected;
+                      }}
+                      onChange={handleToggleSelectAll}
+                      title={isAllSelected ? "Deselect all" : "Select all"}
+                    />
                     <span>Name</span>
                   </div>
                 </th>
@@ -210,82 +413,103 @@ export default function CategoriesPage({ setActiveModule }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container-low/40 font-body-sm text-body-sm">
-              {filteredCategories.map((cat) => (
-                <tr key={cat.id} className="hover:bg-surface-container-low/50 transition-colors group">
-                  <td className="py-3.5 px-space-md">
-                    <div className="flex items-center gap-3">
-                      <input className="w-4 h-4 rounded text-primary accent-primary cursor-pointer" type="checkbox" />
-                      <div className="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shrink-0">
-                        <span className="material-symbols-outlined text-xl">{cat.icon}</span>
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors truncate">
-                          {cat.name}
-                        </span>
-                        <span className="font-caption text-caption text-on-surface-variant">
-                          {cat.id} • Updated {cat.updated}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-space-md text-on-surface-variant max-w-xs">
-                    <span className="truncate block">{cat.description}</span>
-                  </td>
-                  <td className="py-3.5 px-space-md">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-primary-fixed/30 text-on-primary-fixed font-semibold">
-                      <span className="material-symbols-outlined text-sm">inventory</span>
-                      <span>{cat.productsCount}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-space-md text-right relative">
-                    <div className="inline-flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewCatName(cat.name);
-                          setNewCatCode(cat.id);
-                          setNewCatDesc(cat.description);
-                          setIsAddModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer"
-                        title="Edit Category"
-                      >
-                        <span className="material-symbols-outlined text-base">edit</span>
-                      </button>
-                      <div className="relative inline-block text-left">
-                        <button
-                          type="button"
-                          onClick={() => setOpenDropdownId(openDropdownId === cat.id ? null : cat.id)}
-                          className="p-1.5 rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-base">more_horiz</span>
-                        </button>
-                        {openDropdownId === cat.id && (
-                          <div className="absolute right-0 top-full mt-1 w-44 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 border border-surface-container-high">
-                            <button
-                              type="button"
-                              onClick={() => { setActiveModule('products'); setOpenDropdownId(null); }}
-                              className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-base text-outline">visibility</span>
-                              View Products
-                            </button>
-                            <div className="h-px bg-surface-container-high my-1" />
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCategory(cat.id)}
-                              className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-error font-body-sm text-body-sm hover:bg-error-container/30 transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-base text-error">delete</span>
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+              {filteredCategories.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-outline text-xs">
+                    No categories found matching your filter criteria.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredCategories.map((cat) => {
+                  const isSelected = selectedCategoryIds.includes(cat.id);
+                  return (
+                    <tr
+                      key={cat.id}
+                      className={`hover:bg-surface-container-low/50 transition-colors group ${
+                        isSelected ? 'bg-primary/[0.04]' : ''
+                      }`}
+                    >
+                      <td className="py-3.5 px-space-md">
+                        <div className="flex items-center gap-3">
+                          <input
+                            className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectCategory(cat.id)}
+                          />
+                          <div className="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+                            <span className="material-symbols-outlined text-xl">{cat.icon}</span>
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors truncate">
+                              {cat.name}
+                            </span>
+                            <span className="font-caption text-caption text-on-surface-variant">
+                              {cat.id} • Updated {cat.updated}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-space-md text-on-surface-variant max-w-xs">
+                        <span className="truncate block">{cat.description}</span>
+                      </td>
+                      <td className="py-3.5 px-space-md">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-primary-fixed/30 text-on-primary-fixed font-semibold">
+                          <span className="material-symbols-outlined text-sm">inventory</span>
+                          <span>{cat.productsCount}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-space-md text-right relative">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewCatName(cat.name);
+                              setNewCatCode(cat.id);
+                              setNewCatDesc(cat.description);
+                              setIsAddModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer"
+                            title="Edit Category"
+                          >
+                            <span className="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <div className="relative inline-block text-left">
+                            <button
+                              type="button"
+                              onClick={() => setOpenDropdownId(openDropdownId === cat.id ? null : cat.id)}
+                              className="p-1.5 rounded-lg text-outline hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-base">more_horiz</span>
+                            </button>
+                            {openDropdownId === cat.id && (
+                              <div className="absolute right-0 top-full mt-1 w-44 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 border border-surface-container-high">
+                                <button
+                                  type="button"
+                                  onClick={() => { setActiveModule('products'); setOpenDropdownId(null); }}
+                                  className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-base text-outline">visibility</span>
+                                  View Products
+                                </button>
+                                <div className="h-px bg-surface-container-high my-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCategory(cat.id)}
+                                  className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-error font-body-sm text-body-sm hover:bg-error-container/30 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-base text-error">delete</span>
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
