@@ -39,7 +39,7 @@ export default function ProductDetailsPage({
         .getProductById(id)
         .then((data) => {
           setProduct(data);
-          if (setSelectedProduct) setSelectedProduct(data);
+          setSelectedProduct?.(data);
         })
         .catch((err) => {
           setError(err?.message || 'Product not found.');
@@ -51,7 +51,7 @@ export default function ProductDetailsPage({
       setProduct(propProduct);
       setIsLoading(false);
     }
-  }, [id, propProduct, setSelectedProduct]);
+  }, [id, propProduct?.id]);
 
   useEffect(() => {
     setSelectedThumbIndex(0);
