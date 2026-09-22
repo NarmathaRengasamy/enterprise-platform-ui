@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { INITIAL_PRODUCTS } from '../data/mockData';
 import { DESCRIPTION_ACCEPT, extractTextFromFile } from '../utils/documentText';
 import { Button } from '../components/common';
+import { productService, CreateProductInput } from '../services/product.service';
+import { categoryService, CategoryItem } from '../services/category.service';
+import { Product } from '../types';
 
 // Industry-agnostic presets to accelerate setup for any business vertical
 const INDUSTRY_PRESETS = [
@@ -53,59 +55,75 @@ const INDUSTRY_PRESETS = [
   }
 ];
 
-export default function AddEditProductPage({ setActiveModule, selectedProduct: selectedProductProp, isEditing: isEditingProp }) {
+export default function AddEditProductPage({
+  setActiveModule,
+  selectedProduct: selectedProductProp,
+  isEditing: isEditingProp,
+}: {
+  setActiveModule?: (module: string) => void;
+  selectedProduct?: Product | null;
+  isEditing?: boolean;
+}) {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
-  const selectedProduct =
-    selectedProductProp ||
-    (id ? INITIAL_PRODUCTS.find((p) => String(p.id) === String(id)) : null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(selectedProductProp || null);
+  const isEditing = isEditingProp !== undefined ? isEditingProp : Boolean(id || (selectedProduct && selectedProduct.id));
 
-  const isEditing = isEditingProp !== undefined ? isEditingProp : Boolean(selectedProduct && selectedProduct.id);
-  const [productName, setProductName] = useState(isEditing ? (selectedProduct?.name || '') : '');
-  const [sku, setSku] = useState(isEditing ? (selectedProduct?.sku || '') : '');
-  const [category, setCategory] = useState(isEditing ? (selectedProduct?.categoryCode || '') : '');
-  const [description, setDescription] = useState(isEditing ? (selectedProduct?.description || '') : '');
+  // Form Fields
+  const [productName, setProductName] = useState(selectedProduct?.name || '');
+  const [sku, setSku] = useState(selectedProduct?.sku || '');
+  const [category, setCategory] = useState(selectedProduct?.categoryId || selectedProduct?.categoryCode || selectedProduct?.category || '');
+  const [description, setDescription] = useState(selectedProduct?.description || '');
+  const [basePrice, setBasePrice] = useState<string | number>(selectedProduct?.price ?? '');
+  const [flatStock, setFlatStock] = useState<number | string>(selectedProduct?.stock ?? 10);
+  const [flatStockStatus, setFlatStockStatus] = useState(selectedProduct?.stockStatus || 'In Stock');
+  const [reorderPoint, setReorderPoint] = useState<number | string>(selectedProduct?.reorderPoint ?? 10);
+  const [margin, setMargin] = useState(selectedProduct?.margin || '50.0%');
+  const [discount, setDiscount] = useState(selectedProduct?.discount || '');
 
-  const [mediaList, setMediaList] = useState(
-    (isEditing && selectedProduct?.gallery) ? selectedProduct.gallery : []
+  const [mediaList, setMediaList] = useState<any[]>(
+    selectedProduct?.gallery ? selectedProduct.gallery : (selectedProduct?.image ? [{ id: 'img-0', src: selectedProduct.image, label: 'Cover' }] : [])
   );
-  const [videoList, setVideoList] = useState(
-    (isEditing && selectedProduct?.videos) ? selectedProduct.videos : []
-  );
+  const [videoList, setVideoList] = useState<any[]>(selectedProduct?.videos || []);
+  
+  // Categories from API
+  const [categoriesList, setCategoriesList] = useState<CategoryItem[]>([]);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   /* Description can be typed by hand or imported from a document. Each import is
      kept with its extracted text so dropping the file also drops its content. */
-  const [descriptionImports, setDescriptionImports] = useState([]);
+  const [descriptionImports, setDescriptionImports] = useState<{ id: string; name: string; text: string }[]>([]);
   const [descriptionImportError, setDescriptionImportError] = useState('');
   const [isImportingDescription, setIsImportingDescription] = useState(false);
 
   // Business-Agnostic Variants & Combinations State
-  const [variants, setVariants] = useState(
-    (isEditing && selectedProduct?.variants)
+  const [variants, setVariants] = useState<any[]>(
+    selectedProduct?.variants
       ? selectedProduct.variants.map((v, i) => ({
           id: `var-${i}-${Date.now()}`,
-          images: v.image ? [v.image] : [],
-          videos: [],
-          title: v.value ? `${v.option || 'Option'}: ${v.value}` : 'Standard Package',
-          attributes: [{ name: v.option || 'Option', value: v.value || 'Standard' }],
-          sku: `${selectedProduct?.sku || ''}-${(v.value || 'STD').substring(0, 3).toUpperCase()}`,
+          images: v.images || (v.image ? [v.image] : []),
+          videos: v.videos || [],
+          title: v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : 'Standard Package'),
+          attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
+          sku: v.sku || `${selectedProduct?.sku || ''}-${(v.value || 'STD').substring(0, 3).toUpperCase()}`,
           price: Number(v.price) || 0,
-          capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock) || 0,
-          capacityUnit: 'units',
-          status: String(v.stock || '').toLowerCase().includes('low') ? 'Limited' : 'Available'
+          capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock ?? v.capacity) || 0,
+          capacityUnit: v.capacityUnit || 'units',
+          status: v.status || (String(v.stock || '').toLowerCase().includes('low') ? 'Limited' : 'Available')
         }))
       : []
   );
 
   // Variant mode: when off, the offering carries one flat price instead of a matrix
   const [hasVariants, setHasVariants] = useState(
-    isEditing ? selectedProduct?.variants?.length > 0 : false
+    Boolean(selectedProduct?.variants && selectedProduct.variants.length > 0)
   );
-  const [basePrice, setBasePrice] = useState(isEditing ? (selectedProduct?.price ?? '') : '');
 
   // Single Item Modal State (Edit Single Item)
   const [isSingleModalOpen, setIsSingleModalOpen] = useState(false);
-  const [editingVariantIndex, setEditingVariantIndex] = useState(null);
+  const [editingVariantIndex, setEditingVariantIndex] = useState<number | null>(null);
   const [singleTitle, setSingleTitle] = useState('');
   const [singleSku, setSingleSku] = useState('');
   const [singlePrice, setSinglePrice] = useState('');
@@ -126,6 +144,76 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct: s
 
   // Turning variants off discards the whole matrix, so it asks first
   const [isDiscardVariantsOpen, setIsDiscardVariantsOpen] = useState(false);
+
+  // Fetch categories from backend API on mount
+  useEffect(() => {
+    categoryService
+      .getCategories()
+      .then((cats) => {
+        if (cats && cats.length > 0) {
+          setCategoriesList(cats);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load categories:', err);
+      });
+  }, []);
+
+  // Fetch product from API if editing by ID
+  useEffect(() => {
+    if (id) {
+      setIsLoadingProduct(true);
+      productService
+        .getProductById(id)
+        .then((prod) => {
+          setSelectedProduct(prod);
+          setProductName(prod.name || '');
+          setSku(prod.sku || '');
+          setCategory(prod.categoryId || prod.categoryCode || prod.category || '');
+          setDescription(prod.description || '');
+          setBasePrice(prod.price ?? '');
+          setFlatStock(prod.stock ?? 10);
+          setFlatStockStatus(prod.stockStatus || 'In Stock');
+          setReorderPoint(prod.reorderPoint ?? 10);
+          setMargin(prod.margin || '50.0%');
+          setDiscount(prod.discount || '');
+          
+          if (prod.gallery && prod.gallery.length > 0) {
+            setMediaList(prod.gallery);
+          } else if (prod.image) {
+            setMediaList([{ id: 'img-0', src: prod.image, label: 'Cover' }]);
+          }
+
+          if (prod.videos) {
+            setVideoList(prod.videos);
+          }
+
+          if (prod.variants && prod.variants.length > 0) {
+            setHasVariants(true);
+            setVariants(
+              prod.variants.map((v, i) => ({
+                id: `var-${i}-${Date.now()}`,
+                images: v.images || (v.image ? [v.image] : []),
+                videos: v.videos || [],
+                title: v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : `Option ${i + 1}`),
+                attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
+                sku: v.sku || `${prod.sku}-${(v.value || 'VAR').substring(0, 3).toUpperCase()}`,
+                price: Number(v.price) || 0,
+                capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock ?? v.capacity) || 0,
+                capacityUnit: v.capacityUnit || 'units',
+                status: v.status || 'Available',
+              }))
+            );
+          }
+        })
+        .catch((err) => {
+          setSaveError(`Could not load product details: ${err.message}`);
+        })
+        .finally(() => {
+          setIsLoadingProduct(false);
+        });
+    }
+  }, [id]);
 
   // Variants checkbox: turning it on hands pricing over to the matrix generator
   const handleToggleVariants = (checked) => {
@@ -444,24 +532,99 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct: s
     );
   };
 
-  const handleSave = () => {
-    if (hasVariants && variants.length === 0) {
-      setSaveError('Add at least one combination, or turn off "This offering has variants" to use a single price.');
+  const handleSave = async () => {
+    if (!productName.trim()) {
+      setSaveError('Title / Service Name is required.');
       return;
     }
-    if (hasVariants && incompleteCount > 0) {
-      setSaveError(
-        `${incompleteCount} combination${incompleteCount === 1 ? '' : 's'} still ${incompleteCount === 1 ? 'needs' : 'need'} a price.`
-      );
+    if (!sku.trim()) {
+      setSaveError('Base Identifier / SKU is required.');
       return;
     }
+    if (!category) {
+      setSaveError('Please select a Domain / Category.');
+      return;
+    }
+
+    if (hasVariants) {
+      if (variants.length === 0) {
+        setSaveError('Add at least one combination, or turn off "This offering has variants" to use a single price.');
+        return;
+      }
+      if (incompleteCount > 0) {
+        setSaveError(
+          `${incompleteCount} combination${incompleteCount === 1 ? '' : 's'} still ${incompleteCount === 1 ? 'needs' : 'need'} a price.`
+        );
+        return;
+      }
+    } else {
+      if (basePrice === '' || Number(basePrice) <= 0) {
+        setSaveError('Price / Rate must be greater than 0.');
+        return;
+      }
+    }
+
+    setIsSaving(true);
     setSaveError('');
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
-      setActiveModule?.('products');
-      navigate('/products');
-    }, 1200);
+
+    try {
+      const formattedVariants = hasVariants
+        ? variants.map((v) => ({
+            option: v.attributes?.[0]?.name || 'Option',
+            value: v.attributes?.[0]?.value || v.title || 'Standard',
+            title: v.title,
+            sku: v.sku || `${sku.trim()}-${(v.title || 'VAR').substring(0, 3).toUpperCase()}`,
+            price: Number(v.price) || 0,
+            stock: typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0,
+            capacity: typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0,
+            capacityUnit: v.capacityUnit || 'units',
+            status: v.status || 'Available',
+            images: v.images || [],
+            videos: v.videos || [],
+          }))
+        : [];
+
+      const computedPrice = hasVariants
+        ? Math.min(...formattedVariants.map((v) => v.price || 0).filter((n) => n > 0)) || 0
+        : Number(basePrice) || 0;
+
+      const computedStock = hasVariants
+        ? formattedVariants.reduce((sum, v) => sum + (v.capacity || 0), 0)
+        : Number(flatStock) || 0;
+
+      const payload: CreateProductInput = {
+        name: productName.trim(),
+        sku: sku.trim(),
+        categoryId: category,
+        price: computedPrice,
+        stock: computedStock,
+        stockStatus: hasVariants ? undefined : flatStockStatus,
+        reorderPoint: Number(reorderPoint) || 10,
+        margin: margin || '50.0%',
+        discount: discount || '',
+        description: description.trim(),
+        image: mediaList[0]?.src || (formattedVariants[0]?.images?.[0] || ''),
+        gallery: mediaList.map((m, idx) => ({ id: idx, label: m.label || `Image ${idx + 1}`, src: m.src })),
+        videos: videoList,
+        variants: formattedVariants,
+      };
+
+      if (isEditing && (id || selectedProduct?.id)) {
+        await productService.updateProduct(id || selectedProduct?.id || sku.trim(), payload);
+      } else {
+        await productService.createProduct(payload);
+      }
+
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setActiveModule?.('products');
+        navigate('/products');
+      }, 800);
+    } catch (err: any) {
+      setSaveError(err?.message || 'Could not save product. Please check required fields.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -502,17 +665,21 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct: s
           <Button
             variant="hover"
             size="md"
-            onClick={() => setActiveModule('products')}
+            onClick={() => {
+              setActiveModule?.('products');
+              navigate('/products');
+            }}
           >
             Discard Draft
           </Button>
           <Button
             variant="primary"
             size="md"
-            startIcon="save"
+            startIcon={isSaving ? 'progress_activity' : 'save'}
+            disabled={isSaving}
             onClick={handleSave}
           >
-            {savedSuccess ? 'Saved!' : 'Save Offering'}
+            {isSaving ? 'Saving...' : savedSuccess ? 'Saved!' : 'Save Offering'}
           </Button>
         </div>
       </div>
@@ -592,12 +759,21 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct: s
                       required
                     >
                       <option value="" disabled>Select category</option>
-                      <option value="saas">Software &amp; Digital Plans</option>
-                      <option value="hospitality">Hospitality &amp; Rooms</option>
-                      <option value="services">Professional Services &amp; Consulting</option>
-                      <option value="healthcare">Healthcare &amp; Appointments</option>
-                      <option value="accessories">Products &amp; Equipment</option>
-                      <option value="education">Courses &amp; Training</option>
+                      {categoriesList.length > 0 ? (
+                        categoriesList.map((cat) => (
+                          <option key={cat.id || cat.name} value={cat.id || cat.name}>
+                            {cat.name}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="CAT-001">Electronics &amp; Gadgets</option>
+                          <option value="CAT-002">Software &amp; Digital Plans</option>
+                          <option value="CAT-003">Hospitality &amp; Rooms</option>
+                          <option value="CAT-004">Professional Services &amp; Consulting</option>
+                          <option value="CAT-005">Healthcare &amp; Appointments</option>
+                        </>
+                      )}
                     </select>
                     <span className="material-symbols-outlined absolute right-3 text-outline text-lg pointer-events-none">unfold_more</span>
                   </div>

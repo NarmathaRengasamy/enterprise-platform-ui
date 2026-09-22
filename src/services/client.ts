@@ -1,33 +1,74 @@
 import { ApiResponse } from '../types/auth.types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050/api/v1';
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://localhost:5050/api/v1';
+
 export const TOKEN_KEY = 'perfox_auth_token';
 
+// Supported storage keys for backward compatibility across modules
+const KNOWN_TOKEN_KEYS = [
+  'perfox_auth_token',
+  'omniflow_auth_token',
+  'token',
+  'authToken',
+  'auth_token',
+];
+
 export const getToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  try {
+    for (const key of KNOWN_TOKEN_KEYS) {
+      const val = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (val && val.trim()) {
+        return val.trim();
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read token from storage:', e);
+  }
+  return null;
 };
 
 export const setToken = (token: string, rememberMe = true): void => {
-  if (rememberMe) {
-    localStorage.setItem(TOKEN_KEY, token);
-    sessionStorage.removeItem(TOKEN_KEY);
-  } else {
-    sessionStorage.setItem(TOKEN_KEY, token);
-    localStorage.removeItem(TOKEN_KEY);
+  try {
+    if (rememberMe) {
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem('token', token);
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem('token');
+    } else {
+      sessionStorage.setItem(TOKEN_KEY, token);
+      sessionStorage.setItem('token', token);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem('token');
+    }
+  } catch (e) {
+    console.warn('Could not save token to storage:', e);
   }
 };
 
 export const clearToken = (): void => {
-  localStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(TOKEN_KEY);
+  try {
+    for (const key of KNOWN_TOKEN_KEYS) {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+  } catch (e) {
+    console.warn('Could not clear token from storage:', e);
+  }
 };
 
 export interface RequestOptions extends RequestInit {
   data?: any;
   params?: Record<string, string | number | boolean | undefined | null>;
+  skipAuth?: boolean;
 }
 
-export async function request<T = any>(endpoint: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+export async function request<T = any>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<ApiResponse<T>> {
   let url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   // Append query params if provided
@@ -44,14 +85,23 @@ export async function request<T = any>(endpoint: string, options: RequestOptions
     }
   }
 
-  const token = getToken();
+  const token = options.skipAuth ? null : getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
   };
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Merge any custom headers passed in options
+  if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
+
+  // If payload is FormData, let fetch generate the multipart boundary
+  if (options.data instanceof FormData) {
+    delete headers['Content-Type'];
   }
 
   const config: RequestInit = {
@@ -60,7 +110,15 @@ export async function request<T = any>(endpoint: string, options: RequestOptions
   };
 
   if (options.data !== undefined) {
-    config.body = JSON.stringify(options.data);
+    if (
+      options.data instanceof FormData ||
+      options.data instanceof Blob ||
+      options.data instanceof ArrayBuffer
+    ) {
+      config.body = options.data;
+    } else {
+      config.body = JSON.stringify(options.data);
+    }
   }
 
   try {
@@ -90,6 +148,48 @@ export async function request<T = any>(endpoint: string, options: RequestOptions
   }
 }
 
+export async function downloadBlob(
+  endpoint: string,
+  params?: Record<string, any>,
+  filename = 'download.csv'
+): Promise<void> {
+  let url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+
+  if (params) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        searchParams.append(key, String(value));
+      }
+    });
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += (url.includes('?') ? '&' : '?') + queryString;
+    }
+  }
+
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(`Export download failed with status ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(blobUrl);
+}
+
 export const client = {
   get: <T = any>(url: string, options?: RequestOptions) =>
     request<T>(url, { ...options, method: 'GET' }),
@@ -105,4 +205,7 @@ export const client = {
 
   delete: <T = any>(url: string, options?: RequestOptions) =>
     request<T>(url, { ...options, method: 'DELETE' }),
+
+  downloadBlob: (endpoint: string, params?: Record<string, any>, filename = 'download.csv') =>
+    downloadBlob(endpoint, params, filename),
 };

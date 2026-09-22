@@ -15,13 +15,12 @@ import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
-import { INITIAL_PRODUCTS } from './data/mockData';
 import { Product, ScheduleEvent } from './types';
 
 function AppRoutes(): JSX.Element {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAuth();
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(INITIAL_PRODUCTS[0] as Product);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedScheduleEvent, setSelectedScheduleEvent] = useState<ScheduleEvent | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 

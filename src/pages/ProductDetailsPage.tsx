@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { INITIAL_PRODUCTS } from '../data/mockData';
 import { Product } from '../types';
+import { productService } from '../services/product.service';
 import { Button, Icon, StatusBadge } from '../components/common';
 
 interface ProductDetailsPageProps {
@@ -10,46 +10,140 @@ interface ProductDetailsPageProps {
   setSelectedProduct?: (product: Product) => void;
 }
 
-export default function ProductDetailsPage({ setActiveModule, selectedProduct, setSelectedProduct }: ProductDetailsPageProps) {
+export default function ProductDetailsPage({
+  setActiveModule,
+  selectedProduct: propProduct,
+  setSelectedProduct,
+}: ProductDetailsPageProps) {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
-  const product =
-    selectedProduct ||
-    (id ? INITIAL_PRODUCTS.find((p) => String(p.id) === String(id)) : null) ||
-    (INITIAL_PRODUCTS[0] as Product);
+  const [product, setProduct] = useState<Product | null>(propProduct || null);
+  const [isLoading, setIsLoading] = useState(!propProduct && Boolean(id));
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedThumbIndex, setSelectedThumbIndex] = useState(0);
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [selectedVariant, setSelectedVariant] = useState('');
   const [copiedSku, setCopiedSku] = useState(false);
 
+  // Delete modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      setIsLoading(true);
+      setError(null);
+      productService
+        .getProductById(id)
+        .then((data) => {
+          setProduct(data);
+          if (setSelectedProduct) setSelectedProduct(data);
+        })
+        .catch((err) => {
+          setError(err?.message || 'Product not found.');
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else if (propProduct) {
+      setProduct(propProduct);
+      setIsLoading(false);
+    }
+  }, [id, propProduct, setSelectedProduct]);
+
   useEffect(() => {
     setSelectedThumbIndex(0);
-    if (product.variants && product.variants.length > 0) {
-      setSelectedVariant(product.variants[0].value);
+    if (product?.variants && product.variants.length > 0) {
+      setSelectedVariant(product.variants[0].value || product.variants[0].title || 'Option 1');
     } else {
       setSelectedVariant('Standard');
     }
-  }, [product.id]);
-
-  const gallery = (product as any).gallery || [
-    { id: 0, label: "Front", src: product.image },
-    { id: 1, label: "Side", src: product.image },
-    { id: 2, label: "Angled", src: product.image },
-    { id: 3, label: "Detail", src: product.image }
-  ];
-
-  const currentImage = gallery[selectedThumbIndex]?.src || product.image;
+  }, [product?.id, product?.sku]);
 
   const handleCopySku = () => {
+    if (!product?.sku) return;
     navigator.clipboard.writeText(product.sku);
     setCopiedSku(true);
     setTimeout(() => setCopiedSku(false), 2000);
   };
 
-  const variantsList = product.variants || [
-    { option: "Option", value: "Standard", price: product.price, stock: `${product.stock} units`, status: product.stockStatus }
-  ];
+  const handleDeleteProduct = async () => {
+    if (!product) return;
+    setIsDeleting(true);
+    try {
+      await productService.deleteProduct(product.id || product.sku);
+      setDeleteModalOpen(false);
+      setActiveModule?.('products');
+      navigate('/products');
+    } catch (err: any) {
+      alert(`Could not delete product: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <p className="font-body-md text-body-md text-on-surface-variant">Loading product details...</p>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-error/10 text-error flex items-center justify-center">
+          <span className="material-symbols-outlined text-3xl">inventory_2</span>
+        </div>
+        <div>
+          <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
+            {error || 'Product Not Found'}
+          </h2>
+          <p className="font-body-md text-body-md text-on-surface-variant mt-1 max-w-md">
+            The requested product could not be located in the catalog. It may have been deleted or the SKU is incorrect.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          size="md"
+          startIcon="arrow_back"
+          onClick={() => {
+            setActiveModule?.('products');
+            navigate('/products');
+          }}
+        >
+          Back to Products Catalog
+        </Button>
+      </div>
+    );
+  }
+
+  const gallery = product.gallery && product.gallery.length > 0
+    ? product.gallery
+    : [
+        { id: 0, label: 'Front', src: product.image },
+        { id: 1, label: 'Side', src: product.image },
+        { id: 2, label: 'Angled', src: product.image },
+        { id: 3, label: 'Detail', src: product.image },
+      ];
+
+  const currentImage = gallery[selectedThumbIndex]?.src || product.image;
+
+  const variantsList = product.variants && product.variants.length > 0
+    ? product.variants
+    : [
+        {
+          option: 'Option',
+          value: 'Standard',
+          price: product.price,
+          stock: `${product.stock} units`,
+          status: product.stockStatus,
+        },
+      ];
 
   return (
     <div className="flex flex-col w-full pt-space-xs">
@@ -76,18 +170,11 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
           <Button
             variant="hover"
             size="md"
-            startIcon="content_copy"
-            onClick={() => alert(`Duplicated product ${product.name}`)}
+            startIcon="delete"
+            onClick={() => setDeleteModalOpen(true)}
+            className="text-error hover:bg-error-container/20"
           >
-            Duplicate
-          </Button>
-          <Button
-            variant="hover"
-            size="md"
-            startIcon="share"
-            onClick={() => alert(`Share link generated for ${product.name}`)}
-          >
-            Share
+            Delete
           </Button>
           <Button
             variant="primary"
@@ -96,7 +183,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
             onClick={() => {
               setSelectedProduct?.(product);
               setActiveModule?.('edit-product');
-              navigate(`/products/${product.id}/edit`);
+              navigate(`/products/${product.id || product.sku}/edit`);
             }}
           >
             Edit Product
@@ -119,33 +206,41 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
 
             {/* Featured Display Container */}
             <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-surface-container-low flex items-center justify-center p-4">
-              <img
-                alt={product.name}
-                src={currentImage}
-                className="w-full h-full object-contain object-center transition-all duration-300 group-hover:scale-[1.02]"
-              />
+              {currentImage ? (
+                <img
+                  alt={product.name}
+                  src={currentImage}
+                  className="w-full h-full object-contain object-center transition-all duration-300 group-hover:scale-[1.02]"
+                />
+              ) : (
+                <span className="material-symbols-outlined text-outline text-6xl">
+                  inventory_2
+                </span>
+              )}
             </div>
 
             {/* Thumbnail Selector Ribbon */}
-            <div className="mt-space-md grid grid-cols-4 gap-space-sm">
-              {gallery.map((thumb: any, idx: number) => (
-                <button
-                  key={thumb.id || idx}
-                  type="button"
-                  onClick={() => setSelectedThumbIndex(idx)}
-                  className={`group/thumb relative rounded-lg overflow-hidden aspect-[4/3] bg-surface-container-low transition-all cursor-pointer ${
-                    selectedThumbIndex === idx
-                      ? 'ring-2 ring-primary shadow-sm bg-surface-container-high'
-                      : 'hover:bg-surface-container-high'
-                  }`}
-                >
-                  <img alt={thumb.label} src={thumb.src} className="w-full h-full object-cover" />
-                  <span className="absolute bottom-1 right-1 px-1 rounded bg-surface-container-lowest/90 font-caption text-caption text-on-surface text-[10px]">
-                    {thumb.label}
-                  </span>
-                </button>
-              ))}
-            </div>
+            {gallery.length > 1 && (
+              <div className="mt-space-md grid grid-cols-4 gap-space-sm">
+                {gallery.map((thumb: any, idx: number) => (
+                  <button
+                    key={thumb.id || idx}
+                    type="button"
+                    onClick={() => setSelectedThumbIndex(idx)}
+                    className={`group/thumb relative rounded-lg overflow-hidden aspect-[4/3] bg-surface-container-low transition-all cursor-pointer ${
+                      selectedThumbIndex === idx
+                        ? 'ring-2 ring-primary shadow-sm bg-surface-container-high'
+                        : 'hover:bg-surface-container-high'
+                    }`}
+                  >
+                    <img alt={thumb.label} src={thumb.src} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-1 right-1 px-1 rounded bg-surface-container-lowest/90 font-caption text-caption text-on-surface text-[10px]">
+                      {thumb.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Media Management Section / Gallery Tabs */}
@@ -154,7 +249,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
               <div className="flex items-center gap-space-xs">
                 <span className="font-title-md text-title-md text-on-surface font-semibold">Media Gallery</span>
                 <span className="font-caption text-caption text-outline px-2 py-0.5 rounded-full bg-surface-container-high font-medium">
-                  {gallery.length + ((product as any).videos?.length || 0)} items
+                  {gallery.length + (product.videos?.length || 0)} items
                 </span>
               </div>
               {/* Tab Bar */}
@@ -181,7 +276,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
                   }`}
                 >
                   <Icon name="videocam" size="xs" />
-                  <span>Videos ({(product as any).videos?.length || 0})</span>
+                  <span>Videos ({product.videos?.length || 0})</span>
                 </button>
               </div>
             </div>
@@ -203,19 +298,25 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
             ) : (
               /* Media Grid: Videos */
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
-                {((product as any).videos || []).map((vid: any) => (
-                  <div key={vid.id} className="relative group rounded-lg overflow-hidden aspect-square bg-surface-container-low shadow-sm">
-                    <img alt="Video thumbnail" src={vid.thumbnail} className="w-full h-full object-cover opacity-90" />
-                    <div className="absolute inset-0 bg-on-surface/30 flex items-center justify-center">
-                      <div className="w-9 h-9 rounded-full bg-surface-container-lowest/90 backdrop-blur flex items-center justify-center shadow-md">
-                        <Icon name="play_arrow" size="lg" color="primary" className="ml-0.5" />
+                {(product.videos && product.videos.length > 0) ? (
+                  product.videos.map((vid: any, vIdx: number) => (
+                    <div key={vid.id || vIdx} className="relative group rounded-lg overflow-hidden aspect-square bg-surface-container-low shadow-sm">
+                      <img alt="Video thumbnail" src={vid.thumbnail || product.image} className="w-full h-full object-cover opacity-90" />
+                      <div className="absolute inset-0 bg-on-surface/30 flex items-center justify-center">
+                        <div className="w-9 h-9 rounded-full bg-surface-container-lowest/90 backdrop-blur flex items-center justify-center shadow-md">
+                          <Icon name="play_arrow" size="lg" color="primary" className="ml-0.5" />
+                        </div>
                       </div>
+                      <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded font-caption text-caption bg-on-surface/80 text-surface-container-lowest text-[10px]">
+                        {vid.duration || 'Video'}
+                      </span>
                     </div>
-                    <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded font-caption text-caption bg-on-surface/80 text-surface-container-lowest text-[10px]">
-                      {vid.duration}
-                    </span>
+                  ))
+                ) : (
+                  <div className="col-span-full py-8 text-center text-on-surface-variant font-caption text-caption">
+                    No videos attached to this product.
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -235,7 +336,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
               {/* SKU Meta Tag */}
               <div className="flex items-center gap-space-2xs">
                 <span className="font-body-sm text-body-sm text-outline">SKU:</span>
-                <span className="font-body-sm text-body-sm font-semibold text-on-surface-variant">
+                <span className="font-body-sm text-body-sm font-semibold text-on-surface-variant font-mono">
                   {product.sku}
                 </span>
                 <button
@@ -256,25 +357,25 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
                 <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Retail Price</span>
                 <div className="flex items-baseline gap-space-xs mt-0.5">
                   <span className="font-display-lg text-display-lg text-primary font-bold tracking-tight">
-                    ₹{product.price.toLocaleString()}
+                    ₹{(product.price || 0).toLocaleString()}
                   </span>
-                  {(product as any).originalPrice && (
+                  {product.originalPrice && (
                     <span className="font-body-sm text-body-sm text-outline line-through">
-                      ₹{(product as any).originalPrice?.toLocaleString()}
+                      ₹{product.originalPrice.toLocaleString()}
                     </span>
                   )}
-                  {(product as any).discount && (
+                  {product.discount && (
                     <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                      {(product as any).discount}
+                      {product.discount}
                     </span>
                   )}
                 </div>
               </div>
-              {(product as any).margin && (
+              {product.margin && (
                 <div className="flex flex-col items-end">
                   <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Margin</span>
                   <span className="font-title-sm text-title-sm text-on-surface font-semibold mt-0.5">
-                    {(product as any).margin}
+                    {product.margin}
                   </span>
                 </div>
               )}
@@ -289,7 +390,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
                   {product.category}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption text-caption">
-                  Omnichannel Verified
+                  Catalog Verified
                 </span>
               </div>
             </div>
@@ -297,52 +398,58 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
             {/* Description */}
             <div className="flex flex-col gap-space-2xs pt-space-xs">
               <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Description</span>
-              <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
-                {product.description}
+              <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed whitespace-pre-line">
+                {product.description || 'No description provided for this product.'}
               </p>
             </div>
 
             {/* Variants Selector */}
-            <div className="flex flex-col gap-space-2xs pt-space-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Variants</span>
-                <span className="font-caption text-caption text-primary cursor-pointer hover:underline">Size &amp; Option Guide</span>
+            {variantsList.length > 0 && (
+              <div className="flex flex-col gap-space-2xs pt-space-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">
+                    Variants ({variantsList.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-space-sm flex-wrap mt-1">
+                  {variantsList.map((v: any, vIdx: number) => {
+                    const label = v.value || v.title || `Variant ${vIdx + 1}`;
+                    return (
+                      <Button
+                        key={v.id || v.sku || label}
+                        variant={selectedVariant === label ? 'primary' : 'hover'}
+                        size="md"
+                        startIcon={selectedVariant === label ? 'check' : undefined}
+                        onClick={() => setSelectedVariant(label)}
+                      >
+                        {label} {v.price ? `(₹${v.price})` : ''}
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-space-sm flex-wrap mt-1">
-                {variantsList.map((v: any) => (
-                  <Button
-                    key={v.value}
-                    variant={selectedVariant === v.value ? 'primary' : 'hover'}
-                    size="md"
-                    startIcon={selectedVariant === v.value ? 'check' : undefined}
-                    onClick={() => setSelectedVariant(v.value)}
-                  >
-                    {v.value}
-                  </Button>
-                ))}
-              </div>
-            </div>
+            )}
 
             {/* Inventory Snapshot */}
             <div className="grid grid-cols-3 gap-space-sm pt-space-xs">
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Available</span>
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1">
-                  {product.stock}
+                  {product.stock || 0}
                 </span>
                 <span className="font-caption text-caption text-secondary font-medium">In Warehouse</span>
               </div>
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Committed</span>
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1">
-                  {(product as any).committed || 0}
+                  {product.committed || 0}
                 </span>
                 <span className="font-caption text-caption text-outline font-medium">In Orders</span>
               </div>
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Reorder Point</span>
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1">
-                  {(product as any).reorderPoint || 0}
+                  {product.reorderPoint || 10}
                 </span>
                 <span className="font-caption text-caption text-outline font-medium">Safety stock</span>
               </div>
@@ -350,6 +457,47 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct, s
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl max-w-md w-full p-6 border border-surface-container-high flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">warning</span>
+              </div>
+              <div>
+                <h3 className="font-title-lg text-title-lg text-on-surface font-bold">
+                  Delete Product?
+                </h3>
+                <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                  Are you sure you want to delete <span className="font-semibold">{product.name}</span> ({product.sku})? This will permanently remove it from the catalog.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-surface-container-low">
+              <Button
+                variant="ghost"
+                size="md"
+                disabled={isDeleting}
+                onClick={() => setDeleteModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                disabled={isDeleting}
+                startIcon={isDeleting ? 'progress_activity' : 'delete'}
+                onClick={handleDeleteProduct}
+              >
+                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
