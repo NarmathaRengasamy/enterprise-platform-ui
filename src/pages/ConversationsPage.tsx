@@ -1,100 +1,480 @@
-import React, { useState, useEffect } from 'react';
-import { INITIAL_CONVERSATIONS } from '../data/mockData';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/common';
+import { conversationService } from '../services/conversation.service';
+import type {
+  ConversationItem,
+  ConversationMessage,
+  NewConversationPayload
+} from '../types/conversation.types';
+import { clockTime, dayKey, dayLabel, fullTimestamp, relativeLabel } from '../utils/datetime';
 
 interface ConversationsPageProps {
   selectedConversationId?: string | null;
   setSelectedConversationId?: (id: string | null) => void;
 }
 
+/* The backend returns every conversation in one response, so "Load more"
+   widens a client-side window rather than fetching another page. */
+const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+/* The transcript carries the whole event stream — tool calls, grounding
+   decisions, guardrails, status changes — and the backend turns the textless
+   ones into placeholder bubbles ("🧠 Knowledge base grounding applied").
+   Only genuine turns belong in a chat, so the rest are filtered out here. */
+const CHAT_EVENT_TYPES = new Set(['user_message', 'ai_response']);
+
+const isChatMessage = (m: ConversationMessage): boolean => {
+  if (!m.eventType) return true; // locally composed messages carry no event type
+  return CHAT_EVENT_TYPES.has(m.eventType) && Boolean((m.text || '').trim());
+};
+
+/* Status dot: ended → blue, abandoned → grey, resolved → green.
+   `active` is a live thread, so it gets its own amber; anything unrecognised
+   falls back to grey rather than pretending to be one of the known states. */
+const STATUS_STYLES: Record<string, { dot: string; pill: string; label: string }> = {
+  ended: { dot: 'bg-blue-500', pill: 'bg-blue-50 text-blue-700', label: 'Ended' },
+  abandoned: { dot: 'bg-gray-400', pill: 'bg-gray-100 text-gray-600', label: 'Abandoned' },
+  resolved: { dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', label: 'Resolved' },
+  active: { dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700', label: 'Active' }
+};
+
+const UNKNOWN_STATUS = { dot: 'bg-gray-400', pill: 'bg-gray-100 text-gray-600', label: 'Unknown' };
+
+const statusStyle = (status?: string) =>
+  STATUS_STYLES[String(status || '').toLowerCase()] || UNKNOWN_STATUS;
+
+const CHANNEL_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'web', label: 'Web' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'voice', label: 'Phone' },
+  { key: 'sms', label: 'SMS' },
+  { key: 'email', label: 'Email' }
+];
+
+const EMPTY_CONVO: ConversationItem = {
+  id: '',
+  name: '',
+  initials: '',
+  avatar: '',
+  phone: '',
+  email: '',
+  timestamp: '',
+  lastMessage: '',
+  channel: 'web',
+  channelLabel: '',
+  channelColor: '#2563eb',
+  unread: 0,
+  status: '',
+  messages: []
+};
+
+const initialsOf = (name: string) => {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+};
+
 export default function ConversationsPage({
   selectedConversationId: propSelectedConvoId,
   setSelectedConversationId: propSetSelectedConvoId
 }: ConversationsPageProps = {}) {
-  const [conversations, setConversations] = useState(INITIAL_CONVERSATIONS);
-  const [internalActiveConvoId, setInternalActiveConvoId] = useState(
-    propSelectedConvoId || INITIAL_CONVERSATIONS[0].id
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [sendError, setSendError] = useState('');
+
+  const [internalActiveConvoId, setInternalActiveConvoId] = useState<string | null>(
+    propSelectedConvoId || null
   );
+  const [threadLoading, setThreadLoading] = useState(false);
 
-  const activeConvoId = propSelectedConvoId !== undefined && propSelectedConvoId !== null
-    ? propSelectedConvoId
-    : internalActiveConvoId;
+  /* Transcripts are fetched once per id and kept for the lifetime of the page.
+     This holds the messages themselves, not just "which ids were fetched":
+     switching channel tabs refetches the list, and those rows arrive with an
+     empty `messages`, so a set of ids would suppress the refetch and leave the
+     thread looking empty. The cache is what re-fills it. */
+  const transcriptCache = useRef<Map<string, ConversationMessage[]>>(new Map());
 
-  const setActiveConvoId = (id) => {
+  const [selectedChannelFilter, setSelectedChannelFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [inputMessage, setInputMessage] = useState('');
+  const [composerChannel, setComposerChannel] = useState('whatsapp');
+  const [sending, setSending] = useState(false);
+
+  /* Attachments are disabled: this backend exposes no upload endpoint. */
+  const attachment = null;
+  const uploading = false;
+
+  /* Search within the open thread */
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [messageSearch, setMessageSearch] = useState('');
+  const [matchIndex, setMatchIndex] = useState(0);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const activeConvoId =
+    propSelectedConvoId !== undefined && propSelectedConvoId !== null
+      ? propSelectedConvoId
+      : internalActiveConvoId;
+
+  const setActiveConvoId = (id: string | null) => {
     if (propSetSelectedConvoId) propSetSelectedConvoId(id);
     setInternalActiveConvoId(id);
   };
 
   useEffect(() => {
-    if (propSelectedConvoId) {
-      setInternalActiveConvoId(propSelectedConvoId);
-    }
+    if (propSelectedConvoId) setInternalActiveConvoId(propSelectedConvoId);
   }, [propSelectedConvoId]);
 
-  const [selectedChannelFilter, setSelectedChannelFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [inputMessage, setInputMessage] = useState('');
-  const [composerChannel, setComposerChannel] = useState('whatsapp');
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const activeConvo = conversations.find((c) => c.id === activeConvoId) || conversations[0];
+  /* The whole (filtered, newest-first) list from the backend in one call; the
+     rail shows `visibleCount` of it and "Load more" widens that window. */
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    setLoading(true);
+    setLoadError('');
+
+    (async () => {
+      try {
+        const rows = await conversationService.getConversations({
+          channel: selectedChannelFilter,
+          search: debouncedSearch
+        });
+        if (signal.aborted) return;
+        setConversations(rows);
+        setTotal(rows.length);
+        setVisibleCount(PAGE_SIZE);
+        setLoading(false);
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        setLoadError(err?.message || 'Could not load conversations.');
+        setConversations([]);
+        setTotal(0);
+        setLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [selectedChannelFilter, debouncedSearch]);
+
+  const visibleConversations = useMemo(
+    () => conversations.slice(0, visibleCount),
+    [conversations, visibleCount]
+  );
+  const hasMore = visibleCount < conversations.length;
+
+  const loadMore = useCallback(() => {
+    setVisibleCount((n) => n + PAGE_SIZE);
+  }, []);
+
+  /* Which thread the right pane is actually showing. Normally the selected one;
+     it falls back to the newest row when nothing is selected, or when a filter
+     no longer contains the previously open thread. A selected id that is not in
+     the list yet (a deep link from the dashboard) is kept so it can be fetched. */
+  const displayedId = useMemo(() => {
+    if (activeConvoId) {
+      if (conversations.some((c) => c.id === activeConvoId)) return activeConvoId;
+      if (!transcriptCache.current.has(activeConvoId)) return activeConvoId;
+    }
+    return conversations[0]?.id || null;
+  }, [activeConvoId, conversations]);
+
+  /* Transcript for the open thread. GET /conversations/:id returns the whole
+     event stream, so the non-chat events are dropped here. */
+  useEffect(() => {
+    if (!displayedId || transcriptCache.current.has(displayedId)) return undefined;
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const id = displayedId;
+
+    setThreadLoading(true);
+    conversationService
+      .getConversation(id, { signal })
+      .then((detail) => {
+        if (signal.aborted) return;
+        const messages = (detail.messages || []).filter(isChatMessage);
+        transcriptCache.current.set(id, messages);
+        setConversations((prev) => {
+          const exists = prev.some((c) => c.id === id);
+          if (!exists) return [{ ...detail, messages }, ...prev];
+          return prev.map((c) => (c.id === id ? { ...c, ...detail, messages } : c));
+        });
+        setThreadLoading(false);
+      })
+      .catch((err: any) => {
+        if (err?.name === 'AbortError') return;
+        setThreadLoading(false);
+        /* An id that is not in the list and cannot be fetched is stale — a deep
+           link to a thread that no longer exists — so fall back to the newest
+           row instead of leaving the pane stuck on an error. */
+        const inList = conversations.some((c) => c.id === id);
+        if (!inList) {
+          setActiveConvoId(null);
+          return;
+        }
+        setLoadError(err?.message || 'Could not load this transcript.');
+      });
+
+    return () => controller.abort();
+  }, [displayedId]);
+
+  const activeConvo = useMemo(() => {
+    const row = conversations.find((c) => c.id === displayedId);
+    if (!row) return EMPTY_CONVO;
+    // List rows carry no messages, so a row that came back from a refetch needs
+    // its transcript put back from the cache
+    if (row.messages.length > 0) return row;
+    const cached = transcriptCache.current.get(row.id);
+    return cached && cached.length > 0 ? { ...row, messages: cached } : row;
+  }, [conversations, displayedId]);
+
+  /* Which channels can actually reach this customer. The Perfox sender nodes
+     target the conversation contact, so with no phone there is nowhere for a
+     WhatsApp or SMS to go, and no address means no email. `web` is the in-app
+     widget — it has no outbound address at all. */
+  const channelOptions = useMemo(() => {
+    const hasPhone = Boolean(activeConvo.phone);
+    const hasEmail = Boolean(activeConvo.email);
+    return [
+      { key: 'whatsapp', label: 'WhatsApp', available: hasPhone, need: 'a phone number' },
+      { key: 'sms', label: 'SMS', available: hasPhone, need: 'a phone number' },
+      { key: 'email', label: 'Email', available: hasEmail, need: 'an email address' }
+    ];
+  }, [activeConvo.phone, activeConvo.email]);
+
+  const activeChannelOption = channelOptions.find((o) => o.key === composerChannel);
+  const canSendOnChannel = Boolean(activeChannelOption?.available);
 
   useEffect(() => {
-    if (activeConvo && activeConvo.channel) {
-      setComposerChannel(activeConvo.channel);
-    }
-  }, [activeConvoId, activeConvo]);
-
-  const filteredConversations = conversations.filter((c) => {
-    const matchesFilter = selectedChannelFilter === 'all' || c.channel === selectedChannelFilter;
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+    if (!activeConvo.id) return;
+    // Prefer the conversation's own channel, else the first one that can reach them
+    const own = channelOptions.find((o) => o.key === activeConvo.channel && o.available);
+    const fallback = channelOptions.find((o) => o.available);
+    setComposerChannel((own || fallback || channelOptions[0]).key);
+  }, [activeConvo.id, activeConvo.channel, channelOptions]);
 
   const getChannelPlaceholder = () => {
+    if (!activeConvo.id) return 'Select a conversation to reply...';
     if (composerChannel === 'whatsapp') {
       return `Type a WhatsApp message to ${activeConvo.name}...`;
     } else if (composerChannel === 'sms') {
-      return `Type an SMS message (${activeConvo.phone || '+91 98201 44521'})...`;
+      return `Type an SMS message (${activeConvo.phone || 'no number on file'})...`;
     } else if (composerChannel === 'email') {
-      return `Type an Email to ${activeConvo.email || 'contact@example.com'}...`;
-    } else {
-      return `Log phone call notes or trigger call with ${activeConvo.name}...`;
+      return `Type an Email to ${activeConvo.email || 'no address on file'}...`;
+    }
+    return `Log phone call notes or trigger call with ${activeConvo.name}...`;
+  };
+
+  /* ── New conversation ──────────────────────────────────────────────────── */
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newChatError, setNewChatError] = useState('');
+  const [newChat, setNewChat] = useState({
+    name: '',
+    channel: 'whatsapp' as NewConversationPayload['channel'],
+    phone: '',
+    email: '',
+    initialMessage: ''
+  });
+
+  const resetNewChat = () => {
+    setNewChat({ name: '', channel: 'whatsapp', phone: '', email: '', initialMessage: '' });
+    setNewChatError('');
+  };
+
+  const handleCreateConversation = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (creating) return;
+
+    const name = newChat.name.trim();
+    const initialMessage = newChat.initialMessage.trim();
+    if (!name || !initialMessage) {
+      setNewChatError('A name and a first message are both required.');
+      return;
+    }
+
+    setCreating(true);
+    setNewChatError('');
+    try {
+      const created = await conversationService.createConversation({
+        name,
+        channel: newChat.channel,
+        initialMessage,
+        phone: newChat.phone.trim() || undefined,
+        email: newChat.email.trim() || undefined
+      });
+
+      // The list call will not return it, so keep it in local state and cache
+      // its messages the same way a fetched transcript would be
+      transcriptCache.current.set(created.id, created.messages || []);
+      setConversations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
+      setTotal((n) => n + 1);
+      setVisibleCount((n) => Math.max(n, 1));
+      setActiveConvoId(created.id);
+      setShowNewChat(false);
+      resetNewChat();
+    } catch (err: any) {
+      setNewChatError(err?.message || 'Could not start the conversation.');
+    } finally {
+      setCreating(false);
     }
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputMessage.trim()) return;
+    const text = inputMessage.trim();
+    if ((!text && !attachment) || !activeConvo.id || sending || uploading || !canSendOnChannel) return;
 
-    const newMessage = {
-      id: `m_${Date.now()}`,
+    const now = new Date();
+    const optimistic: ConversationMessage = {
+      id: `m_${now.getTime()}`,
       sender: 'me',
-      text: inputMessage,
+      text,
       channel: composerChannel,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      attachment: attachment || undefined,
+      timestamp: now.toISOString(),
+      time: clockTime(now.toISOString())
     };
 
-    const updated = conversations.map((c) => {
-      if (c.id === activeConvoId) {
-        return {
-          ...c,
-          lastMessage: inputMessage,
-          messages: [...c.messages, newMessage]
-        };
-      }
-      return c;
-    });
-
-    setConversations(updated);
+    const convoId = activeConvo.id;
+    /* Append to activeConvo.messages, not to the row in `conversations` — the row
+       may be a post-refetch one whose messages are empty and only live in the
+       cache. Writing the cache too keeps the message across a tab switch. */
+    const previousMessages = activeConvo.messages;
+    const nextMessages = [...previousMessages, optimistic];
+    transcriptCache.current.set(convoId, nextMessages);
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === convoId
+          ? { ...c, lastMessage: text || attachment?.fileName || 'Attachment', messages: nextMessages }
+          : c
+      )
+    );
+    const sentAttachment = attachment;
     setInputMessage('');
-    setShowEmojiPicker(false);
+    setSendError('');
+    setSending(true);
+
+    try {
+      const updated = await conversationService.sendMessage(convoId, {
+        text,
+        sender: 'me',
+        channel: composerChannel,
+        attachment: sentAttachment || undefined
+      });
+      transcriptCache.current.set(convoId, updated.messages || nextMessages);
+      setConversations((prev) => prev.map((c) => (c.id === convoId ? { ...c, ...updated } : c)));
+    } catch (err: any) {
+      // Put the text back so nothing is silently lost
+      transcriptCache.current.set(convoId, previousMessages);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convoId ? { ...c, messages: previousMessages } : c))
+      );
+      setInputMessage(text);
+      setSendError(err?.message || 'Message could not be sent.');
+    } finally {
+      setSending(false);
+    }
   };
 
-  const emojis = ['👍', '👋', '✅', '📦', '💬', '🎉', '📋', '⭐'];
+  /* ── Search within the open thread ─────────────────────────────────────── */
+  const matchIds = useMemo(() => {
+    const q = messageSearch.trim().toLowerCase();
+    if (!q) return [];
+    return activeConvo.messages.filter((m) => (m.text || '').toLowerCase().includes(q)).map((m) => m.id);
+  }, [messageSearch, activeConvo.messages]);
+
+  const currentMatchId = matchIds[matchIndex] ?? null;
+
+  // A new query starts from the first hit again
+  useEffect(() => {
+    setMatchIndex(0);
+  }, [messageSearch, activeConvo.id]);
+
+  // Bring the current hit into view
+  useEffect(() => {
+    if (!currentMatchId) return;
+    messageRefs.current[currentMatchId]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [currentMatchId]);
+
+  const stepMatch = (delta: number) => {
+    if (matchIds.length === 0) return;
+    setMatchIndex((i) => (i + delta + matchIds.length) % matchIds.length);
+  };
+
+  const closeMessageSearch = () => {
+    setShowMessageSearch(false);
+    setMessageSearch('');
+    setMatchIndex(0);
+  };
+
+  /* Split a message into plain and matching runs so hits can be marked without
+     dangerouslySetInnerHTML. */
+  const highlight = (text: string, messageId: string) => {
+    const q = messageSearch.trim();
+    if (!q) return text;
+
+    const lower = text.toLowerCase();
+    const needle = q.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let cursor = 0;
+    let hit = lower.indexOf(needle);
+
+    while (hit !== -1) {
+      if (hit > cursor) parts.push(text.slice(cursor, hit));
+      const isCurrent = messageId === currentMatchId;
+      parts.push(
+        <mark
+          key={`${messageId}-${hit}`}
+          className={
+            isCurrent
+              ? 'bg-amber-400 text-on-surface rounded-sm px-0.5'
+              : 'bg-amber-200/70 text-on-surface rounded-sm px-0.5'
+          }
+        >
+          {text.slice(hit, hit + q.length)}
+        </mark>
+      );
+      cursor = hit + q.length;
+      hit = lower.indexOf(needle, cursor);
+    }
+
+    if (cursor < text.length) parts.push(text.slice(cursor));
+    return parts;
+  };
+
+  /* ── Group the thread into days ────────────────────────────────────────── */
+  const messageDays = useMemo(() => {
+    const groups: { key: string; label: string; messages: ConversationMessage[] }[] = [];
+    activeConvo.messages.forEach((m) => {
+      const iso = m.timestamp || '';
+      const key = dayKey(iso);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) {
+        last.messages.push(m);
+      } else {
+        groups.push({ key, label: dayLabel(iso), messages: [m] });
+      }
+    });
+    return groups;
+  }, [activeConvo.messages]);
+
+  const activeStatus = statusStyle(activeConvo.status);
 
   return (
+    <>
     <div className="flex w-full h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container">
       {/* LEFT PANEL: Conversations list */}
       <div className="w-80 md:w-96 flex flex-col bg-surface-container-lowest shrink-0 border-r border-surface-container">
@@ -108,7 +488,7 @@ export default function ConversationsPage({
               variant="ghost"
               size="icon-sm"
               startIcon="edit_square"
-              onClick={() => alert("Start new conversation thread")}
+              onClick={() => setShowNewChat(true)}
               title="New conversation"
               aria-label="New conversation"
             />
@@ -130,13 +510,7 @@ export default function ConversationsPage({
 
           {/* Channel Filter Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar pt-1">
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'whatsapp', label: 'WhatsApp' },
-              { key: 'voice', label: 'Phone' },
-              { key: 'sms', label: 'SMS' },
-              { key: 'email', label: 'Email' }
-            ].map((tab) => (
+            {CHANNEL_TABS.map((tab) => (
               <Button
                 key={tab.key}
                 variant={selectedChannelFilter === tab.key ? 'primary' : 'hover'}
@@ -153,31 +527,48 @@ export default function ConversationsPage({
 
         {/* Conversation Thread List */}
         <div className="flex-1 overflow-y-auto p-space-xs space-y-1">
-          {filteredConversations.map((c) => {
-            const isActive = c.id === activeConvoId;
+          {loadError && (
+            <div className="m-2 p-3 rounded-xl bg-error/10 text-error font-body-sm text-body-sm">
+              {loadError}
+            </div>
+          )}
+
+          {loading && (
+            <div className="p-6 flex items-center justify-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
+              <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+              Loading conversations...
+            </div>
+          )}
+
+          {!loading && !loadError && conversations.length === 0 && (
+            <div className="p-6 text-center text-on-surface-variant font-body-sm text-body-sm">
+              No conversations match this filter.
+            </div>
+          )}
+
+          {visibleConversations.map((c) => {
+            const isActive = c.id === activeConvo.id;
+            const status = statusStyle(c.status);
             return (
               <div
                 key={c.id}
                 onClick={() => setActiveConvoId(c.id)}
                 className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                  isActive
-                    ? 'bg-surface-container-high font-semibold'
-                    : 'hover:bg-surface-container'
+                  isActive ? 'bg-surface-container-high font-semibold' : 'hover:bg-surface-container'
                 }`}
               >
                 <div className="relative shrink-0">
                   {c.avatar ? (
-                    <img
-                      src={c.avatar}
-                      alt={c.name}
-                      className="w-11 h-11 rounded-full object-cover"
-                    />
+                    <img src={c.avatar} alt={c.name} className="w-11 h-11 rounded-full object-cover" />
                   ) : (
                     <div className="w-11 h-11 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-sm shrink-0">
-                      {c.initials || 'DM'}
+                      {c.initials || initialsOf(c.name) || 'CU'}
                     </div>
                   )}
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                  <span
+                    className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-white ${status.dot}`}
+                    title={status.label}
+                  ></span>
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -185,19 +576,30 @@ export default function ConversationsPage({
                     <h3 className="font-label-lg text-label-lg text-on-surface font-semibold truncate">
                       {c.name}
                     </h3>
-                    <span className="font-mono text-[11px] text-on-surface-variant">
-                      {c.timestamp}
+                    <span
+                      className="font-mono text-[11px] text-on-surface-variant shrink-0 ml-2"
+                      title={fullTimestamp(c.updatedAt || c.createdAt)}
+                    >
+                      {relativeLabel(c.updatedAt || c.createdAt) || c.timestamp}
                     </span>
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant truncate font-normal">
                     {c.lastMessage}
                   </p>
-                  <div className="flex items-center justify-between mt-1.5">
-                    <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[10px] font-medium flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> {c.channelLabel}
-                    </span>
+                  <div className="flex items-center justify-between mt-1.5 gap-2">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[10px] font-medium flex items-center gap-1 shrink-0">
+                        <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
+                        {c.channelLabel}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full font-label-sm text-[10px] font-medium shrink-0 ${status.pill}`}
+                      >
+                        {status.label}
+                      </span>
+                    </div>
                     {c.unread > 0 && (
-                      <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-mono text-[11px] font-semibold">
+                      <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-mono text-[11px] font-semibold shrink-0">
                         {c.unread}
                       </span>
                     )}
@@ -206,6 +608,21 @@ export default function ConversationsPage({
               </div>
             );
           })}
+
+          {/* Load more — pulls the next PAGE_SIZE rows and appends them */}
+          {hasMore && !loading && (
+            <div className="p-2">
+              <Button variant="hover" size="sm" fullWidth onClick={loadMore}>
+                {`Load more (${visibleConversations.length} of ${total})`}
+              </Button>
+            </div>
+          )}
+
+          {!loading && visibleConversations.length > 0 && (
+            <p className="py-2 text-center font-body-sm text-[11px] text-on-surface-variant">
+              {visibleConversations.length} of {total} conversations
+            </p>
+          )}
         </div>
       </div>
 
@@ -223,23 +640,34 @@ export default function ConversationsPage({
                 />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-sm shrink-0">
-                  {activeConvo.initials || 'DM'}
+                  {activeConvo.initials || initialsOf(activeConvo.name) || 'CU'}
                 </div>
               )}
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+              <span
+                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-white ${activeStatus.dot}`}
+                title={activeStatus.label}
+              ></span>
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold truncate">
                   {activeConvo.name}
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-label-sm text-[11px] font-semibold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> {activeConvo.channelLabel}
+                <span className="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold flex items-center gap-1 shrink-0">
+                  {activeConvo.channelLabel}
                 </span>
+                {activeConvo.status && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full font-label-sm text-[11px] font-semibold flex items-center gap-1 shrink-0 ${activeStatus.pill}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${activeStatus.dot}`}></span>
+                    {activeStatus.label}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm truncate">
                 <span>{activeConvo.phone}</span>
-                <span>•</span>
+                {activeConvo.phone && activeConvo.email && <span>•</span>}
                 <span className="truncate">{activeConvo.email}</span>
               </div>
             </div>
@@ -249,6 +677,7 @@ export default function ConversationsPage({
               variant="soft"
               size="sm"
               startIcon="call"
+              disabled={!activeConvo.id}
               onClick={() => {
                 setComposerChannel('voice');
                 alert(`Starting voice call / logging call with ${activeConvo.name} (${activeConvo.phone})`);
@@ -261,159 +690,269 @@ export default function ConversationsPage({
               variant="ghost"
               size="icon-sm"
               startIcon="search"
+              active={showMessageSearch}
+              disabled={!activeConvo.id}
+              onClick={() => (showMessageSearch ? closeMessageSearch() : setShowMessageSearch(true))}
               title="Search messages"
               aria-label="Search messages"
+            />
+          </div>
+        </div>
+
+        {/* Search within this conversation */}
+        {showMessageSearch && (
+          <div className="px-space-lg py-2 bg-surface-container-lowest border-b border-surface-container flex items-center gap-2 shrink-0">
+            <span className="material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+            <input
+              type="text"
+              autoFocus
+              value={messageSearch}
+              onChange={(e) => setMessageSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') closeMessageSearch();
+                if (e.key === 'Enter') stepMatch(e.shiftKey ? -1 : 1);
+              }}
+              placeholder="Search in this conversation..."
+              className="flex-1 bg-transparent text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none"
+            />
+            <span className="font-mono text-[11px] text-on-surface-variant shrink-0 min-w-[4.5rem] text-right">
+              {messageSearch.trim()
+                ? matchIds.length > 0
+                  ? `${matchIndex + 1} of ${matchIds.length}`
+                  : 'no matches'
+                : ''}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="keyboard_arrow_up"
+              disabled={matchIds.length === 0}
+              onClick={() => stepMatch(-1)}
+              title="Previous match"
+              aria-label="Previous match"
             />
             <Button
               variant="ghost"
               size="icon-sm"
-              startIcon="more_vert"
-              title="Options"
-              aria-label="Options"
+              startIcon="keyboard_arrow_down"
+              disabled={matchIds.length === 0}
+              onClick={() => stepMatch(1)}
+              title="Next match"
+              aria-label="Next match"
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              startIcon="close"
+              onClick={closeMessageSearch}
+              title="Close search"
+              aria-label="Close search"
             />
           </div>
-        </div>
+        )}
 
         {/* Chat Message Thread */}
         <div className="flex-1 overflow-y-auto px-6 lg:px-12 py-6 space-y-4">
-          <div className="flex items-center justify-center">
-            <span className="px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
-              Today
-            </span>
-          </div>
+          {threadLoading && (
+            <div className="flex items-center justify-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
+              <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+              Loading messages...
+            </div>
+          )}
 
-          {activeConvo.messages.map((m) => {
-            const isMe = m.sender === 'me';
-            return (
-              <div
-                key={m.id}
-                className={`flex flex-col max-w-lg ${isMe ? 'items-end ml-auto' : 'items-start'}`}
-              >
-                <div
-                  className={`px-4 py-3 rounded-2xl shadow-sm space-y-1 ${
-                    isMe
-                      ? 'bg-primary text-on-primary rounded-br-sm'
-                      : 'bg-surface-container-lowest text-on-surface rounded-bl-sm'
-                  }`}
-                >
-                  {/* Attachment Card if present */}
-                  {m.attachment && (
-                    <div className="rounded-xl overflow-hidden bg-surface-container text-on-surface mb-2">
-                      <img
-                        src={m.attachment.image}
-                        alt={m.attachment.title}
-                        className="w-full h-40 object-cover"
-                      />
-                      <div className="p-2.5 flex items-center justify-between">
-                        <div>
-                          <p className="font-label-md text-label-md font-semibold text-on-surface">
-                            {m.attachment.title}
-                          </p>
-                          <p className="font-body-sm text-[11px] text-on-surface-variant">
-                            SKU: {m.attachment.sku}
-                          </p>
+          {!threadLoading && activeConvo.messages.length === 0 && (
+            <div className="flex items-center justify-center text-on-surface-variant font-body-sm text-body-sm">
+              No messages in this conversation yet.
+            </div>
+          )}
+
+          {messageDays.map((day) => (
+            <div key={day.key} className="space-y-4">
+              {/* Day separator — this is what tells you whether a message is from
+                  today or three weeks ago; the bubbles themselves only show a clock. */}
+              <div className="flex items-center justify-center sticky top-0 z-10 py-1">
+                <span className="px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm shadow-sm">
+                  {day.label}
+                </span>
+              </div>
+
+              {day.messages.map((m) => {
+                const isMe = m.sender === 'me';
+                const isSystem = m.sender === 'system';
+                const isCurrentMatch = m.id === currentMatchId;
+                const isMatch = matchIds.includes(m.id);
+
+                if (isSystem) {
+                  return (
+                    <div key={m.id} className="flex items-center justify-center">
+                      <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px]">
+                        {highlight(m.text, m.id)}
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={m.id}
+                    ref={(el) => {
+                      messageRefs.current[m.id] = el;
+                    }}
+                    className={`flex flex-col max-w-lg ${isMe ? 'items-end ml-auto' : 'items-start'}`}
+                  >
+                    <div
+                      className={`px-4 py-3 rounded-2xl shadow-sm space-y-1 transition-shadow ${
+                        isMe
+                          ? 'bg-primary text-on-primary rounded-br-sm'
+                          : 'bg-surface-container-lowest text-on-surface rounded-bl-sm'
+                      } ${isCurrentMatch ? 'ring-2 ring-amber-400' : isMatch ? 'ring-1 ring-amber-300/70' : ''}`}
+                    >
+                      {/* Attachment: an image preview, a product card, or a file
+                          the reader can open — whichever the payload describes. */}
+                      {m.attachment && (
+                        <div className="rounded-xl overflow-hidden bg-surface-container text-on-surface mb-2">
+                          {m.attachment.image && !m.attachment.fileUrl && (
+                            <img
+                              src={m.attachment.image}
+                              alt={m.attachment.title}
+                              className="w-full h-40 object-cover"
+                            />
+                          )}
+
+                          {m.attachment.fileUrl && m.attachment.mimeType?.startsWith('image/') && (
+                            <a href={m.attachment.fileUrl} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={m.attachment.fileUrl}
+                                alt={m.attachment.fileName || 'Attachment'}
+                                className="w-full max-h-64 object-cover"
+                              />
+                            </a>
+                          )}
+
+                          {m.attachment.fileUrl && !m.attachment.mimeType?.startsWith('image/') && (
+                            <a
+                              href={m.attachment.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2.5 flex items-center gap-2.5 hover:bg-surface-container-high transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-primary text-[22px] shrink-0">
+                                description
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-label-md text-label-md font-semibold text-on-surface truncate">
+                                  {m.attachment.fileName || 'Attachment'}
+                                </span>
+                                <span className="block font-body-sm text-[11px] text-on-surface-variant">
+                                  {m.attachment.mimeType || 'File'}
+                                </span>
+                              </span>
+                              <span className="material-symbols-outlined text-on-surface-variant text-[18px] shrink-0">
+                                download
+                              </span>
+                            </a>
+                          )}
+
+                          {m.attachment.title && (
+                            <div className="p-2.5 flex items-center justify-between">
+                              <div>
+                                <p className="font-label-md text-label-md font-semibold text-on-surface">
+                                  {m.attachment.title}
+                                </p>
+                                {m.attachment.sku && (
+                                  <p className="font-body-sm text-[11px] text-on-surface-variant">
+                                    SKU: {m.attachment.sku}
+                                  </p>
+                                )}
+                              </div>
+                              {m.attachment.status && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                  {m.attachment.status}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                          {m.attachment.status}
+                      )}
+
+                      {m.text && (
+                        <p className="font-body-md text-body-md leading-relaxed whitespace-pre-wrap">
+                          {highlight(m.text, m.id)}
+                        </p>
+                      )}
+                      <div
+                        className={`flex items-center justify-end gap-1.5 font-mono text-[10px] ${
+                          isMe ? 'text-primary-fixed' : 'text-on-surface-variant'
+                        }`}
+                      >
+                        {m.channel && (
+                          <span className="uppercase text-[9px] font-semibold tracking-wider opacity-80">
+                            via {m.channel}
+                          </span>
+                        )}
+                        <span title={fullTimestamp(m.timestamp)}>
+                          {clockTime(m.timestamp) || m.time}
                         </span>
+                        {isMe && <span className="material-symbols-outlined text-[14px]">done_all</span>}
                       </div>
                     </div>
-                  )}
-
-                  <p className="font-body-md text-body-md leading-relaxed">
-                    {m.text}
-                  </p>
-                  <div className={`flex items-center justify-end gap-1.5 font-mono text-[10px] ${isMe ? 'text-primary-fixed' : 'text-on-surface-variant'}`}>
-                    {m.channel && (
-                      <span className="uppercase text-[9px] font-semibold tracking-wider opacity-80">
-                        via {m.channel}
-                      </span>
-                    )}
-                    <span>{m.time}</span>
-                    {isMe && (
-                      <span className="material-symbols-outlined text-[14px]">done_all</span>
-                    )}
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          ))}
         </div>
-
-        {/* BOTTOM COMPOSER: Simple, clean, uncluttered with Send via channel selector */}
+        {/* BOTTOM COMPOSER */}
         <div className="p-space-md bg-surface-container-lowest border-t border-surface-container relative">
-          {/* Channel Selector Chips (Send via: WhatsApp, SMS, Email) */}
+          {sendError && (
+            <div className="mb-2 px-3 py-2 rounded-lg bg-error/10 text-error font-body-sm text-body-sm">
+              {sendError}
+            </div>
+          )}
+
+          {/* Channel Selector Chips — a channel with no address to send to is
+              disabled rather than failing at send time */}
           <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
             <span className="text-on-surface-variant font-label-sm text-label-sm mr-1 font-medium">
               Send via:
             </span>
-            <Button
-              variant={composerChannel === 'whatsapp' ? 'primary' : 'hover'}
-              size="xs"
-              onClick={() => setComposerChannel('whatsapp')}
-            >
-              WhatsApp {composerChannel === 'whatsapp' ? '(Active)' : ''}
-            </Button>
-            <Button
-              variant={composerChannel === 'sms' ? 'primary' : 'hover'}
-              size="xs"
-              onClick={() => setComposerChannel('sms')}
-            >
-              SMS {composerChannel === 'sms' ? '(Active)' : ''}
-            </Button>
-            <Button
-              variant={composerChannel === 'email' ? 'primary' : 'hover'}
-              size="xs"
-              onClick={() => setComposerChannel('email')}
-            >
-              Email {composerChannel === 'email' ? '(Active)' : ''}
-            </Button>
+            {channelOptions.map((option) => (
+              <Button
+                key={option.key}
+                variant={composerChannel === option.key ? 'primary' : 'hover'}
+                size="xs"
+                disabled={!option.available}
+                onClick={() => setComposerChannel(option.key)}
+                title={
+                  option.available
+                    ? `Send over ${option.label}`
+                    : `${activeConvo.name || 'This customer'} has no ${option.need} on file`
+                }
+              >
+                {option.label} {composerChannel === option.key ? '(Active)' : ''}
+              </Button>
+            ))}
           </div>
 
-          {/* Quick Emoji Picker Popover */}
-          {showEmojiPicker && (
-            <div className="absolute bottom-16 left-6 p-2 bg-surface-container-lowest rounded-xl shadow-xl border border-surface-container-high flex items-center gap-2 z-30">
-              {emojis.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => {
-                    setInputMessage(inputMessage + emoji);
-                    setShowEmojiPicker(false);
-                  }}
-                  className="p-1.5 text-lg hover:bg-surface-container rounded-lg transition-colors cursor-pointer"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
+          {activeConvo.id && !canSendOnChannel && (
+            <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
+              No channel can reach this customer — add {channelOptions.map((o) => o.need).join(' or ')}{' '}
+              to their record first.
+            </p>
           )}
 
           {/* Input Container */}
-          <form onSubmit={handleSendMessage} className="flex items-center gap-2 bg-surface-container-low rounded-xl px-3 py-2 focus-within:bg-surface-container focus-within:ring-1 focus-within:ring-primary transition-all">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              startIcon="sentiment_satisfied"
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              title="Add emoji"
-              aria-label="Add emoji"
-            />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              startIcon="attach_file"
-              onClick={() => alert("Attach product quote, catalog sheet, or image")}
-              title="Attach file"
-              aria-label="Attach file"
-            />
-
+          <form
+            onSubmit={handleSendMessage}
+            className="flex items-center gap-2 bg-surface-container-low rounded-xl px-3 py-2 focus-within:bg-surface-container focus-within:ring-1 focus-within:ring-primary transition-all"
+          >
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder={getChannelPlaceholder()}
-              className="flex-1 bg-transparent text-on-surface placeholder:text-on-surface-variant font-body-md text-body-md focus:outline-none px-1"
+              disabled={!activeConvo.id}
+              className="flex-1 bg-transparent text-on-surface placeholder:text-on-surface-variant font-body-md text-body-md focus:outline-none px-1 disabled:cursor-not-allowed"
             />
 
             <Button
@@ -421,7 +960,13 @@ export default function ConversationsPage({
               size="md"
               type="submit"
               endIcon="send"
-              disabled={!inputMessage.trim()}
+              loading={sending}
+              disabled={
+                (!inputMessage.trim() && !attachment) ||
+                !activeConvo.id ||
+                uploading ||
+                !canSendOnChannel
+              }
             >
               Send
             </Button>
@@ -429,5 +974,137 @@ export default function ConversationsPage({
         </div>
       </div>
     </div>
+
+      {/* New conversation dialog */}
+      {showNewChat && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => {
+            if (!creating) {
+              setShowNewChat(false);
+              resetNewChat();
+            }
+          }}
+        >
+          <form
+            onSubmit={handleCreateConversation}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container p-space-lg space-y-space-sm"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                Start a conversation
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
+                disabled={creating}
+                onClick={() => {
+                  setShowNewChat(false);
+                  resetNewChat();
+                }}
+                title="Close"
+                aria-label="Close"
+              />
+            </div>
+
+            {newChatError && (
+              <div className="px-3 py-2 rounded-lg bg-error/10 text-error font-body-sm text-body-sm">
+                {newChatError}
+              </div>
+            )}
+
+            <label className="block">
+              <span className="font-label-md text-label-md text-on-surface-variant">Customer name</span>
+              <input
+                autoFocus
+                value={newChat.name}
+                onChange={(e) => setNewChat((v) => ({ ...v, name: e.target.value }))}
+                placeholder="e.g. Anna Lakshmi"
+                className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </label>
+
+            <label className="block">
+              <span className="font-label-md text-label-md text-on-surface-variant">Channel</span>
+              <select
+                value={newChat.channel}
+                onChange={(e) =>
+                  setNewChat((v) => ({ ...v, channel: e.target.value as NewConversationPayload['channel'] }))
+                }
+                className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sms">SMS</option>
+                <option value="email">Email</option>
+                <option value="voice">Voice</option>
+                <option value="web">Web</option>
+              </select>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="font-label-md text-label-md text-on-surface-variant">Phone</span>
+                <input
+                  value={newChat.phone}
+                  onChange={(e) => setNewChat((v) => ({ ...v, phone: e.target.value }))}
+                  placeholder="+91…"
+                  className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </label>
+              <label className="block">
+                <span className="font-label-md text-label-md text-on-surface-variant">Email</span>
+                <input
+                  value={newChat.email}
+                  onChange={(e) => setNewChat((v) => ({ ...v, email: e.target.value }))}
+                  placeholder="name@example.com"
+                  className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="font-label-md text-label-md text-on-surface-variant">First message</span>
+              <textarea
+                rows={3}
+                value={newChat.initialMessage}
+                onChange={(e) => setNewChat((v) => ({ ...v, initialMessage: e.target.value }))}
+                placeholder="What did the customer ask?"
+                className="mt-1 w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              />
+            </label>
+
+            <p className="font-body-sm text-[11px] text-on-surface-variant">
+              This thread is stored locally. It will not appear in the list after a refresh until the
+              backend merges local threads into <code>GET /conversations</code>.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                variant="hover"
+                size="sm"
+                disabled={creating}
+                onClick={() => {
+                  setShowNewChat(false);
+                  resetNewChat();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                type="submit"
+                loading={creating}
+                disabled={!newChat.name.trim() || !newChat.initialMessage.trim() || creating}
+              >
+                Start conversation
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
   );
 }
