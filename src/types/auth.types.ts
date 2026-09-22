@@ -30,6 +30,11 @@ export interface AuthResponseData {
   user: User;
 }
 
+export interface ApiFieldError {
+  path: string;
+  message: string;
+}
+
 export interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
@@ -39,7 +44,10 @@ export interface ApiResponse<T = any> {
   limit?: number;
   totalPages?: number;
   error?: string;
-  errors?: string[];
+  /** Present only on a 400 from schema validation. `path` is dotted and carries
+      its source prefix (`body.name`, `query.page`, `params.id`), which is what
+      lets a failure be mapped back to the form field that caused it. */
+  errors?: ApiFieldError[];
 }
 
 export interface AuthContextType {

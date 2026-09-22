@@ -1,4 +1,4 @@
-import { ApiResponse } from '../types/auth.types';
+import { ApiFieldError, ApiResponse } from '../types/auth.types';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
@@ -61,9 +61,41 @@ export const clearToken = (): void => {
 
 export interface RequestOptions extends RequestInit {
   data?: any;
-  params?: Record<string, any>;
-  skipAuth?: boolean;
+  params?: Record<string, string | number | boolean | undefined | null>;
 }
+
+/**
+ * What `request` throws. `status` carries the HTTP code so a caller can tell a
+ * 409 ("Perfox is not connected yet") from a 403 ("you are not an Admin") from
+ * a genuine server failure — the message alone cannot be branched on safely.
+ * It is absent when the request never reached the server.
+ */
+export interface ApiError extends Error {
+  status?: number;
+  /** On a 400, the validation failures keyed by field name, so a form can mark
+      the inputs that were rejected instead of showing one opaque banner. */
+  fieldErrors?: Record<string, string>;
+}
+
+/**
+ * Turns the API's `errors` array into a lookup a form can use.
+ *
+ * Paths arrive dotted and prefixed with their source — `body.url`,
+ * `query.page`, `params.id`. The prefix is about where the value travelled, not
+ * what the user typed, so it is stripped: a form knows its field as `url`.
+ * The first failure per field wins; later ones are usually refinements of it.
+ */
+const fieldErrorsFrom = (errors?: ApiFieldError[]): Record<string, string> => {
+  if (!Array.isArray(errors)) return {};
+
+  const result: Record<string, string> = {};
+  for (const entry of errors) {
+    if (!entry?.path || !entry?.message) continue;
+    const field = entry.path.replace(/^(body|query|params)\./, '');
+    if (!(field in result)) result[field] = entry.message;
+  }
+  return result;
+};
 
 export async function request<T = any>(
   endpoint: string,
@@ -126,17 +158,28 @@ export async function request<T = any>(
     const json = (await response.json().catch(() => ({}))) as ApiResponse<T>;
 
     if (!response.ok) {
+      /* A validation failure always carries the generic message "Validation
+         failed", so listing the fields is the only way the caller learns what
+         was actually wrong. */
+      const fieldErrors = fieldErrorsFrom(json.errors);
+      const fieldSummary = Object.entries(fieldErrors)
+        .map(([field, message]) => `${field}: ${message}`)
+        .join(', ');
+
       const errorMessage =
+        fieldSummary ||
         json.message ||
         json.error ||
-        (Array.isArray(json.errors) ? json.errors.join(', ') : null) ||
         `Request failed with status ${response.status}`;
 
       if (response.status === 401) {
         clearToken();
       }
 
-      throw new Error(errorMessage);
+      const error: ApiError = new Error(errorMessage);
+      error.status = response.status;
+      if (fieldSummary) error.fieldErrors = fieldErrors;
+      throw error;
     }
 
     return json;

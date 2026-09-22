@@ -36,6 +36,14 @@ export const conversationService = {
     return response.data;
   },
 
+  /** Raw event log stream for a thread (system events, webhooks, AI agent telemetry). */
+  async getConversationEvents(id: string): Promise<any[]> {
+    const response = await client.get<any[]>(
+      `/conversations/${encodeURIComponent(id)}/events`
+    );
+    return response.data || [];
+  },
+
   /** Unread threads and messages, for the sidebar badge. */
   async getUnreadCount(): Promise<UnreadCount> {
     const response = await client.get<UnreadCount>('/conversations/unread-count');

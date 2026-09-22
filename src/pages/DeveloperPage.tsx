@@ -1,299 +1,446 @@
-import React, { useState } from 'react';
-import { INITIAL_DEVELOPER_AGENTS, INITIAL_DEVELOPER_ENDPOINTS } from '../data/mockData';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '../components/common';
+import { useAuth } from '../hooks/useAuth';
+import {
+  developerService,
+  fieldErrorsOf,
+  isForbidden,
+  isPlatformNotConfigured,
+  isUpstreamFailure
+} from '../services/developer.service';
+import { DeveloperAgent, PlatformConnection } from '../types/developer.types';
+import { fullTimestamp, relativeLabel } from '../utils/datetime';
 
-export default function DeveloperPage() {
-  const [agents, setAgents] = useState(INITIAL_DEVELOPER_AGENTS);
-  const [endpoints, setEndpoints] = useState(INITIAL_DEVELOPER_ENDPOINTS);
-  const [selectedAgentId, setSelectedAgentId] = useState(INITIAL_DEVELOPER_AGENTS[0].id);
+/* The Developer Hub is two screens, not one.
 
-  // Visibility & Copy states for active agent keys
-  const [showSiteKey, setShowSiteKey] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
-  const [copiedKeyType, setCopiedKeyType] = useState(null); // 'siteKey' | 'secretKey' | 'endpointUrl' | 'secretToken'
+   Until a Perfox workspace is connected there is nothing to show and nothing
+   worth asking the server for, so the page is the configure form and only that.
+   Agents are fetched once the connection exists.
 
-  // Testing ping per endpoint state: { [endpointId]: 'idle' | 'pinging' | 'success' | 'error' }
-  const [pingStatuses, setPingStatuses] = useState({});
+   Agents themselves are a read-only mirror of the workspace: no site key, no
+   secret key, no widget styling and no endpoint bindings, because the backend
+   stores none of those. The one write is publish/pause, forwarded to Perfox. */
 
-  // Modals
-  const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
-  const [isAddEndpointModalOpen, setIsAddEndpointModalOpen] = useState(false);
+const agentStatusClass = (status: string): string => {
+  if (status === 'published') return 'bg-emerald-500/15 text-emerald-700';
+  if (status === 'paused') return 'bg-amber-500/15 text-amber-700';
+  return 'bg-surface-container text-on-surface-variant';
+};
 
-  // New Agent Form State
-  const [newAgentName, setNewAgentName] = useState('');
-  const [newAgentWorkflowId, setNewAgentWorkflowId] = useState('');
-  const [newAgentChannel, setNewAgentChannel] = useState('Web Storefront Widget');
-  const [newAgentModel, setNewAgentModel] = useState('Perfox-Omni 2.5');
-  const [newAgentAccentColor, setNewAgentAccentColor] = useState('#2563eb');
-  const [newAgentPosition, setNewAgentPosition] = useState('bottom-right');
-  const [newAgentDescription, setNewAgentDescription] = useState('');
+const platformStatusClass = (status: string): string => {
+  if (status === 'Connected') return 'bg-emerald-500/15 text-emerald-700';
+  if (status === 'Error') return 'bg-error/15 text-error';
+  return 'bg-amber-500/15 text-amber-700';
+};
 
-  // New Endpoint Form State
-  const [newEndpointName, setNewEndpointName] = useState('');
-  const [newEndpointUrl, setNewEndpointUrl] = useState('');
-  const [newEndpointMethod, setNewEndpointMethod] = useState('GET');
-  const [newEndpointTransport, setNewEndpointTransport] = useState('HTTP'); // 'HTTP' | 'SSE'
-  const [newEndpointAuthType, setNewEndpointAuthType] = useState('none'); // 'none' | 'bearer' | 'apiKey' | 'basic'
-  const [newEndpointBearerToken, setNewEndpointBearerToken] = useState('');
-  const [newEndpointApiKeyHeader, setNewEndpointApiKeyHeader] = useState('X-API-Key');
-  const [newEndpointApiKeyValue, setNewEndpointApiKeyValue] = useState('');
-  const [newEndpointBasicAuth, setNewEndpointBasicAuth] = useState('');
+/**
+ * Sorts a failure into the one bucket it belongs in.
+ *
+ * A 502/504 means Perfox refused or timed out: retrying changes nothing and the
+ * form was never at fault, so it gets its own banner rather than sitting in a
+ * red box beside the fields. A 400 carries per-field reasons, which belong on
+ * the inputs — "Validation failed" on its own tells nobody anything.
+ */
+const classify = (error: unknown, fallback: string) => ({
+  upstream: isUpstreamFailure(error),
+  fields: fieldErrorsOf(error),
+  message: (error as Error)?.message || fallback
+});
 
-  // Three Toggles: Send Query Parameters, Send Headers, Send Body
-  const [sendQueryParams, setSendQueryParams] = useState(false);
-  const [queryParams, setQueryParams] = useState([{ id: 1, key: '', value: '' }]);
+/** Red ring plus the reason under any input the server rejected. */
+const fieldClass = (fieldErrors: Record<string, string>, field: string): string =>
+  fieldErrors[field] ? 'border-error ring-1 ring-error/40' : 'border-surface-container-high';
 
-  const [sendHeaders, setSendHeaders] = useState(false);
-  const [headersList, setHeadersList] = useState([{ id: 1, key: 'Content-Type', value: 'application/json' }]);
+const FieldError = ({ error }: { error?: string }) =>
+  error ? <span className="text-[11px] text-error">{error}</span> : null;
 
-  const [sendBody, setSendBody] = useState(false);
-  const [bodyFormat, setBodyFormat] = useState('application/json');
-  const [bodyContent, setBodyContent] = useState('{\n  "event": "webhook.trigger",\n  "timestamp": "2026-09-18T14:35:00Z"\n}');
+/* Outcomes are reported in a dialog rather than a banner above the connection
+   details: a strip that appears and shifts the page is easy to miss and easy to
+   leave stale, and it put a failed agent toggle nowhere near the agent. A
+   dialog interrupts once, says what happened, and is dismissed deliberately. */
+type DialogTone = 'success' | 'error' | 'warning';
 
-  // Currently selected active agent
-  const activeAgent = agents.find((a) => a.id === selectedAgentId) || agents[0];
+interface DialogState {
+  tone: DialogTone;
+  title: string;
+  message: string;
+  /* Second line for context the message itself should not carry. */
+  detail?: string;
+  /* Present only on a confirmation; its absence makes this a plain alert. */
+  confirmLabel?: string;
+  onConfirm?: () => void;
+  danger?: boolean;
+}
 
-  const copyToClipboard = (text, type) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKeyType(type);
-    setTimeout(() => setCopiedKeyType(null), 2000);
-  };
+const toneStyle: Record<DialogTone, { icon: string; className: string }> = {
+  success: { icon: 'check_circle', className: 'bg-emerald-500/10 text-emerald-700' },
+  error: { icon: 'error', className: 'bg-error/10 text-error' },
+  warning: { icon: 'cloud_off', className: 'bg-amber-500/10 text-amber-700' }
+};
 
-  const handleTestPingEndpoint = (endpointId) => {
-    setPingStatuses((prev) => ({ ...prev, [endpointId]: 'pinging' }));
-    setTimeout(() => {
-      setPingStatuses((prev) => ({ ...prev, [endpointId]: 'success' }));
-      setTimeout(() => {
-        setPingStatuses((prev) => ({ ...prev, [endpointId]: null }));
-      }, 3500);
-    }, 900);
-  };
-
-  const handleToggleAgentStatus = (agentId) => {
-    setAgents((prev) =>
-      prev.map((a) => {
-        if (a.id === agentId) {
-          const newStatus = a.status === 'Active' ? 'Paused' : 'Active';
-          return {
-            ...a,
-            status: newStatus,
-            statusColor: newStatus === 'Active' ? 'emerald' : 'amber'
-          };
-        }
-        return a;
-      })
-    );
-  };
-
-  const handleUpdateActiveAgentColor = (color) => {
-    setAgents((prev) =>
-      prev.map((a) => (a.id === activeAgent.id ? { ...a, accentColor: color } : a))
-    );
-  };
-
-  const handleUpdateActiveAgentPosition = (pos) => {
-    setAgents((prev) =>
-      prev.map((a) => (a.id === activeAgent.id ? { ...a, position: pos } : a))
-    );
-  };
-
-  const handleToggleAgentEndpointAssignment = (endpointId) => {
-    setAgents((prev) =>
-      prev.map((a) => {
-        if (a.id === activeAgent.id) {
-          const exists = a.assignedEndpoints.includes(endpointId);
-          const updated = exists
-            ? a.assignedEndpoints.filter((id) => id !== endpointId)
-            : [...a.assignedEndpoints, endpointId];
-          return { ...a, assignedEndpoints: updated };
-        }
-        return a;
-      })
-    );
-  };
-
-  const handleRotateKey = () => {
-    const newSecret = `sk_mock_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
-    setAgents((prev) =>
-      prev.map((a) => (a.id === activeAgent.id ? { ...a, secretKey: newSecret } : a))
-    );
-    alert(`Rotated secret API key for "${activeAgent.name}". Ensure your backend environments are updated.`);
-  };
-
-  // Query Params Handlers
-  const handleAddQueryParam = () => {
-    setQueryParams((prev) => [...prev, { id: Date.now(), key: '', value: '' }]);
-  };
-
-  const handleRemoveQueryParam = (id) => {
-    setQueryParams((prev) => (prev.length > 1 ? prev.filter((p) => p.id !== id) : [{ id: 1, key: '', value: '' }]));
-  };
-
-  const handleUpdateQueryParam = (id, field, val) => {
-    setQueryParams((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: val } : p))
-    );
-  };
-
-  // Headers Handlers
-  const handleAddHeader = () => {
-    setHeadersList((prev) => [...prev, { id: Date.now(), key: '', value: '' }]);
-  };
-
-  const handleRemoveHeader = (id) => {
-    setHeadersList((prev) => (prev.length > 1 ? prev.filter((h) => h.id !== id) : [{ id: 1, key: '', value: '' }]));
-  };
-
-  const handleUpdateHeader = (id, field, val) => {
-    setHeadersList((prev) =>
-      prev.map((h) => (h.id === id ? { ...h, [field]: val } : h))
-    );
-  };
-
-  // Submit New Agent
-  const handleAddAgentSubmit = (e) => {
-    e.preventDefault();
-    if (!newAgentName) return;
-
-    const id = `agt-00${agents.length + 1}`;
-    const wfId =
-      newAgentWorkflowId ||
-      `wf_flow_${newAgentName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Math.random().toString(36).substring(2, 7)}`;
-    const randomHex1 = Math.random().toString(36).substring(2, 14);
-    const randomHex2 = Math.random().toString(36).substring(2, 14);
-
-    const newAgt = {
-      id,
-      name: newAgentName,
-      workflowId: wfId,
-      channel: newAgentChannel,
-      model: newAgentModel,
-      siteKey: `pk_mock_${randomHex1}${randomHex2}`,
-      secretKey: `sk_mock_${randomHex2}${randomHex1}`,
-      accentColor: newAgentAccentColor,
-      position: newAgentPosition,
-      status: 'Active',
-      statusColor: 'emerald',
-      totalCalls: '0',
-      avgLatency: '18 ms',
-      assignedEndpoints: ['ep-1'],
-      description: newAgentDescription || 'Multi-agent connection configured for autonomous workflow execution.'
-    };
-
-    setAgents((prev) => [...prev, newAgt]);
-    setSelectedAgentId(id);
-    setIsAddAgentModalOpen(false);
-
-    // Reset form
-    setNewAgentName('');
-    setNewAgentWorkflowId('');
-    setNewAgentDescription('');
-  };
-
-  // Submit New Endpoint with Method, URL, Auth, Toggles
-  const handleAddEndpointSubmit = (e) => {
-    e.preventDefault();
-    if (!newEndpointName || !newEndpointUrl) return;
-
-    const id = `ep-${endpoints.length + 1}`;
-
-    // Construct authConfig based on chosen authType
-    const authConfig: Record<string, any> = {};
-    if (newEndpointAuthType === 'bearer') {
-      authConfig.bearerToken = newEndpointBearerToken;
-    } else if (newEndpointAuthType === 'apiKey') {
-      authConfig.headerName = newEndpointApiKeyHeader || 'X-API-Key';
-      authConfig.apiKeyValue = newEndpointApiKeyValue;
-    } else if (newEndpointAuthType === 'basic') {
-      authConfig.basicAuth = newEndpointBasicAuth;
-    }
-
-    const newEp = {
-      id,
-      name: newEndpointName,
-      url: newEndpointUrl,
-      method: newEndpointMethod,
-      transport: newEndpointTransport,
-      authType: newEndpointAuthType,
-      authConfig,
-      sendQueryParams,
-      queryParams: sendQueryParams ? queryParams.filter((p) => p.key) : [],
-      sendHeaders,
-      headers: sendHeaders ? headersList.filter((h) => h.key) : [],
-      sendBody,
-      bodyFormat: sendBody ? bodyFormat : null,
-      bodyContent: sendBody ? bodyContent : '',
-      status: 'Healthy',
-      statusColor: 'emerald',
-      latency: '18 ms',
-      connectedAgentsCount: 1,
-      lastPingStatus: '200 OK',
-      lastPingTime: 'Just now'
-    };
-
-    setEndpoints((prev) => [...prev, newEp]);
-    // Assign to active agent by default
-    setAgents((prev) =>
-      prev.map((a) =>
-        a.id === activeAgent.id
-          ? { ...a, assignedEndpoints: [...a.assignedEndpoints, id] }
-          : a
-      )
-    );
-    setIsAddEndpointModalOpen(false);
-
-    // Reset form
-    setNewEndpointName('');
-    setNewEndpointUrl('');
-    setNewEndpointMethod('GET');
-    setNewEndpointTransport('HTTP');
-    setNewEndpointAuthType('none');
-    setNewEndpointBearerToken('');
-    setNewEndpointApiKeyHeader('X-API-Key');
-    setNewEndpointApiKeyValue('');
-    setNewEndpointBasicAuth('');
-    setSendQueryParams(false);
-    setSendHeaders(false);
-    setSendBody(false);
-  };
-
-  const getAuthBadge = (ep) => {
-    if (ep.authType === 'bearer') {
-      return (
-        <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 flex items-center gap-1">
-          <span className="material-symbols-outlined text-xs">key</span>
-          <span>Bearer Token</span>
-        </span>
-      );
-    }
-    if (ep.authType === 'apiKey') {
-      return (
-        <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold bg-blue-500/15 text-blue-700 flex items-center gap-1">
-          <span className="material-symbols-outlined text-xs">vpn_key</span>
-          <span>API Key ({ep.authConfig?.headerName || 'X-API-Key'})</span>
-        </span>
-      );
-    }
-    if (ep.authType === 'basic') {
-      return (
-        <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold bg-amber-500/15 text-amber-700 flex items-center gap-1">
-          <span className="material-symbols-outlined text-xs">lock</span>
-          <span>Basic Auth</span>
-        </span>
-      );
-    }
-    return (
-      <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold bg-surface-container text-on-surface-variant flex items-center gap-1">
-        <span className="material-symbols-outlined text-xs">lock_open</span>
-        <span>No Auth</span>
-      </span>
-    );
-  };
+const Dialog = ({
+  state,
+  busy,
+  onClose
+}: {
+  state: DialogState;
+  busy?: boolean;
+  onClose: () => void;
+}) => {
+  const tone = toneStyle[state.tone];
+  const isConfirm = Boolean(state.confirmLabel && state.onConfirm);
 
   return (
-    <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
-      {/* Breadcrumb & Top Command Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={() => !busy && onClose()}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={state.title}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md border border-surface-container-high overflow-hidden animate-in zoom-in-95 duration-150"
+      >
+        <div className="p-5 flex items-start gap-3.5">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tone.className}`}
+          >
+            <span className="material-symbols-outlined text-xl">{tone.icon}</span>
+          </div>
+          <div className="flex flex-col gap-1 min-w-0 pt-0.5">
+            <h3 className="font-title-md text-title-md font-bold text-on-surface">{state.title}</h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant break-words">
+              {state.message}
+            </p>
+            {state.detail && (
+              <p className="font-body-sm text-[11px] text-outline break-words">{state.detail}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-3.5 bg-surface-container-low/60 border-t border-surface-container flex items-center justify-end gap-2">
+          <Button variant="ghost" size="md" onClick={onClose} disabled={busy}>
+            {isConfirm ? 'Cancel' : 'Close'}
+          </Button>
+          {isConfirm && (
+            <Button
+              variant={state.danger ? 'danger' : 'primary'}
+              size="md"
+              loading={busy}
+              disabled={busy}
+              onClick={state.onConfirm}
+            >
+              {state.confirmLabel}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function DeveloperPage() {
+  const { user } = useAuth();
+
+  /* ── Platform connection ────────────────────────────────────────────────── */
+  const [platform, setPlatform] = useState<PlatformConnection | null>(null);
+  const [platformLoading, setPlatformLoading] = useState(true);
+  const [platformFieldErrors, setPlatformFieldErrors] = useState<Record<string, string>>({});
+  /* Every outcome that is not attached to a specific input goes here. One
+     dialog at a time, so a success can never sit under a stale failure. */
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [apiUrlInput, setApiUrlInput] = useState('');
+  const [apiTokenInput, setApiTokenInput] = useState('');
+  const [savingPlatform, setSavingPlatform] = useState(false);
+  const [testingPlatform, setTestingPlatform] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  /* Which of the two screens the page is on.
+     Credentials that exist but have never verified are not a connection — an
+     environment-provided pair arrives as `Unverified` and may be wrong, so it
+     does not skip the configure screen. Once established it stays established
+     for the session: a failed Test reports the failure where it happened
+     instead of throwing the page back to a form and demanding the token
+     again. */
+  const [connectionEstablished, setConnectionEstablished] = useState(false);
+
+  /* ── Agents ─────────────────────────────────────────────────────────────── */
+  const [agents, setAgents] = useState<DeveloperAgent[]>([]);
+  const [agentSource, setAgentSource] = useState<'cache' | 'perfox'>('cache');
+  const [syncedAt, setSyncedAt] = useState('');
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  /* The whole module is Admin-only; a 403 means there is nothing to show. */
+  const [forbidden, setForbidden] = useState(false);
+
+  /* A failure Perfox caused is worth naming as such — the user's input was not
+     at fault and retrying the same call will not help. */
+  const reportFailure = useCallback((error: unknown, fallback: string) => {
+    const failure = classify(error, fallback);
+    setDialog(
+      failure.upstream
+        ? {
+            tone: 'warning',
+            title: 'Perfox did not answer',
+            message: failure.message,
+            detail: 'The platform is unreachable or rejected the token. Anything on the page is the last state it reported.'
+          }
+        : { tone: 'error', title: fallback, message: failure.message }
+    );
+    return failure;
+  }, []);
+
+  /* ── Loading ────────────────────────────────────────────────────────────── */
+
+  const loadAgents = useCallback(
+    async (refresh = false) => {
+      setAgentsLoading(true);
+      try {
+        const result = await developerService.getAgents(refresh);
+        setAgents(result.agents || []);
+        setAgentSource(result.source);
+        setSyncedAt(result.syncedAt || '');
+      } catch (error) {
+        if (isForbidden(error)) {
+          setForbidden(true);
+        } else if (isPlatformNotConfigured(error)) {
+          /* Not a failure — the server says the connection went away underneath
+             us, so go back to the configure screen rather than complaining
+             about agents that were never fetchable. */
+          setConnectionEstablished(false);
+          setAgents([]);
+        } else {
+          /* A refresh that fails leaves the cached rows on screen — they are
+             still the last thing Perfox actually said. */
+          reportFailure(error, 'Could not load the agents');
+        }
+      } finally {
+        setAgentsLoading(false);
+      }
+    },
+    [reportFailure]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    /* Mirror the server's role check rather than calling and catching the 403 —
+       a control that is going to be refused should never be offered. The 403
+       branch below still stands: the token is the authority, not this claim. */
+    if (user && user.role !== 'Admin') {
+      setForbidden(true);
+      setPlatformLoading(false);
+      return;
+    }
+
+    (async () => {
+      setPlatformLoading(true);
+      try {
+        const connection = await developerService.getPlatform();
+        if (cancelled) return;
+        setPlatform(connection);
+        /* The configure form starts empty, so nothing is copied into the
+           inputs — the credentials are typed in, not confirmed from a prefill. */
+        const established = connection.configured && connection.status === 'Connected';
+        setConnectionEstablished(established);
+        /* Agents are asked for only once there is a verified workspace. */
+        if (established) await loadAgents(false);
+      } catch (error) {
+        if (cancelled) return;
+        if (isForbidden(error)) setForbidden(true);
+        else reportFailure(error, 'Could not read the platform connection');
+      } finally {
+        if (!cancelled) setPlatformLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAgents, user]);
+
+  /* ── Platform actions ───────────────────────────────────────────────────── */
+
+  const handleSavePlatform = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apiUrlInput.trim()) return;
+
+    setSavingPlatform(true);
+    setPlatformFieldErrors({});
+    setDialog(null);
+    try {
+      const result = await developerService.savePlatform({
+        apiUrl: apiUrlInput.trim(),
+        apiToken: apiTokenInput.trim()
+      });
+      setPlatform(result);
+      /* The token is never held in the browser longer than the request. */
+      setApiTokenInput('');
+
+      if (result.verification?.ok) {
+        setConnectionEstablished(true);
+        setApiUrlInput('');
+        setDialog({
+          tone: 'success',
+          title: 'Workspace connected',
+          message: `Connected to ${result.workspace} in ${result.verification.latencyMs} ms.`
+        });
+        await loadAgents(true);
+      } else {
+        /* Saved anyway — say what Perfox answered rather than losing the input,
+           and stay on the configure screen so it can be corrected. */
+        setDialog({
+          tone: 'error',
+          title: 'Perfox rejected these credentials',
+          message: result.verification?.message || 'Perfox could not be reached.',
+          detail: 'They have been saved, so you can correct just the part that is wrong.'
+        });
+      }
+    } catch (error) {
+      const failure = classify(error, 'Could not save the platform connection');
+      setPlatformFieldErrors(failure.fields);
+      /* With the reasons already sitting on the fields, a dialog repeating them
+         would just be something else to dismiss. */
+      if (Object.keys(failure.fields).length === 0) {
+        reportFailure(error, 'Could not save the platform connection');
+      }
+    } finally {
+      setSavingPlatform(false);
+    }
+  };
+
+  const handleTestPlatform = async () => {
+    setTestingPlatform(true);
+    setDialog(null);
+    try {
+      const result = await developerService.testPlatform();
+      if (result.ok) {
+        setPlatform((prev) =>
+          prev
+            ? { ...prev, status: 'Connected', lastError: '', lastVerifiedAt: new Date().toISOString() }
+            : prev
+        );
+        setDialog({
+          tone: 'success',
+          title: 'Connection is live',
+          message: `Perfox answered in ${result.latencyMs} ms.`
+        });
+      } else {
+        setPlatform((prev) => (prev ? { ...prev, status: 'Error', lastError: result.message } : prev));
+        setDialog({
+          tone: 'warning',
+          title: 'Perfox did not answer',
+          message: result.message,
+          detail: 'The stored credentials are unchanged — disconnect to enter different ones.'
+        });
+      }
+    } catch (error) {
+      reportFailure(error, 'Could not test the platform connection');
+    } finally {
+      setTestingPlatform(false);
+    }
+  };
+
+  /* Disconnecting hides every agent until a workspace is connected again, so it
+     asks first — in the page's own dialog, not a browser confirm box. */
+  const askToDisconnect = () =>
+    setDialog({
+      tone: 'warning',
+      title: 'Disconnect this workspace?',
+      message: `The stored credentials for ${platform?.workspace || 'this workspace'} will be removed and the agents hidden until a workspace is connected again.`,
+      detail: 'Nothing in Perfox itself is changed — no agent is paused, deleted or republished.',
+      confirmLabel: 'Disconnect',
+      danger: true,
+      onConfirm: () => void handleDisconnect()
+    });
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      const result = await developerService.disconnectPlatform();
+      setPlatform(result.connection);
+      setApiUrlInput('');
+      setApiTokenInput('');
+      setAgents([]);
+      /* Even an environment fallback is unverified, so either way this returns
+         to the configure screen rather than quietly using credentials the user
+         has just said they do not want. */
+      setConnectionEstablished(false);
+      setDialog({
+        tone: 'success',
+        title: 'Workspace disconnected',
+        message: result.fellBackToEnvironment
+          ? 'The server environment still provides credentials, but they have not been verified.'
+          : 'Enter credentials to connect a workspace again.'
+      });
+    } catch (error) {
+      reportFailure(error, 'Could not disconnect the platform');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  /* ── Agent actions ──────────────────────────────────────────────────────── */
+
+  const handleToggleAgent = async (agent: DeveloperAgent) => {
+    if (agent.status === 'draft') return;
+    const next = agent.status === 'published' ? 'paused' : 'published';
+
+    setTogglingAgentId(agent.id);
+    try {
+      const updated = await developerService.setAgentStatus(agent.id, next);
+      setAgents((prev) => prev.map((a) => (a.id === agent.id ? { ...a, ...updated } : a)));
+    } catch (error) {
+      /* Name the agent: a bare "could not change the status" beside the platform
+         details gave no clue which of a dozen switches failed. */
+      reportFailure(error, `Could not ${next === 'published' ? 'publish' : 'pause'} ${agent.name}`);
+    } finally {
+      setTogglingAgentId(null);
+    }
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied((current) => (current === key ? null : current)), 2000);
+  };
+
+  const publishedCount = agents.filter((a) => a.status === 'published').length;
+  const pausedCount = agents.filter((a) => a.status === 'paused').length;
+  const draftCount = agents.filter((a) => a.status === 'draft').length;
+
+  /* ── Whole-page states ──────────────────────────────────────────────────── */
+
+  if (forbidden) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <span className="material-symbols-outlined text-5xl text-outline">lock</span>
+        <h1 className="font-title-lg text-title-lg font-bold text-on-surface">
+          The Developer Hub is Admin-only
+        </h1>
+        <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+          It exposes platform credentials and lets a user register URLs the server will call, so it
+          is restricted to Admins. Your account is {user?.role || 'not an Admin'}.
+        </p>
+      </div>
+    );
+  }
+
+  if (platformLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-on-surface-variant">
+        <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+        <span className="font-body-sm text-body-sm">Loading the Developer Hub…</span>
+      </div>
+    );
+  }
+
+  /* ── Configure screen: everything else waits on this ─────────────────────── */
+  if (!connectionEstablished) {
+    return (
+      <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10 max-w-2xl mx-auto">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 font-caption text-caption text-outline">
             <span>OmniFlow</span>
@@ -301,85 +448,246 @@ export default function DeveloperPage() {
             <span className="text-primary font-semibold">Developer Hub</span>
           </div>
           <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-            Multi-Agent &amp; Multi-Endpoint Gateway
+            Connect your Perfox workspace
           </h1>
-          <p className="font-body-sm text-body-sm text-on-surface-variant max-w-3xl">
-            Configure multi-agent integrations, manage public tokens &amp; secret keys, and route webhook event streams across multiple backend endpoints.
+          <p className="font-body-sm text-body-sm text-on-surface-variant">
+            The agents on this page mirror a Perfox workspace, so there is nothing to show until the
+            platform credentials are in place.
           </p>
         </div>
 
-        {/* Action CTAs */}
-        <div className="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
-          <Button
-            variant="secondary"
-            size="md"
-            startIcon="add_link"
-            onClick={() => setIsAddEndpointModalOpen(true)}
-          >
-            Add Endpoint
-          </Button>
+        <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
+          <div className="p-5 bg-surface-container-low/60 border-b border-surface-container flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
+              <span className="material-symbols-outlined text-xl">hub</span>
+            </div>
+            <div>
+              <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
+                Platform Credentials
+              </h2>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Stored on the server — the token never comes back to the browser.
+              </p>
+            </div>
+          </div>
 
-          <Button
-            variant="primary"
-            size="md"
-            startIcon="smart_toy"
-            onClick={() => setIsAddAgentModalOpen(true)}
-          >
-            Connect New Agent
-          </Button>
+          <div className="p-5 flex flex-col gap-4">
+            <form onSubmit={handleSavePlatform} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                  API Base URL *
+                </label>
+                <input
+                  type="url"
+                  required
+                  autoFocus
+                  value={apiUrlInput}
+                  onChange={(e) => setApiUrlInput(e.target.value)}
+                  placeholder="https://your-workspace-api.perfox.ai/api/v1"
+                  className={`h-11 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border focus:outline-none focus:ring-1 focus:ring-primary shadow-inner ${fieldClass(platformFieldErrors, 'apiUrl')}`}
+                />
+                <FieldError error={platformFieldErrors.apiUrl} />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                  API Token *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={apiTokenInput}
+                  onChange={(e) => setApiTokenInput(e.target.value)}
+                  placeholder="sk_…"
+                  className={`h-11 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border focus:outline-none focus:ring-1 focus:ring-primary shadow-inner ${fieldClass(platformFieldErrors, 'apiToken')}`}
+                />
+                <FieldError error={platformFieldErrors.apiToken} />
+              </div>
+
+              <p className="text-[11px] text-on-surface-variant">
+                Connecting verifies the credentials against{' '}
+                <span className="font-mono">{platform?.verifyPath || '/kb/folders'}</span>. If Perfox
+                rejects them they are still saved, with the reason shown above, so nothing you typed
+                is lost.
+              </p>
+
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                startIcon="link"
+                loading={savingPlatform}
+                disabled={savingPlatform || !apiUrlInput.trim() || !apiTokenInput.trim()}
+              >
+                Connect Workspace
+              </Button>
+            </form>
+          </div>
+        </div>
+
+        {dialog && <Dialog state={dialog} busy={disconnecting} onClose={() => setDialog(null)} />}
+      </div>
+    );
+  }
+
+  /* ── Connected: the Developer Hub proper ─────────────────────────────────── */
+  return (
+    <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 font-caption text-caption text-outline">
+          <span>OmniFlow</span>
+          <span className="material-symbols-outlined text-xs">chevron_right</span>
+          <span className="text-primary font-semibold">Developer Hub</span>
+        </div>
+        <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
+          Platform Connection &amp; Workspace Agents
+        </h1>
+        <p className="font-body-sm text-body-sm text-on-surface-variant max-w-3xl">
+          Review the Perfox workspace this service is connected to, activate and pause the agents
+          it holds.
+        </p>
+      </div>
+
+      {/* ===================================================================== */}
+      {/* PLATFORM CONNECTION                                                    */}
+      {/* ===================================================================== */}
+      <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
+        <div className="p-5 bg-surface-container-low/60 border-b border-surface-container flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
+              <span className="material-symbols-outlined text-xl">hub</span>
+            </div>
+            <div>
+              <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
+                Perfox Platform Connection
+              </h2>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Agents stay hidden until this is configured.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${platformStatusClass(platform.status)}`}
+            >
+              {platform.status}
+            </span>
+            <Button
+              variant="hover"
+              size="sm"
+              startIcon="network_ping"
+              loading={testingPlatform}
+              disabled={testingPlatform}
+              onClick={handleTestPlatform}
+            >
+              Test
+            </Button>
+            {/* Changing the credentials means disconnecting and connecting
+                again — there is no in-place edit, so a half-changed pair can
+                never sit in front of a workspace it does not open. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              startIcon="link_off"
+              loading={disconnecting}
+              disabled={disconnecting}
+              onClick={askToDisconnect}
+              title="Disconnect this workspace and enter different credentials"
+            >
+              Disconnect
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-5 flex flex-col gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-outline">
+                  Workspace
+                </span>
+                <span className="font-title-sm text-title-sm font-bold text-on-surface">
+                  {platform.workspace || '—'}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-outline">
+                  API Base URL
+                </span>
+                <span className="font-mono text-xs text-on-surface truncate" title={platform.apiUrl}>
+                  {platform.apiUrl}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-outline">
+                  API Token
+                </span>
+                <span className="font-mono text-xs text-on-surface">{platform.apiTokenMasked}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-outline">
+                  Last Verified
+                </span>
+                <span
+                  className="font-body-sm text-body-sm text-on-surface"
+                  title={fullTimestamp(platform.lastVerifiedAt)}
+                >
+                  {platform.lastVerifiedAt ? relativeLabel(platform.lastVerifiedAt) : 'Never'}
+                </span>
+              </div>
+
+            {platform.source === 'env' && (
+              <p className="sm:col-span-2 lg:col-span-4 text-[11px] text-on-surface-variant">
+                These credentials come from the server environment, not the Developer Hub.
+                Disconnecting and entering your own stores a workspace connection that takes
+                precedence over them.
+              </p>
+            )}
+            {platform.lastError && platform.status === 'Error' && (
+              <p className="sm:col-span-2 lg:col-span-4 text-[11px] text-error">
+                {platform.lastError}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Global Telemetry Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-sm">
+      {/* Real counts only — nothing here is a placeholder figure. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-sm">
         <div className="bg-surface-container-lowest p-space-md rounded-2xl shadow-sm border border-surface-container flex items-center gap-space-sm">
           <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center">
             <span className="material-symbols-outlined text-2xl">smart_toy</span>
           </div>
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Connected Agents
+              Workspace Agents
             </span>
             <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              {agents.length} Active
+              {agents.length}
             </span>
-            <span className="font-caption text-caption text-purple-700 font-semibold flex items-center gap-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
-              All instances routed
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-surface-container-lowest p-space-md rounded-2xl shadow-sm border border-surface-container flex items-center gap-space-sm">
-          <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
-            <span className="material-symbols-outlined text-2xl">hub</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Live Endpoints
-            </span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              {endpoints.length} Registered
-            </span>
-            <span className="font-caption text-caption text-blue-600 font-semibold">
-              Event stream active
+            <span className="font-caption text-caption text-purple-700 font-semibold">
+              {publishedCount} published · {pausedCount} paused
+              {draftCount > 0 ? ` · ${draftCount} draft` : ''}
             </span>
           </div>
         </div>
 
         <div className="bg-surface-container-lowest p-space-md rounded-2xl shadow-sm border border-surface-container flex items-center gap-space-sm">
           <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-            <span className="material-symbols-outlined text-2xl">speed</span>
+            <span className="material-symbols-outlined text-2xl">sync</span>
           </div>
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Avg Gateway Latency
+              Agents Last Synced
             </span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              18 ms
+            <span
+              className="font-headline-sm text-headline-sm text-on-surface font-bold"
+              title={fullTimestamp(syncedAt)}
+            >
+              {syncedAt ? relativeLabel(syncedAt) : '—'}
             </span>
-            <span className="font-caption text-caption text-emerald-600 font-semibold flex items-center gap-0.5">
-              <span className="material-symbols-outlined text-xs">trending_down</span> Nominal SLA
+            <span className="font-caption text-caption text-outline">
+              {agentSource === 'perfox' ? 'Fetched from Perfox' : 'Served from cache'}
             </span>
           </div>
         </div>
@@ -390,23 +698,22 @@ export default function DeveloperPage() {
           </div>
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Uptime &amp; Security
+              Connection
             </span>
             <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              99.98%
+              {platform.status}
             </span>
-            <span className="font-caption text-caption text-outline">
-              Keys encrypted (AES-256)
+            <span className="font-caption text-caption text-outline truncate">
+              {platform.workspace || '—'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* SECTION 1: MULTI-AGENT CONNECTION MATRIX */}
-      {/* ========================================================================= */}
+      {/* ===================================================================== */}
+      {/* WORKSPACE AGENTS — read-only, toggled in place                         */}
+      {/* ===================================================================== */}
       <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
-        {/* Header */}
         <div className="p-5 bg-surface-container-low/60 border-b border-surface-container flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
@@ -414,985 +721,148 @@ export default function DeveloperPage() {
             </div>
             <div>
               <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
-                Connected AI Agents ({agents.length})
+                Workspace Agents ({agents.length})
               </h2>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Select an agent below to configure its unique keys, widget appearance, and endpoint bindings.
+                Agents are created and edited in Perfox. Here you can activate or pause them.
               </p>
             </div>
           </div>
 
+          {/* Perfox is only called when the cache is empty or a refresh is asked
+              for, so this is the only way to re-sync. */}
           <Button
-            variant="soft"
+            variant="secondary"
             size="md"
-            startIcon="add"
-            onClick={() => setIsAddAgentModalOpen(true)}
+            startIcon="sync"
+            loading={agentsLoading}
+            disabled={agentsLoading}
+            onClick={() => loadAgents(true)}
+            title="Re-sync the agent list from Perfox"
           >
-            Connect Another Agent
+            Refresh from Perfox
           </Button>
         </div>
 
-        {/* Multi-Agent Cards Grid */}
-        <div className="p-5 border-b border-surface-container bg-surface-container-low/20">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {agents.map((agt) => {
-              const isSelected = agt.id === activeAgent.id;
-              return (
-                <div
-                  key={agt.id}
-                  onClick={() => setSelectedAgentId(agt.id)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 relative ${
-                    isSelected
-                      ? 'bg-surface-container-lowest border-primary shadow-md ring-2 ring-primary/20'
-                      : 'bg-surface-container-low/70 border-surface-container hover:bg-surface-container hover:border-surface-container-high'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        style={{ backgroundColor: agt.accentColor }}
-                        className="w-7 h-7 rounded-lg text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
-                      >
-                        <span className="material-symbols-outlined text-base">smart_toy</span>
+        {agents.length === 0 ? (
+          <div className="p-10 text-center flex flex-col items-center gap-2">
+            <span className="material-symbols-outlined text-4xl text-outline">smart_toy</span>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">
+              {agentsLoading
+                ? 'Loading agents…'
+                : 'This Perfox workspace has no agents yet. Create one in Perfox, then refresh.'}
+            </p>
+          </div>
+        ) : (
+          <div className="p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {agents.map((agent) => {
+                const isDraft = agent.status === 'draft';
+                const isPublished = agent.status === 'published';
+                const isToggling = togglingAgentId === agent.id;
+
+                return (
+                  <div
+                    key={agent.id}
+                    className="p-3.5 rounded-2xl border border-surface-container bg-surface-container-low/70 hover:bg-surface-container hover:border-surface-container-high transition-all flex flex-col gap-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-base">smart_toy</span>
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-title-sm text-title-sm font-bold text-on-surface truncate">
+                            {agent.name}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(agent.id, agent.id)}
+                            title={`Copy ${agent.id}`}
+                            className="text-[11px] text-outline font-mono block truncate max-w-full hover:text-primary cursor-pointer text-left"
+                          >
+                            {copied === agent.id ? 'Copied' : agent.id}
+                          </button>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <h3 className="font-title-sm text-title-sm font-bold text-on-surface truncate">
-                          {agt.name}
-                        </h3>
-                        <span className="text-[11px] text-outline font-mono block truncate">
-                          {agt.id}
+
+                      {/* Status and its toggle sit together on the card — a draft
+                          has no switch, because there is no second state to move
+                          to until Perfox has published it once. */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agentStatusClass(agent.status)}`}
+                        >
+                          {agent.status}
+                        </span>
+                        {!isDraft && (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={isPublished}
+                            aria-label={`${isPublished ? 'Pause' : 'Publish'} ${agent.name}`}
+                            disabled={isToggling}
+                            onClick={() => handleToggleAgent(agent)}
+                            className={`w-9 h-[18px] rounded-full transition-colors relative focus:outline-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                              isPublished ? 'bg-emerald-600' : 'bg-surface-container-high'
+                            }`}
+                            title={
+                              isPublished
+                                ? 'Pause this agent in Perfox'
+                                : `Publish this agent in Perfox — this bumps it to v${agent.activeVersion + 1}`
+                            }
+                          >
+                            <div
+                              className={`w-3.5 h-3.5 rounded-full bg-white shadow-xs transition-transform absolute top-[2px] ${
+                                isPublished ? 'left-[20px]' : 'left-[2px]'
+                              }`}
+                            />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] text-on-surface-variant pt-1 border-t border-surface-container-low">
+                      <div className="flex items-center justify-between">
+                        <span className="text-outline">Version:</span>
+                        <span className="font-semibold text-on-surface">v{agent.activeVersion}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-outline">Nodes:</span>
+                        <span className="font-semibold text-on-surface">{agent.nodeCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-outline shrink-0">Channels:</span>
+                        <span className="font-medium text-on-surface truncate">
+                          {agent.channels?.length ? agent.channels.join(', ') : '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-outline shrink-0">Updated:</span>
+                        <span
+                          className="font-medium text-on-surface truncate"
+                          title={fullTimestamp(agent.perfoxUpdatedAt)}
+                        >
+                          {relativeLabel(agent.perfoxUpdatedAt) || '—'}
                         </span>
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        agt.status === 'Active'
-                          ? 'bg-emerald-500/15 text-emerald-700'
-                          : 'bg-amber-500/15 text-amber-700'
-                      }`}
-                    >
-                      {agt.status}
-                    </span>
+                    {isDraft && (
+                      <p className="text-[10px] text-on-surface-variant leading-snug">
+                        Publish it in Perfox before it can be toggled here.
+                      </p>
+                    )}
                   </div>
+                );
+              })}
+            </div>
 
-                  <div className="space-y-1 text-[11px] text-on-surface-variant pt-1 border-t border-surface-container-low">
-                    <div className="flex items-center justify-between">
-                      <span className="text-outline">Model:</span>
-                      <span className="font-semibold text-on-surface">{agt.model}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-outline">Channel:</span>
-                      <span className="font-medium text-on-surface truncate max-w-[130px]">{agt.channel}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-outline">Assigned Endpoints:</span>
-                      <span className="font-bold text-primary">{agt.assignedEndpoints.length} Active</span>
-                    </div>
-                  </div>
-
-                  {isSelected && (
-                    <div className="w-full text-center py-1 bg-primary/10 text-primary font-bold text-[11px] rounded-lg">
-                      Currently Selected
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
-        </div>
-
-        {/* Selected Agent Detailed Configuration Panel */}
-        <div className="p-5 lg:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column: Credentials & Model Info */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-wider font-bold text-outline">
-                  Agent Credentials:
-                </span>
-                <span className="font-title-md text-title-md font-bold text-primary">
-                  {activeAgent.name}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-semibold ${
-                  activeAgent.status === 'Active' ? 'text-emerald-700' : 'text-on-surface-variant'
-                }`}>
-                  {activeAgent.status === 'Active' ? 'Active' : 'Paused'}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={activeAgent.status === 'Active'}
-                  onClick={() => handleToggleAgentStatus(activeAgent.id)}
-                  className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer focus:outline-none ${
-                    activeAgent.status === 'Active' ? 'bg-emerald-600' : 'bg-surface-container-high'
-                  }`}
-                  title={activeAgent.status === 'Active' ? 'Click to Pause Agent' : 'Click to Activate Agent'}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform absolute top-0.5 ${
-                      activeAgent.status === 'Active' ? 'left-[22px]' : 'left-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Workflow ID & Channel Info */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant">Workflow Identifier</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={activeAgent.workflowId}
-                  className="h-9 px-3 rounded-xl bg-surface-container-low font-mono text-xs text-on-surface border border-surface-container focus:outline-none"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant">Model Engine</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={activeAgent.model}
-                  className="h-9 px-3 rounded-xl bg-surface-container-low font-semibold text-xs text-on-surface border border-surface-container focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Public Site Key */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                  <span>Public Site Key</span>
-                  <span className="text-[10px] text-outline font-normal">(Safe for frontend inclusion)</span>
-                </label>
-                <span className="text-[11px] text-emerald-700 font-medium">Valid</span>
-              </div>
-              <div className="flex items-center bg-surface-container-low px-3 py-1.5 rounded-xl border border-surface-container shadow-inner">
-                <span className="font-mono text-xs text-on-surface flex-1 truncate">
-                  {showSiteKey ? activeAgent.siteKey : `${activeAgent.siteKey.slice(0, 10)}••••••••••••••••••••${activeAgent.siteKey.slice(-4)}`}
-                </span>
-                <div className="flex items-center gap-1 ml-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSiteKey(!showSiteKey)}
-                    className="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container cursor-pointer"
-                    title="Toggle site key visibility"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {showSiteKey ? 'visibility_off' : 'visibility'}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(activeAgent.siteKey, 'siteKey')}
-                    className="flex items-center gap-1 text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-all cursor-pointer font-semibold text-xs"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {copiedKeyType === 'siteKey' ? 'check' : 'content_copy'}
-                    </span>
-                    <span>{copiedKeyType === 'siteKey' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Secret Backend API Key */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                  <span>Secret Backend API Key</span>
-                  <span className="text-[10px] text-error font-semibold">(Keep private)</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleRotateKey}
-                  className="text-[11px] text-primary hover:underline font-semibold cursor-pointer flex items-center gap-0.5"
-                >
-                  <span className="material-symbols-outlined text-xs">restart_alt</span>
-                  <span>Rotate Key</span>
-                </button>
-              </div>
-              <div className="flex items-center bg-surface-container-low px-3 py-1.5 rounded-xl border border-surface-container shadow-inner">
-                <span className="font-mono text-xs text-on-surface flex-1 truncate">
-                  {showSecretKey ? activeAgent.secretKey : `${activeAgent.secretKey.slice(0, 10)}••••••••••••••••••••${activeAgent.secretKey.slice(-4)}`}
-                </span>
-                <div className="flex items-center gap-1 ml-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSecretKey(!showSecretKey)}
-                    className="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container cursor-pointer"
-                    title="Toggle secret key visibility"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {showSecretKey ? 'visibility_off' : 'visibility'}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(activeAgent.secretKey, 'secretKey')}
-                    className="flex items-center gap-1 text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-all cursor-pointer font-semibold text-xs"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {copiedKeyType === 'secretKey' ? 'check' : 'content_copy'}
-                    </span>
-                    <span>{copiedKeyType === 'secretKey' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Widget Styling & Endpoint Bindings */}
-          <div className="flex flex-col gap-4">
-            {/* Widget Styling Customization */}
-            <div className="p-4 rounded-2xl bg-surface-container-low/60 border border-surface-container space-y-3">
-              <span className="text-xs font-bold text-on-surface block uppercase tracking-wider">
-                Storefront Widget Appearance
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-on-surface-variant block mb-1">Theme Accent Color</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={activeAgent.accentColor}
-                      onChange={(e) => handleUpdateActiveAgentColor(e.target.value)}
-                      className="w-9 h-9 rounded-lg border border-surface-container-high cursor-pointer"
-                    />
-                    <span className="font-mono text-xs font-bold text-on-surface">{activeAgent.accentColor}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs text-on-surface-variant block mb-1">Display Position</label>
-                  <select
-                    value={activeAgent.position}
-                    onChange={(e) => handleUpdateActiveAgentPosition(e.target.value)}
-                    className="h-9 w-full px-2.5 rounded-lg bg-surface-container-lowest text-xs border border-surface-container text-on-surface cursor-pointer"
-                  >
-                    <option value="bottom-right">Bottom Right Floating</option>
-                    <option value="bottom-left">Bottom Left Floating</option>
-                    <option value="embed-inline">Inline Embed Frame</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Assigned Endpoints for this Agent */}
-            <div className="p-4 rounded-2xl bg-surface-container-low/60 border border-surface-container space-y-2 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-on-surface uppercase tracking-wider">
-                  Connected Webhook Endpoints
-                </span>
-                <span className="text-[11px] text-outline">
-                  {activeAgent.assignedEndpoints.length} of {endpoints.length} connected
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {endpoints.map((ep) => {
-                  const isChecked = activeAgent.assignedEndpoints.includes(ep.id);
-                  return (
-                    <label
-                      key={ep.id}
-                      onClick={() => handleToggleAgentEndpointAssignment(ep.id)}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
-                        isChecked
-                          ? 'bg-primary/10 border-primary/40 text-on-surface font-semibold'
-                          : 'bg-surface-container-lowest border-surface-container text-on-surface-variant hover:bg-surface-container'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {}}
-                        className="rounded text-primary focus:ring-0 cursor-pointer"
-                      />
-                      <div className="min-w-0">
-                        <span className="block truncate font-medium">{ep.name}</span>
-                        <span className="text-[10px] text-outline font-mono block truncate">{ep.url}</span>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* ========================================================================= */}
-      {/* SECTION 2: MULTIPLE ENDPOINT & WEBHOOK GATEWAY HUB */}
-      {/* ========================================================================= */}
-      <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
-        {/* Header */}
-        <div className="p-5 bg-surface-container-low/60 border-b border-surface-container flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-              <span className="material-symbols-outlined text-xl">hub</span>
-            </div>
-            <div>
-              <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
-                Backend Endpoints &amp; Webhooks ({endpoints.length})
-              </h2>
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Configure multiple live endpoints with custom transport protocols and authentication methods.
-              </p>
-            </div>
-          </div>
-
-          <Button
-            variant="soft"
-            size="md"
-            startIcon="add"
-            onClick={() => setIsAddEndpointModalOpen(true)}
-          >
-            Register New Endpoint
-          </Button>
-        </div>
-
-        {/* Endpoints List */}
-        <div className="p-5 space-y-3">
-          {endpoints.map((ep) => {
-            const isPinging = pingStatuses[ep.id] === 'pinging';
-            const isSuccess = pingStatuses[ep.id] === 'success';
-
-            return (
-              <div
-                key={ep.id}
-                className="p-4 rounded-2xl border border-surface-container bg-surface-container-low/40 hover:bg-surface-container-low/80 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-              >
-                {/* Endpoint Info */}
-                <div className="flex-1 space-y-2 min-w-0">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-md font-mono text-[11px] font-bold bg-blue-500/20 text-blue-700">
-                      {ep.method}
-                    </span>
-
-                    {/* Transport Protocol Badge */}
-                    <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold flex items-center gap-1 ${
-                      ep.transport === 'SSE'
-                        ? 'bg-purple-500/15 text-purple-700'
-                        : 'bg-primary/10 text-primary'
-                    }`}>
-                      <span className="material-symbols-outlined text-xs">
-                        {ep.transport === 'SSE' ? 'wifi_tethering' : 'http'}
-                      </span>
-                      <span>{ep.transport || 'HTTP'}</span>
-                    </span>
-
-                    {/* Authentication Type Badge */}
-                    {getAuthBadge(ep)}
-
-                    <h3 className="font-title-md text-title-md font-bold text-on-surface">
-                      {ep.name}
-                    </h3>
-
-                    <span className="text-[11px] text-emerald-700 bg-emerald-500/15 px-2 py-0.2 rounded-full font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                      {ep.status} ({ep.latency})
-                    </span>
-                  </div>
-
-                  {/* URL Bar */}
-                  <div className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-xl border border-surface-container max-w-2xl">
-                    <span className="font-mono text-xs text-on-surface flex-1 truncate">
-                      {ep.url}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(ep.url, `ep-${ep.id}`)}
-                      className="text-primary hover:underline text-xs font-semibold cursor-pointer shrink-0"
-                    >
-                      {copiedKeyType === `ep-${ep.id}` ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Actions & Test Ping */}
-                <div className="flex items-center gap-2.5 shrink-0 self-end lg:self-center">
-                  {isSuccess && (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-500/15 px-3 py-1.5 rounded-xl flex items-center gap-1 animate-in fade-in">
-                      <span className="material-symbols-outlined text-base">verified</span>
-                      <span>200 OK (16ms)</span>
-                    </span>
-                  )}
-
-                  <Button
-                    variant="hover"
-                    size="sm"
-                    startIcon={isPinging ? 'sync' : 'network_ping'}
-                    loading={isPinging}
-                    disabled={isPinging}
-                    onClick={() => handleTestPingEndpoint(ep.id)}
-                  >
-                    {isPinging ? 'Pinging Gateway...' : 'Test Ping'}
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* MODAL 1: CONNECT NEW AGENT */}
-      {/* ========================================================================= */}
-      {isAddAgentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg border border-surface-container-high flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]">
-            <div className="px-5 py-3.5 bg-surface-container-low/70 border-b border-surface-container flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
-                  <span className="material-symbols-outlined text-lg">smart_toy</span>
-                </div>
-                <div>
-                  <h2 className="font-title-md text-title-md text-on-surface font-bold">
-                    Connect New AI Agent
-                  </h2>
-                  <p className="text-[11px] text-on-surface-variant">Register a new multi-agent worker and generate API credentials</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                startIcon="close"
-                onClick={() => setIsAddAgentModalOpen(false)}
-                aria-label="Close modal"
-              />
-            </div>
-
-            <form onSubmit={handleAddAgentSubmit} className="p-5 flex flex-col gap-4 overflow-y-auto">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                  Agent Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={newAgentName}
-                  onChange={(e) => setNewAgentName(e.target.value)}
-                  placeholder="e.g. Luxury Villa Concierge Bot"
-                  className="w-full h-10 px-3 font-title-sm text-title-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Deployment Channel
-                  </label>
-                  <select
-                    value={newAgentChannel}
-                    onChange={(e) => setNewAgentChannel(e.target.value)}
-                    className="h-10 px-3 text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high cursor-pointer"
-                  >
-                    <option value="Web Storefront Widget">Web Storefront Widget</option>
-                    <option value="Booking Portal & WhatsApp">Booking Portal &amp; WhatsApp</option>
-                    <option value="Customer Help Desk & Email">Customer Help Desk &amp; Email</option>
-                    <option value="Telephony Voice SIP Trunk">Telephony Voice SIP Trunk</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Model Engine
-                  </label>
-                  <select
-                    value={newAgentModel}
-                    onChange={(e) => setNewAgentModel(e.target.value)}
-                    className="h-10 px-3 text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high cursor-pointer"
-                  >
-                    <option value="Perfox-Omni 2.5">Perfox-Omni 2.5 (Fast)</option>
-                    <option value="Perfox-Omni 2.5 Pro">Perfox-Omni 2.5 Pro (Advanced)</option>
-                    <option value="Claude 3.7 Sonnet (Hybrid)">Claude 3.7 Sonnet (Hybrid)</option>
-                    <option value="Perfox Realtime Voice v2">Perfox Realtime Voice v2</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Accent Color
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={newAgentAccentColor}
-                      onChange={(e) => setNewAgentAccentColor(e.target.value)}
-                      className="w-10 h-10 rounded-xl border border-surface-container-high cursor-pointer"
-                    />
-                    <span className="font-mono text-xs font-bold text-on-surface">{newAgentAccentColor}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Widget Position
-                  </label>
-                  <select
-                    value={newAgentPosition}
-                    onChange={(e) => setNewAgentPosition(e.target.value)}
-                    className="h-10 px-2 text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high cursor-pointer"
-                  >
-                    <option value="bottom-right">Bottom Right</option>
-                    <option value="bottom-left">Bottom Left</option>
-                    <option value="embed-inline">Inline Frame</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                  Description / Purpose
-                </label>
-                <textarea
-                  rows={2}
-                  value={newAgentDescription}
-                  onChange={(e) => setNewAgentDescription(e.target.value)}
-                  placeholder="Describe what this AI agent handles..."
-                  className="w-full p-2.5 font-body-sm text-body-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-surface-container mt-1">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setIsAddAgentModalOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="submit"
-                  startIcon="add_circle"
-                >
-                  Create &amp; Connect Agent
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 2: REGISTER NEW ENDPOINT WITH METHOD, URL, AUTH & THREE TOGGLES */}
-      {/* ========================================================================= */}
-      {isAddEndpointModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg border border-surface-container-high flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]">
-            {/* Modal Header */}
-            <div className="px-5 py-3.5 bg-surface-container-low/70 border-b border-surface-container flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                  <span className="material-symbols-outlined text-lg">hub</span>
-                </div>
-                <div>
-                  <h2 className="font-title-md text-title-md text-on-surface font-bold">
-                    Register New Webhook Endpoint
-                  </h2>
-                  <p className="text-[11px] text-on-surface-variant">Configure method, URL, authentication and request payload</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                startIcon="close"
-                onClick={() => setIsAddEndpointModalOpen(false)}
-                aria-label="Close modal"
-              />
-            </div>
-
-            {/* Modal Form Content */}
-            <form onSubmit={handleAddEndpointSubmit} className="p-5 flex flex-col gap-4 overflow-y-auto">
-              {/* Endpoint Name & Transport */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Endpoint Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    value={newEndpointName}
-                    onChange={(e) => setNewEndpointName(e.target.value)}
-                    placeholder="e.g. Booking Sync Webhook"
-                    className="w-full h-10 px-3 font-title-sm text-title-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Transport Protocol
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5 h-10 p-1 bg-surface-container-low rounded-xl border border-surface-container-high">
-                    <button
-                      type="button"
-                      onClick={() => setNewEndpointTransport('HTTP')}
-                      className={`rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                        newEndpointTransport === 'HTTP'
-                          ? 'bg-surface-container-lowest text-primary shadow-xs'
-                          : 'text-on-surface-variant hover:text-on-surface'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-sm">http</span>
-                      <span>HTTP</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewEndpointTransport('SSE')}
-                      className={`rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                        newEndpointTransport === 'SSE'
-                          ? 'bg-purple-600 text-white shadow-xs'
-                          : 'text-on-surface-variant hover:text-on-surface'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-sm">wifi_tethering</span>
-                      <span>SSE</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* 1. Method (Dropdown) */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-on-surface-variant">
-                  Method
-                </label>
-                <div className="relative">
-                  <select
-                    value={newEndpointMethod}
-                    onChange={(e) => setNewEndpointMethod(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high font-semibold text-sm appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-inner pr-8"
-                  >
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="DELETE">DELETE</option>
-                    <option value="PATCH">PATCH</option>
-                    <option value="HEAD">HEAD</option>
-                    <option value="OPTIONS">OPTIONS</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-outline">
-                    <span className="material-symbols-outlined text-lg">expand_more</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. URL */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-on-surface-variant">
-                  URL
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={newEndpointUrl}
-                  onChange={(e) => setNewEndpointUrl(e.target.value)}
-                  placeholder="http://example.com/index.html"
-                  className="w-full h-10 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high placeholder:text-outline/60 focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-                />
-              </div>
-
-              {/* 3. Authentication (Dropdown with conditional fields) */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-on-surface-variant">
-                  Authentication
-                </label>
-                <div className="relative">
-                  <select
-                    value={newEndpointAuthType}
-                    onChange={(e) => setNewEndpointAuthType(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high font-semibold text-sm appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary shadow-inner pr-8"
-                  >
-                    <option value="none">None</option>
-                    <option value="bearer">Bearer Token</option>
-                    <option value="apiKey">API Key</option>
-                    <option value="basic">Basic Auth</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-outline">
-                    <span className="material-symbols-outlined text-lg">expand_more</span>
-                  </div>
-                </div>
-
-                {/* Conditional Auth Fields */}
-                {newEndpointAuthType !== 'none' && (
-                  <div className="p-3 rounded-xl bg-surface-container-low/60 border border-surface-container mt-1">
-                    {/* Bearer Token */}
-                    {newEndpointAuthType === 'bearer' && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                          <span className="material-symbols-outlined text-xs text-primary">key</span>
-                          <span>Bearer Token *</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={newEndpointBearerToken}
-                          onChange={(e) => setNewEndpointBearerToken(e.target.value)}
-                          placeholder="e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                          className="w-full h-9 px-3 font-mono text-xs rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-                        />
-                      </div>
-                    )}
-
-                    {/* API Key */}
-                    {newEndpointAuthType === 'apiKey' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs font-semibold text-on-surface">Header Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={newEndpointApiKeyHeader}
-                            onChange={(e) => setNewEndpointApiKeyHeader(e.target.value)}
-                            placeholder="e.g. X-API-Key"
-                            className="w-full h-9 px-3 font-mono text-xs rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs font-semibold text-on-surface">API Key Value *</label>
-                          <input
-                            type="text"
-                            required
-                            value={newEndpointApiKeyValue}
-                            onChange={(e) => setNewEndpointApiKeyValue(e.target.value)}
-                            placeholder="e.g. key_mock_99a80b1c..."
-                            className="w-full h-9 px-3 font-mono text-xs rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Basic Auth */}
-                    {newEndpointAuthType === 'basic' && (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                            <span className="material-symbols-outlined text-xs text-primary">lock</span>
-                            <span>Basic Auth Credentials (username:password) *</span>
-                          </label>
-                        </div>
-                        <input
-                          type="text"
-                          required
-                          value={newEndpointBasicAuth}
-                          onChange={(e) => setNewEndpointBasicAuth(e.target.value)}
-                          placeholder="username:password"
-                          className="w-full h-9 px-3 font-mono text-xs rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* ========================================================================= */}
-              {/* THREE TOGGLES: Query Parameters, Headers, Body */}
-              {/* ========================================================================= */}
-              <div className="pt-2 border-t border-surface-container space-y-3">
-                {/* Toggle 1: Send Query Parameters */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-on-surface">Send Query Parameters</span>
-                    <button
-                      type="button"
-                      onClick={() => setSendQueryParams(!sendQueryParams)}
-                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                        sendQueryParams ? 'bg-primary' : 'bg-surface-container-high'
-                      }`}
-                    >
-                      <div
-                        className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform absolute top-0.5 ${
-                          sendQueryParams ? 'left-[22px]' : 'left-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Expandable Query Params Builder */}
-                  {sendQueryParams && (
-                    <div className="p-3 rounded-xl bg-surface-container-low/80 border border-surface-container space-y-2 animate-in fade-in duration-150">
-                      <div className="space-y-1.5">
-                        {queryParams.map((param, pIdx) => (
-                          <div key={param.id} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={param.key}
-                              onChange={(e) => handleUpdateQueryParam(param.id, 'key', e.target.value)}
-                              placeholder="Key (e.g. format)"
-                              className="flex-1 h-8 px-2.5 rounded-lg bg-surface-container-lowest text-xs font-mono border border-surface-container focus:outline-none"
-                            />
-                            <input
-                              type="text"
-                              value={param.value}
-                              onChange={(e) => handleUpdateQueryParam(param.id, 'value', e.target.value)}
-                              placeholder="Value (e.g. json)"
-                              className="flex-1 h-8 px-2.5 rounded-lg bg-surface-container-lowest text-xs font-mono border border-surface-container focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveQueryParam(param.id)}
-                              className="w-7 h-7 rounded-lg text-outline hover:text-error hover:bg-surface-container flex items-center justify-center cursor-pointer"
-                              title="Remove parameter"
-                            >
-                              <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleAddQueryParam}
-                        className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer pt-0.5"
-                      >
-                        <span className="material-symbols-outlined text-sm">add</span>
-                        <span>Add Parameter</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Toggle 2: Send Headers */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-on-surface">Send Headers</span>
-                    <button
-                      type="button"
-                      onClick={() => setSendHeaders(!sendHeaders)}
-                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                        sendHeaders ? 'bg-primary' : 'bg-surface-container-high'
-                      }`}
-                    >
-                      <div
-                        className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform absolute top-0.5 ${
-                          sendHeaders ? 'left-[22px]' : 'left-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Expandable Headers Builder */}
-                  {sendHeaders && (
-                    <div className="p-3 rounded-xl bg-surface-container-low/80 border border-surface-container space-y-2 animate-in fade-in duration-150">
-                      <div className="space-y-1.5">
-                        {headersList.map((header) => (
-                          <div key={header.id} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={header.key}
-                              onChange={(e) => handleUpdateHeader(header.id, 'key', e.target.value)}
-                              placeholder="Header Name"
-                              className="flex-1 h-8 px-2.5 rounded-lg bg-surface-container-lowest text-xs font-mono border border-surface-container focus:outline-none"
-                            />
-                            <input
-                              type="text"
-                              value={header.value}
-                              onChange={(e) => handleUpdateHeader(header.id, 'value', e.target.value)}
-                              placeholder="Header Value"
-                              className="flex-1 h-8 px-2.5 rounded-lg bg-surface-container-lowest text-xs font-mono border border-surface-container focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveHeader(header.id)}
-                              className="w-7 h-7 rounded-lg text-outline hover:text-error hover:bg-surface-container flex items-center justify-center cursor-pointer"
-                              title="Remove header"
-                            >
-                              <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleAddHeader}
-                        className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer pt-0.5"
-                      >
-                        <span className="material-symbols-outlined text-sm">add</span>
-                        <span>Add Header</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Toggle 3: Send Body */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-on-surface">Send Body</span>
-                    <button
-                      type="button"
-                      onClick={() => setSendBody(!sendBody)}
-                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                        sendBody ? 'bg-primary' : 'bg-surface-container-high'
-                      }`}
-                    >
-                      <div
-                        className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform absolute top-0.5 ${
-                          sendBody ? 'left-[22px]' : 'left-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Expandable Body Editor */}
-                  {sendBody && (
-                    <div className="p-3 rounded-xl bg-surface-container-low/80 border border-surface-container space-y-2 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold text-on-surface-variant">Body Content-Type</label>
-                        <select
-                          value={bodyFormat}
-                          onChange={(e) => setBodyFormat(e.target.value)}
-                          className="h-7 px-2 rounded-lg bg-surface-container-lowest text-xs font-mono border border-surface-container text-on-surface cursor-pointer"
-                        >
-                          <option value="application/json">JSON (application/json)</option>
-                          <option value="application/x-www-form-urlencoded">x-www-form-urlencoded</option>
-                          <option value="text/plain">Raw Text (text/plain)</option>
-                        </select>
-                      </div>
-                      <textarea
-                        rows={4}
-                        value={bodyContent}
-                        onChange={(e) => setBodyContent(e.target.value)}
-                        placeholder='{\n  "key": "value"\n}'
-                        className="w-full p-2.5 font-mono text-xs rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary shadow-inner resize-none leading-relaxed"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Form Action Buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-surface-container mt-1">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setIsAddEndpointModalOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="submit"
-                  startIcon="add_link"
-                >
-                  Register Endpoint
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {dialog && <Dialog state={dialog} busy={disconnecting} onClose={() => setDialog(null)} />}
     </div>
   );
 }
