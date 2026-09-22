@@ -68,6 +68,7 @@ export interface Product {
 export * from './category.types';
 export * from './auth.types';
 export * from './team.types';
+export * from './knowledge.types';
 
 export interface KnowledgeDocument {
   id: string;
