@@ -61,7 +61,8 @@ export const clearToken = (): void => {
 
 export interface RequestOptions extends RequestInit {
   data?: any;
-  params?: Record<string, string | number | boolean | undefined | null>;
+  params?: Record<string, any>;
+  skipAuth?: boolean;
 }
 
 /**
