@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  INITIAL_PRODUCTS,
-  INITIAL_CATEGORIES,
   INITIAL_CONVERSATIONS,
   INITIAL_SCHEDULE_EVENTS,
   INITIAL_TEAM
 } from '../data/mockData';
 import { Button, MetricsCard, Icon, StatusBadge } from '../components/common';
+import { productService, ProductStats } from '../services/product.service';
+import { categoryService, CategoryItem, CategoryStats } from '../services/category.service';
+import { Product } from '../types';
 
 interface DashboardPageProps {
   setActiveModule?: (module: string) => void;
@@ -21,14 +22,48 @@ export default function DashboardPage({
   setSelectedScheduleEvent,
   setSelectedConversationId
 }: DashboardPageProps) {
-  const recentProducts = INITIAL_PRODUCTS.slice(0, 4);
+  const [recentProducts, setRecentProducts] = useState<Product[]>([]);
+  const [productStats, setProductStats] = useState<ProductStats | null>(null);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [categoryStats, setCategoryStats] = useState<CategoryStats | null>(null);
+
+  useEffect(() => {
+    productService
+      .getProducts({ page: 1, limit: 4 })
+      .then((res) => {
+        if (res.data) setRecentProducts(res.data);
+      })
+      .catch((err) => console.warn('Could not load dashboard products:', err));
+
+    productService
+      .getProductStats()
+      .then((stats) => {
+        if (stats) setProductStats(stats);
+      })
+      .catch((err) => console.warn('Could not load dashboard product stats:', err));
+
+    categoryService
+      .getCategories({ limit: 4 })
+      .then((data) => {
+        if (data) setCategories(data.slice(0, 4));
+      })
+      .catch((err) => console.warn('Could not load dashboard categories:', err));
+
+    categoryService
+      .getCategoryStats()
+      .then((stats) => {
+        if (stats) setCategoryStats(stats);
+      })
+      .catch((err) => console.warn('Could not load dashboard category stats:', err));
+  }, []);
+
   const recentAppointments = INITIAL_SCHEDULE_EVENTS.slice(0, 3);
   const recentConversations = INITIAL_CONVERSATIONS.slice(0, 3);
 
-  const totalProducts = INITIAL_PRODUCTS.length;
-  const inStockProducts = INITIAL_PRODUCTS.filter((p) => p.stockStatus === 'In Stock').length;
+  const totalProducts = productStats?.total ?? recentProducts.length;
+  const inStockProducts = productStats?.inStock ?? recentProducts.filter((p) => p.stockStatus === 'In Stock').length;
 
-  const totalCategories = INITIAL_CATEGORIES.length;
+  const totalCategories = categoryStats?.totalCategories ?? categories.length;
 
   const totalAppointments = INITIAL_SCHEDULE_EVENTS.length;
   const confirmedAppointments = INITIAL_SCHEDULE_EVENTS.filter((e) => e.status === 'Confirmed').length;
@@ -90,7 +125,7 @@ export default function DashboardPage({
         <MetricsCard
           title="Total Categories"
           value={totalCategories}
-          trend="All operational"
+          trend={categoryStats?.assignedSkus !== undefined ? `${categoryStats.assignedSkus} SKUs Assigned` : 'All operational'}
           trendType="positive"
           icon="category"
           variant="secondary"
@@ -218,30 +253,48 @@ export default function DashboardPage({
             </div>
 
             <div className="p-space-md grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {INITIAL_CATEGORIES.map((cat) => (
-                <div
-                  key={cat.id}
-                  onClick={() => setActiveModule && setActiveModule('categories')}
-                  className="p-3.5 rounded-xl border border-surface-container bg-surface-container-low/30 hover:bg-surface-container-low/80 transition-all cursor-pointer flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-on-primary transition-colors shrink-0">
-                      <Icon name={cat.icon || 'category'} size="lg" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-title-sm text-title-sm text-on-surface font-bold truncate group-hover:text-primary transition-colors">
-                        {cat.name}
-                      </span>
-                      <span className="font-caption text-caption text-on-surface-variant truncate">
-                        {cat.description}
-                      </span>
-                    </div>
+              {categories.length === 0 ? (
+                <div className="col-span-1 sm:col-span-2 py-8 px-4 text-center flex flex-col items-center justify-center gap-2 border border-dashed border-surface-container rounded-xl">
+                  <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+                    <Icon name="category" size="md" />
                   </div>
-                  <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-surface-container-lowest border border-surface-container text-primary shrink-0 ml-2">
-                    {cat.productsCount} items
-                  </span>
+                  <span className="text-xs font-semibold text-on-surface">No categories loaded</span>
+                  <span className="text-xs text-on-surface-variant">Organize your catalog by creating product categories.</span>
+                  <Button
+                    variant="soft"
+                    size="sm"
+                    startIcon="add"
+                    onClick={() => setActiveModule && setActiveModule('categories')}
+                  >
+                    Add Category
+                  </Button>
                 </div>
-              ))}
+              ) : (
+                categories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    onClick={() => setActiveModule && setActiveModule('categories')}
+                    className="p-3.5 rounded-xl border border-surface-container bg-surface-container-low/30 hover:bg-surface-container-low/80 transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-on-primary transition-colors shrink-0">
+                        <Icon name={cat.icon || 'category'} size="lg" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-title-sm text-title-sm text-on-surface font-bold truncate group-hover:text-primary transition-colors">
+                          {cat.name}
+                        </span>
+                        <span className="font-caption text-caption text-on-surface-variant truncate">
+                          {cat.description || 'General category item'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-surface-container-lowest border border-surface-container text-primary shrink-0 ml-2">
+                      {cat.productsCount ?? 0} items
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

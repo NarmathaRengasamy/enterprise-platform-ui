@@ -7,15 +7,44 @@ export interface ProductReview {
   content: string;
 }
 
+export interface ProductGalleryItem {
+  id: number;
+  label: string;
+  src: string;
+}
+
+export interface ProductVariant {
+  id?: string;
+  option?: string;
+  value?: string;
+  title?: string;
+  sku?: string;
+  price?: number;
+  stock?: string | number;
+  capacity?: number;
+  capacityUnit?: string;
+  status?: string;
+  attributes?: Array<{ name: string; value: string }>;
+  images?: string[];
+  videos?: any[];
+  image?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
+  shortName?: string;
   sku: string;
+  categoryId?: string;
   category: string;
+  categoryCode?: string;
   price: number;
+  originalPrice?: number;
   stockStatus: 'In Stock' | 'Low Stock' | 'Out of Stock' | string;
   stock: number;
   image: string;
+  gallery?: ProductGalleryItem[];
+  videos?: any[];
   description?: string;
   salesLast30Days?: number;
   conversionRate?: number;
@@ -24,20 +53,21 @@ export interface Product {
   status?: string;
   brand?: string;
   costPrice?: number;
-  variants?: any[];
+  committed?: number;
+  reorderPoint?: number;
+  margin?: string;
+  discount?: string;
+  variants?: ProductVariant[];
   images?: string[];
   tags?: string[];
   reviews?: ProductReview[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export interface Category {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  productCount: number;
-  subcategories: string[];
-}
+export * from './category.types';
+export * from './auth.types';
+export * from './team.types';
 
 export interface KnowledgeDocument {
   id: string;
