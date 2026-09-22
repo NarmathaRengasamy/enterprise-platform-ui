@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Icon } from '../components/common';
+import { useAuth } from '../hooks/useAuth';
+import { UserRole } from '../types/auth.types';
 
 interface LoginPageProps {
   onLoginSuccess?: () => void;
@@ -7,17 +9,18 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: LoginPageProps) {
+  const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   
   // Login form state
-  const [loginEmail, setLoginEmail] = useState('sarah@omniflow.io');
-  const [loginPassword, setLoginPassword] = useState('password123');
-  const [rememberMe, setRememberMe] = useState(true);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   
   // Signup form state
   const [fullName, setFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
-  const [workspaceName, setWorkspaceName] = useState('');
+  const [signupRole, setSignupRole] = useState<UserRole>('Admin');
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(true);
@@ -28,22 +31,31 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      await login({
+        email: loginEmail.trim(),
+        password: loginPassword,
+        rememberMe,
+      });
       onLoginSuccess?.();
-    }, 400);
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (signupPassword.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (signupPassword.length < 6) {
+      setError('Password must be at least 6 characters long.');
       return;
     }
 
@@ -58,10 +70,21 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      await register({
+        name: fullName.trim(),
+        email: signupEmail.trim(),
+        password: signupPassword,
+        department: 'Operations',
+        role: signupRole,
+      });
       onLoginSuccess?.();
-    }, 600);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -136,7 +159,7 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
 
           {/* Login Form */}
           {mode === 'login' ? (
-            <form className="flex flex-col gap-space-md" onSubmit={handleLoginSubmit}>
+            <form className="flex flex-col gap-space-md" onSubmit={handleLoginSubmit} autoComplete="off">
               <div className="flex flex-col gap-space-2xs">
                 <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="login-email">
                   Email address
@@ -148,10 +171,12 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                   <input
                     id="login-email"
                     type="email"
+                    name="email"
+                    autoComplete="off"
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="sarah@omniflow.io"
+                    placeholder="name@company.com"
                     className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -170,10 +195,12 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                   <input
                     id="login-password"
                     type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="new-password"
                     required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter password"
+                    placeholder="Enter your password"
                     className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                   <button
@@ -201,7 +228,7 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                 </label>
                 <a
                   href="#forgot"
-                  onClick={(e) => { e.preventDefault(); alert("Password reset link sent to your email."); }}
+                  onClick={(e) => { e.preventDefault(); alert("Please contact your workspace administrator to reset your password."); }}
                   className="font-label-md text-label-md text-primary font-semibold hover:underline focus:outline-none"
                 >
                   Forgot password?
@@ -217,12 +244,12 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                 endIcon={isLoading ? undefined : 'arrow_forward'}
                 className="mt-space-xs"
               >
-                {isLoading ? 'Signing in...' : 'Login to Dashboard'}
+                {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
           ) : (
             /* Signup Form */
-            <form className="flex flex-col gap-space-md" onSubmit={handleSignupSubmit}>
+            <form className="flex flex-col gap-space-md" onSubmit={handleSignupSubmit} autoComplete="off">
               {/* Full Name */}
               <div className="flex flex-col gap-space-2xs">
                 <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="signup-name">
@@ -236,9 +263,10 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                     id="signup-name"
                     type="text"
                     required
+                    autoComplete="off"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Sarah Jenkins"
+                    placeholder="e.g. Sarah Jenkins"
                     className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
@@ -257,31 +285,37 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                     id="signup-email"
                     type="email"
                     required
+                    autoComplete="off"
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
-                    placeholder="sarah@company.com"
+                    placeholder="name@company.com"
                     className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
 
-              {/* Workspace Name */}
+              {/* Role Selection */}
               <div className="flex flex-col gap-space-2xs">
-                <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="signup-workspace">
-                  Workspace / Organization
+                <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="signup-role">
+                  Account Role <span className="text-error">*</span>
                 </label>
                 <div className="relative flex items-center">
                   <span className="absolute left-3 pointer-events-none select-none flex items-center">
-                    <Icon name="domain" size="md" color="outline" />
+                    <Icon name="shield_person" size="md" color="outline" />
                   </span>
-                  <input
-                    id="signup-workspace"
-                    type="text"
-                    value={workspaceName}
-                    onChange={(e) => setWorkspaceName(e.target.value)}
-                    placeholder="Acme Corp"
-                    className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
+                  <select
+                    id="signup-role"
+                    value={signupRole}
+                    onChange={(e) => setSignupRole(e.target.value as UserRole)}
+                    className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high appearance-none transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  >
+                    <option value="Admin">Admin (Full System &amp; Developer Access)</option>
+                    <option value="Editor">Editor (Manage Products, KB &amp; Schedule)</option>
+                    <option value="Viewer">Viewer (Read-only Access)</option>
+                  </select>
+                  <span className="absolute right-3 pointer-events-none text-outline flex items-center">
+                    <Icon name="expand_more" size="md" />
+                  </span>
                 </div>
               </div>
 
@@ -298,11 +332,12 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                     <input
                       id="signup-pwd"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       required
-                      minLength={8}
+                      minLength={6}
                       value={signupPassword}
                       onChange={(e) => setSignupPassword(e.target.value)}
-                      placeholder="Min 8 chars"
+                      placeholder="Min. 6 characters"
                       className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     />
                     <button
@@ -327,10 +362,11 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                     <input
                       id="signup-confirm-pwd"
                       type={showConfirmPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter"
+                      placeholder="Re-enter password"
                       className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     />
                     <button

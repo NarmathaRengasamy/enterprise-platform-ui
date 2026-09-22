@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './hooks/useAuth';
 import AppLayout from './components/layout/AppLayout';
 import DashboardPage from './pages/DashboardPage';
 import ConversationsPage from './pages/ConversationsPage';
@@ -16,12 +18,12 @@ import SignupPage from './pages/SignupPage';
 import { INITIAL_PRODUCTS } from './data/mockData';
 import { Product, ScheduleEvent } from './types';
 
-export default function App(): JSX.Element {
+function AppRoutes(): JSX.Element {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(INITIAL_PRODUCTS[0] as Product);
   const [selectedScheduleEvent, setSelectedScheduleEvent] = useState<ScheduleEvent | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
 
   const handleSetActiveModule = (module: string) => {
     switch (module) {
@@ -82,29 +84,52 @@ export default function App(): JSX.Element {
   };
 
   const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
     navigate('/dashboard');
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
     navigate('/login');
   };
+
+  // Loading splash while checking session token
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-blue-500 flex items-center justify-center text-white shadow-xl animate-pulse mb-4">
+          <span className="material-symbols-outlined text-3xl">all_inclusive</span>
+        </div>
+        <div className="flex items-center gap-2.5 text-on-surface-variant font-label-md">
+          <span className="w-2.5 h-2.5 rounded-full bg-primary animate-ping"></span>
+          <span className="font-semibold text-sm">Loading OmniFlow Workspace...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
       {/* Auth Routes */}
       <Route
         path="/login"
-        element={<LoginPage onLoginSuccess={handleLoginSuccess} />}
+        element={
+          isAuthenticated ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <LoginPage onLoginSuccess={handleLoginSuccess} />
+          )
+        }
       />
       <Route
         path="/signup"
         element={
-          <SignupPage
-            onSignupSuccess={handleLoginSuccess}
-            onSwitchToLogin={() => navigate('/login')}
-          />
+          isAuthenticated ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <SignupPage
+              onSignupSuccess={handleLoginSuccess}
+              onSwitchToLogin={() => navigate('/login')}
+            />
+          )
         }
       />
 
@@ -298,5 +323,13 @@ export default function App(): JSX.Element {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
+  );
+}
+
+export default function App(): JSX.Element {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 
 interface AppLayoutProps {
   activeModule?: string;
@@ -9,8 +10,20 @@ interface AppLayoutProps {
 }
 
 export default function AppLayout({ activeModule: activeModuleProp, setActiveModule, children, onLogout }: AppLayoutProps) {
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const displayName = user?.name || 'Sarah Jenkins';
+  const displayEmail = user?.email || 'sarah@omniflow.io';
+  const displayRole = user?.role || 'Admin';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'SJ';
 
   const getActiveModuleFromPath = (path: string): string => {
     if (path.startsWith('/conversations')) return 'conversations';
@@ -464,11 +477,15 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
                 <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-primary to-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-xs ring-1 ring-primary/30">
-                  SJ
+                  {initials}
                 </div>
                 <div className="flex flex-col text-left sm:flex">
-                  <span className="font-title-sm text-xs text-on-surface font-bold leading-tight">Sarah Jenkins</span>
-                  <span className="font-caption text-[9.5px] text-on-surface-variant uppercase tracking-wider font-semibold">Admin</span>
+                  <span className="font-title-sm text-xs text-on-surface font-bold leading-tight">{displayName}</span>
+                  <span className={`font-caption text-[9.5px] uppercase tracking-wider font-semibold ${
+                    displayRole === 'Admin' ? 'text-primary' : displayRole === 'Editor' ? 'text-emerald-600' : 'text-amber-600'
+                  }`}>
+                    {displayRole}
+                  </span>
                 </div>
                 <span className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-primary' : ''}`}>
                   expand_more
@@ -479,8 +496,8 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               {profileDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl z-50 py-2 border border-slate-200/90 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70">
-                    <p className="font-title-sm text-sm text-on-surface font-bold">Sarah Jenkins</p>
-                    <p className="font-caption text-xs text-outline">sarah@omniflow.io</p>
+                    <p className="font-title-sm text-sm text-on-surface font-bold">{displayName}</p>
+                    <p className="font-caption text-xs text-outline">{displayEmail}</p>
                   </div>
                   <div className="py-1">
                     <button
@@ -508,6 +525,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                   <button
                     onClick={() => {
                       setProfileDropdownOpen(false);
+                      logout();
                       if (onLogout) {
                         onLogout();
                       } else {

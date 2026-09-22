@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Icon } from '../components/common';
+import { useAuth } from '../hooks/useAuth';
+import { UserRole } from '../types/auth.types';
 
 interface SignupPageProps {
   onSignupSuccess?: () => void;
@@ -7,9 +9,10 @@ interface SignupPageProps {
 }
 
 export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupPageProps) {
+  const { register } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [workspaceName, setWorkspaceName] = useState('');
+  const [role, setRole] = useState<UserRole>('Admin');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,12 +21,12 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
       return;
     }
 
@@ -38,10 +41,21 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      await register({
+        name: fullName.trim(),
+        email: email.trim(),
+        password,
+        department: 'Operations',
+        role,
+      });
       onSignupSuccess?.();
-    }, 600);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -80,14 +94,14 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
 
           {/* Error Banner */}
           {error && (
-            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center gap-2 border border-error/20">
+            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center gap-2 border border-error/20 animate-fadeIn">
               <Icon name="error" size="sm" color="error" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Form */}
-          <form className="flex flex-col gap-space-md" onSubmit={handleSubmit}>
+          <form className="flex flex-col gap-space-md" onSubmit={handleSubmit} autoComplete="off">
             {/* Full Name */}
             <div className="flex flex-col gap-space-2xs">
               <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="fullName">
@@ -101,9 +115,10 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                   id="fullName"
                   type="text"
                   required
+                  autoComplete="off"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Sarah Jenkins"
+                  placeholder="e.g. Sarah Jenkins"
                   className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
@@ -122,31 +137,37 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                   id="email"
                   type="email"
                   required
+                  autoComplete="off"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="sarah@company.com"
+                  placeholder="name@company.com"
                   className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             </div>
 
-            {/* Organization / Workspace Name */}
+            {/* Role Selection */}
             <div className="flex flex-col gap-space-2xs">
-              <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="workspaceName">
-                Workspace / Organization name
+              <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="role">
+                Account Role <span className="text-error">*</span>
               </label>
               <div className="relative flex items-center">
                 <span className="absolute left-3 pointer-events-none select-none flex items-center">
-                  <Icon name="domain" size="md" color="outline" />
+                  <Icon name="shield_person" size="md" color="outline" />
                 </span>
-                <input
-                  id="workspaceName"
-                  type="text"
-                  value={workspaceName}
-                  onChange={(e) => setWorkspaceName(e.target.value)}
-                  placeholder="Acme Corp"
-                  className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as UserRole)}
+                  className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high appearance-none transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                >
+                  <option value="Admin">Admin (Full System &amp; Developer Access)</option>
+                  <option value="Editor">Editor (Manage Products, KB &amp; Schedule)</option>
+                  <option value="Viewer">Viewer (Read-only Access)</option>
+                </select>
+                <span className="absolute right-3 pointer-events-none text-outline flex items-center">
+                  <Icon name="expand_more" size="md" />
+                </span>
               </div>
             </div>
 
@@ -163,11 +184,12 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                   <input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
                     required
-                    minLength={8}
+                    minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min. 8 chars"
+                    placeholder="Min. 6 characters"
                     className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                   <button
@@ -192,10 +214,11 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                   <input
                     id="confirmPassword"
                     type={showConfirmPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter"
+                    placeholder="Re-enter password"
                     className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                   <button
