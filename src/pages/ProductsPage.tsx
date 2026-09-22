@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { INITIAL_PRODUCTS } from '../data/mockData';
 import { Product } from '../types';
 import {
@@ -18,11 +19,12 @@ import {
 } from '../components/common';
 
 interface ProductsPageProps {
-  setActiveModule: (module: string) => void;
+  setActiveModule?: (module: string) => void;
   setSelectedProduct?: (product: Product) => void;
 }
 
 export default function ProductsPage({ setActiveModule, setSelectedProduct }: ProductsPageProps) {
+  const navigate = useNavigate();
   const [products] = useState<Product[]>(INITIAL_PRODUCTS as Product[]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -79,7 +81,10 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
             variant="primary"
             size="md"
             startIcon="add"
-            onClick={() => setActiveModule('add-product')}
+            onClick={() => {
+              setActiveModule?.('add-product');
+              navigate('/products/add');
+            }}
           >
             Add Product
           </Button>
@@ -206,7 +211,8 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                   clickable
                   onClick={() => {
                     if (setSelectedProduct) setSelectedProduct(p);
-                    setActiveModule('product-details');
+                    if (setActiveModule) setActiveModule('product-details');
+                    navigate(`/products/${p.id}`);
                   }}
                   className="group"
                 >
@@ -243,7 +249,8 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                       startIcon="edit"
                       onClick={() => {
                         if (setSelectedProduct) setSelectedProduct(p);
-                        setActiveModule('edit-product');
+                        if (setActiveModule) setActiveModule('edit-product');
+                        navigate(`/products/${p.id}/edit`);
                       }}
                       title="Edit Product"
                       aria-label="Edit Product"

@@ -1,6 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 
-export default function AppLayout({ activeModule, setActiveModule, children, onLogout }) {
+interface AppLayoutProps {
+  activeModule?: string;
+  setActiveModule?: (module: string) => void;
+  children?: React.ReactNode;
+  onLogout?: () => void;
+}
+
+export default function AppLayout({ activeModule: activeModuleProp, setActiveModule, children, onLogout }: AppLayoutProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getActiveModuleFromPath = (path: string): string => {
+    if (path.startsWith('/conversations')) return 'conversations';
+    if (path.startsWith('/categories')) return 'categories';
+    if (path.startsWith('/products/new') || path.startsWith('/products/add')) return 'add-product';
+    if (path.startsWith('/products/edit') || path.includes('/edit')) return 'edit-product';
+    if (path.startsWith('/products/details') || (path.startsWith('/products/') && path !== '/products')) return 'product-details';
+    if (path.startsWith('/products')) return 'products';
+    if (path.startsWith('/schedule') || path.startsWith('/calendar') || path.startsWith('/appointments')) return 'schedule';
+    if (path.startsWith('/teams')) return 'teams';
+    if (path.startsWith('/knowledge-base') || path.startsWith('/collections')) return 'knowledge-base';
+    if (path.startsWith('/developer')) return 'developer';
+    return 'dashboard';
+  };
+
+  const activeModule = activeModuleProp || getActiveModuleFromPath(location.pathname);
+
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
     activeModule === 'products' ||
     activeModule === 'categories' ||
@@ -12,7 +39,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Automatically open products submenu for product/category modules and close it for other modules
+  // Automatically open products submenu for product/category modules
   useEffect(() => {
     const isProductRelated =
       activeModule === 'products' ||
@@ -21,7 +48,9 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
       activeModule === 'product-details' ||
       activeModule === 'edit-product';
 
-    setProductsSubmenuOpen(isProductRelated);
+    if (isProductRelated) {
+      setProductsSubmenuOpen(true);
+    }
   }, [activeModule]);
 
   // Notification state
@@ -70,16 +99,16 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
 
   const unreadCount = notifications.filter((n) => n.unread).length;
 
-  const notifRef = useRef(null);
-  const profileRef = useRef(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotificationsOpen(false);
       }
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileDropdownOpen(false);
       }
     };
@@ -91,13 +120,18 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
     setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
-  const handleNotificationClick = (notif) => {
+  const handleNav = (module: string, path: string) => {
+    setActiveModule?.(module);
+    navigate(path);
+  };
+
+  const handleNotificationClick = (notif: typeof notifications[0]) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n))
     );
     setNotificationsOpen(false);
     if (notif.type) {
-      setActiveModule(notif.type);
+      handleNav(notif.type, `/${notif.type}`);
     }
   };
 
@@ -116,7 +150,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
           {/* Streamlined Brand Header with Built-in High-Res Vector Mark */}
           <div
             className="h-16 px-4 flex items-center gap-3 cursor-pointer border-b border-surface-container/60 hover:bg-surface-container-low/40 transition-colors"
-            onClick={() => setActiveModule('dashboard')}
+            onClick={() => handleNav('dashboard', '/dashboard')}
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
               <span className="material-symbols-outlined text-xl">all_inclusive</span>
@@ -137,7 +171,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {/* 1. Dashboard */}
               <button
                 type="button"
-                onClick={() => setActiveModule('dashboard')}
+                onClick={() => handleNav('dashboard', '/dashboard')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'dashboard'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -151,7 +185,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {/* 2. Conversations */}
               <button
                 type="button"
-                onClick={() => setActiveModule('conversations')}
+                onClick={() => handleNav('conversations', '/conversations')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'conversations'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -198,7 +232,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                     {/* 3.1 All Products */}
                     <button
                       type="button"
-                      onClick={() => setActiveModule('products')}
+                      onClick={() => handleNav('products', '/products')}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                         activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
                           ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -218,7 +252,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                     {/* 3.2 Categories */}
                     <button
                       type="button"
-                      onClick={() => setActiveModule('categories')}
+                      onClick={() => handleNav('categories', '/categories')}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                         activeModule === 'categories'
                           ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -239,7 +273,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {/* 4. Schedule */}
               <button
                 type="button"
-                onClick={() => setActiveModule('schedule')}
+                onClick={() => handleNav('schedule', '/schedule')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'schedule' || activeModule === 'calendar' || activeModule === 'appointments'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -253,7 +287,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {/* 5. Teams */}
               <button
                 type="button"
-                onClick={() => setActiveModule('teams')}
+                onClick={() => handleNav('teams', '/teams')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'teams'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -267,7 +301,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {/* 6. Knowledge Base */}
               <button
                 type="button"
-                onClick={() => setActiveModule('knowledge-base')}
+                onClick={() => handleNav('knowledge-base', '/knowledge-base')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'knowledge-base' || activeModule === 'collections'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -281,7 +315,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {/* 7. Developer */}
               <button
                 type="button"
-                onClick={() => setActiveModule('developer')}
+                onClick={() => handleNav('developer', '/developer')}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   activeModule === 'developer'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
@@ -410,7 +444,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                     <button
                       type="button"
                       onClick={() => setNotificationsOpen(false)}
-                      className="text-xs font-semibold text-on-surface-variant hover:text-on-surface"
+                      className="text-xs font-semibold text-on-surface-variant hover:text-on-surface cursor-pointer"
                     >
                       Close Notifications
                     </button>
@@ -451,7 +485,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                   <div className="py-1">
                     <button
                       onClick={() => {
-                        setActiveModule('teams');
+                        handleNav('teams', '/teams');
                         setProfileDropdownOpen(false);
                       }}
                       className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
@@ -461,7 +495,7 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                     </button>
                     <button
                       onClick={() => {
-                        setActiveModule('developer');
+                        handleNav('developer', '/developer');
                         setProfileDropdownOpen(false);
                       }}
                       className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
@@ -474,7 +508,11 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                   <button
                     onClick={() => {
                       setProfileDropdownOpen(false);
-                      onLogout?.();
+                      if (onLogout) {
+                        onLogout();
+                      } else {
+                        navigate('/login');
+                      }
                     }}
                     className="w-full text-left px-4 py-2 font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2.5 cursor-pointer font-semibold transition-colors"
                   >
@@ -489,11 +527,9 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
 
         {/* Dynamic Page Container */}
         <main className="w-full pt-[5.25rem] px-space-lg pb-space-lg bg-background flex-1 flex flex-col">
-          {children}
+          {children || <Outlet />}
         </main>
       </div>
     </div>
   );
 }
-
-

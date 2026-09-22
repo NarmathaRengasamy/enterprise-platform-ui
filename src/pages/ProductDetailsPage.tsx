@@ -1,15 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { INITIAL_PRODUCTS } from '../data/mockData';
 import { Product } from '../types';
 import { Button, Icon, StatusBadge } from '../components/common';
 
 interface ProductDetailsPageProps {
-  setActiveModule: (module: string) => void;
+  setActiveModule?: (module: string) => void;
   selectedProduct?: Product | null;
+  setSelectedProduct?: (product: Product) => void;
 }
 
-export default function ProductDetailsPage({ setActiveModule, selectedProduct }: ProductDetailsPageProps) {
-  const product = selectedProduct || (INITIAL_PRODUCTS[0] as Product);
+export default function ProductDetailsPage({ setActiveModule, selectedProduct, setSelectedProduct }: ProductDetailsPageProps) {
+  const { id } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
+
+  const product =
+    selectedProduct ||
+    (id ? INITIAL_PRODUCTS.find((p) => String(p.id) === String(id)) : null) ||
+    (INITIAL_PRODUCTS[0] as Product);
   const [selectedThumbIndex, setSelectedThumbIndex] = useState(0);
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [selectedVariant, setSelectedVariant] = useState('');
@@ -52,7 +60,10 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct }:
             variant="hover"
             size="md"
             startIcon="arrow_back"
-            onClick={() => setActiveModule('products')}
+            onClick={() => {
+              setActiveModule?.('products');
+              navigate('/products');
+            }}
           >
             Back to Products
           </Button>
@@ -82,7 +93,11 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct }:
             variant="primary"
             size="md"
             startIcon="edit"
-            onClick={() => setActiveModule('edit-product')}
+            onClick={() => {
+              setSelectedProduct?.(product);
+              setActiveModule?.('edit-product');
+              navigate(`/products/${product.id}/edit`);
+            }}
           >
             Edit Product
           </Button>

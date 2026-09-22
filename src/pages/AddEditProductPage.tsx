@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { INITIAL_PRODUCTS } from '../data/mockData';
 import { DESCRIPTION_ACCEPT, extractTextFromFile } from '../utils/documentText';
 import { Button } from '../components/common';
@@ -52,7 +53,14 @@ const INDUSTRY_PRESETS = [
   }
 ];
 
-export default function AddEditProductPage({ setActiveModule, selectedProduct, isEditing: isEditingProp }) {
+export default function AddEditProductPage({ setActiveModule, selectedProduct: selectedProductProp, isEditing: isEditingProp }) {
+  const { id } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
+
+  const selectedProduct =
+    selectedProductProp ||
+    (id ? INITIAL_PRODUCTS.find((p) => String(p.id) === String(id)) : null);
+
   const isEditing = isEditingProp !== undefined ? isEditingProp : Boolean(selectedProduct && selectedProduct.id);
   const [productName, setProductName] = useState(isEditing ? (selectedProduct?.name || '') : '');
   const [sku, setSku] = useState(isEditing ? (selectedProduct?.sku || '') : '');
@@ -451,7 +459,8 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
-      setActiveModule('products');
+      setActiveModule?.('products');
+      navigate('/products');
     }, 1200);
   };
 
@@ -462,7 +471,10 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         <div className="flex flex-col gap-1">
           <button
             type="button"
-            onClick={() => setActiveModule('products')}
+            onClick={() => {
+              setActiveModule?.('products');
+              navigate('/products');
+            }}
             className="inline-flex items-center gap-1.5 font-label-md text-label-md text-primary hover:text-primary-fixed-variant transition-colors group cursor-pointer text-left"
           >
             <span className="material-symbols-outlined text-base group-hover:-translate-x-0.5 transition-transform">
