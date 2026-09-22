@@ -37,11 +37,14 @@ export default function TeamsPage() {
   // Add Member Form State
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newDept, setNewDept] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('Editor');
 
   // Edit Member Form State
   const [editName, setEditName] = useState('');
+  const [editDept, setEditDept] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('Editor');
+  const [editStatus, setEditStatus] = useState<'Active' | 'Pending' | 'Inactive'>('Active');
 
   // Load team data & stats from API
   const loadData = useCallback(async () => {
@@ -92,6 +95,7 @@ export default function TeamsPage() {
       const created = await teamService.addTeamMember({
         name: newName.trim(),
         email: newEmail.trim().toLowerCase(),
+        department: newDept.trim() || 'Operations',
         role: newRole,
       });
 
@@ -100,6 +104,7 @@ export default function TeamsPage() {
       setIsAddMemberOpen(false);
       setNewName('');
       setNewEmail('');
+      setNewDept('');
       setNewRole('Editor');
       // Refresh stats
       teamService.getTeamStats().then(setStats).catch(() => {});
@@ -114,7 +119,9 @@ export default function TeamsPage() {
   const handleOpenEdit = (m: TeamMemberItem) => {
     setEditingMember(m);
     setEditName(m.name);
+    setEditDept(m.department);
     setEditRole(m.role);
+    setEditStatus(m.status);
     setOpenMenuId(null);
     setModalError(null);
   };
@@ -130,7 +137,9 @@ export default function TeamsPage() {
     try {
       const updated = await teamService.updateTeamMember(editingMember.id, {
         name: editName.trim(),
+        department: editDept.trim(),
         role: editRole,
+        status: editStatus,
       });
 
       setTeam((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -370,7 +379,7 @@ export default function TeamsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-container-low/40 font-body-sm text-body-sm">
-                {team.map((m, idx) => {
+                {team.map((m) => {
                   const initials = m.name
                     .split(' ')
                     .filter(Boolean)
@@ -378,7 +387,6 @@ export default function TeamsPage() {
                     .join('')
                     .slice(0, 2)
                     .toUpperCase() || 'TM';
-                  const isBottomRows = idx >= Math.max(0, team.length - 2);
 
                   return (
                     <tr key={m.id} className="h-16 hover:bg-surface-container-low/60 transition-colors group">
@@ -455,18 +463,7 @@ export default function TeamsPage() {
                           </button>
 
                           {openMenuId === m.id && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-20 cursor-default"
-                                onClick={() => setOpenMenuId(null)}
-                              />
-                              <div
-                                className={`absolute right-0 ${
-                                  isBottomRows
-                                    ? 'bottom-full mb-1.5 origin-bottom-right'
-                                    : 'top-full mt-1.5 origin-top-right'
-                                } w-48 rounded-xl bg-white shadow-2xl z-30 py-1.5 text-left border border-slate-200 animate-in fade-in zoom-in-95`}
-                              >
+                            <div className="absolute right-0 mt-1 w-48 rounded-xl bg-white shadow-xl z-20 py-1.5 text-left border border-slate-200 animate-in fade-in zoom-in-95">
                               {isAdmin ? (
                                 <>
                                   <button
@@ -503,9 +500,8 @@ export default function TeamsPage() {
                                 </div>
                               )}
                             </div>
-                          </>
-                        )}
-                      </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -563,17 +559,29 @@ export default function TeamsPage() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface">Role *</label>
-                <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as UserRole)}
-                  className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm focus:outline-none focus:border-primary cursor-pointer"
-                >
-                  <option value="Admin">Admin</option>
-                  <option value="Editor">Editor</option>
-                  <option value="Viewer">Viewer</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-on-surface">Department</label>
+                  <input
+                    type="text"
+                    value={newDept}
+                    onChange={(e) => setNewDept(e.target.value)}
+                    placeholder="Customer Support"
+                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-on-surface">Role *</label>
+                  <select
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Editor">Editor</option>
+                    <option value="Viewer">Viewer</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-surface-container-low mt-2">
@@ -643,16 +651,40 @@ export default function TeamsPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-on-surface">Department</label>
+                  <input
+                    type="text"
+                    value={editDept}
+                    onChange={(e) => setEditDept(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-on-surface">Role</label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as UserRole)}
+                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Editor">Editor</option>
+                    <option value="Viewer">Viewer</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface">Role</label>
+                <label className="text-xs font-semibold text-on-surface">Status</label>
                 <select
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value as UserRole)}
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as 'Active' | 'Pending' | 'Inactive')}
                   className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high text-sm focus:outline-none focus:border-primary cursor-pointer"
                 >
-                  <option value="Admin">Admin</option>
-                  <option value="Editor">Editor</option>
-                  <option value="Viewer">Viewer</option>
+                  <option value="Active">Active</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Inactive">Inactive</option>
                 </select>
               </div>
 

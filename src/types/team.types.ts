@@ -29,5 +29,7 @@ export interface AddMemberPayload {
 
 export interface UpdateMemberPayload {
   name?: string;
+  department?: string;
   role?: UserRole;
+  status?: 'Active' | 'Pending' | 'Inactive';
 }
