@@ -378,8 +378,9 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                 colSpan={4}
               />
             ) : (
-              filteredCategories.map((cat) => {
+              filteredCategories.map((cat, idx) => {
                 const isSelected = selectedCategoryIds.includes(cat.id);
+                const isBottomRows = idx >= Math.max(0, filteredCategories.length - 2);
                 return (
                   <TableRow
                     key={cat.id}
@@ -440,25 +441,37 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                             aria-label="More actions"
                           />
                           {openDropdownId === cat.id && (
-                            <div className="absolute right-0 top-full mt-1 w-44 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 border border-surface-container-high">
-                              <button
-                                type="button"
-                                onClick={() => { setActiveModule('products'); setOpenDropdownId(null); }}
-                                className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors"
+                            <>
+                              <div
+                                className="fixed inset-0 z-20 cursor-default"
+                                onClick={() => setOpenDropdownId(null)}
+                              />
+                              <div
+                                className={`absolute right-0 ${
+                                  isBottomRows
+                                    ? 'bottom-full mb-1.5 origin-bottom-right'
+                                    : 'top-full mt-1.5 origin-top-right'
+                                } w-44 bg-surface-container-lowest rounded-xl shadow-2xl z-30 py-1.5 border border-surface-container-high animate-in fade-in zoom-in-95`}
                               >
-                                <Icon name="visibility" size="sm" color="outline" />
-                                View Products
-                              </button>
-                              <div className="h-px bg-surface-container-high my-1" />
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteCategory(cat.id)}
-                                className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-error font-body-sm text-body-sm hover:bg-error-container/30 transition-colors"
-                              >
-                                <Icon name="delete" size="sm" color="error" />
-                                Delete
-                              </button>
-                            </div>
+                                <button
+                                  type="button"
+                                  onClick={() => { setActiveModule('products'); setOpenDropdownId(null); }}
+                                  className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors"
+                                >
+                                  <Icon name="visibility" size="sm" color="outline" />
+                                  View Products
+                                </button>
+                                <div className="h-px bg-surface-container-high my-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCategory(cat.id)}
+                                  className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-error font-body-sm text-body-sm hover:bg-error-container/30 transition-colors"
+                                >
+                                  <Icon name="delete" size="sm" color="error" />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
