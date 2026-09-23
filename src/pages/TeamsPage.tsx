@@ -80,6 +80,13 @@ export default function TeamsPage() {
     }
   }, [successMessage]);
 
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   // Add Member Handler
   const handleAddMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +141,7 @@ export default function TeamsPage() {
       });
 
       setTeam((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setSuccessMessage(`Updated profile for ${updated.name}`);
+      setSuccessMessage(`Role updated to ${updated.role} for ${updated.name}`);
       setEditingMember(null);
       // Refresh stats
       teamService.getTeamStats().then(setStats).catch(() => {});
@@ -176,37 +183,58 @@ export default function TeamsPage() {
 
   return (
     <div className="flex flex-col gap-y-space-lg w-full pt-space-xs">
-      {/* Toast Feedback */}
-      {successMessage && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 rounded-xl font-label-md flex items-center justify-between shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
-            <span>{successMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccessMessage(null)}
-            className="text-emerald-700/60 hover:text-emerald-700 font-bold"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {/* Floating Sticky Toast Notification Container (Always visible even when scrolled down) */}
+      {(successMessage || error) && (
+        <div className="fixed top-6 right-6 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none px-4 sm:px-0">
+          {successMessage && (
+            <div className="p-4 bg-white/95 backdrop-blur-md border border-emerald-500/30 text-on-surface rounded-2xl shadow-2xl flex items-center justify-between gap-3 pointer-events-auto animate-in slide-in-from-top-3 fade-in duration-300 border-l-4 border-l-emerald-500">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <span className="material-symbols-outlined text-xl">check_circle</span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-label-md text-label-md font-bold text-on-surface">
+                    Action Successful
+                  </span>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant truncate">
+                    {successMessage}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSuccessMessage(null)}
+                className="w-8 h-8 rounded-lg hover:bg-surface-container-high flex items-center justify-center text-outline hover:text-on-surface transition-colors cursor-pointer shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
-      {/* Error Alert */}
-      {error && (
-        <div className="p-3 bg-error-container text-on-error-container border border-error/20 rounded-xl font-label-md flex items-center justify-between shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <Icon name="error" size="sm" color="error" />
-            <span>{error}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setError(null)}
-            className="text-on-error-container/60 hover:text-on-error-container font-bold"
-          >
-            ✕
-          </button>
+          {error && (
+            <div className="p-4 bg-white/95 backdrop-blur-md border border-error/30 text-on-surface rounded-2xl shadow-2xl flex items-center justify-between gap-3 pointer-events-auto animate-in slide-in-from-top-3 fade-in duration-300 border-l-4 border-l-error">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-error/15 text-error flex items-center justify-center shrink-0 shadow-xs">
+                  <Icon name="error" size="sm" color="error" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-label-md text-label-md font-bold text-error">
+                    Action Failed
+                  </span>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant truncate">
+                    {error}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="w-8 h-8 rounded-lg hover:bg-surface-container-high flex items-center justify-center text-outline hover:text-on-surface transition-colors cursor-pointer shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -284,20 +312,40 @@ export default function TeamsPage() {
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between border border-surface-container">
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">
               Role Distribution
             </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="font-display-lg text-display-lg text-on-surface font-bold">
-                {team.filter((m) => m.role === 'Admin').length}
-              </span>
-              <span className="font-caption text-caption text-primary font-medium">
-                Admins · {team.filter((m) => m.role === 'Editor').length} Editors
-              </span>
+            <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
+              <div className="flex items-baseline gap-1">
+                <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                  {team.filter((m) => m.role === 'Admin').length}
+                </span>
+                <span className="font-caption text-caption text-outline font-medium">
+                  {team.filter((m) => m.role === 'Admin').length === 1 ? 'Admin' : 'Admins'}
+                </span>
+              </div>
+              <span className="text-outline/40">•</span>
+              <div className="flex items-baseline gap-1">
+                <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                  {team.filter((m) => m.role === 'Editor').length}
+                </span>
+                <span className="font-caption text-caption text-outline font-medium">
+                  {team.filter((m) => m.role === 'Editor').length === 1 ? 'Editor' : 'Editors'}
+                </span>
+              </div>
+              <span className="text-outline/40">•</span>
+              <div className="flex items-baseline gap-1">
+                <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                  {team.filter((m) => m.role === 'Viewer').length}
+                </span>
+                <span className="font-caption text-caption text-outline font-medium">
+                  {team.filter((m) => m.role === 'Viewer').length === 1 ? 'Viewer' : 'Viewers'}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+          <div className="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shrink-0 ml-2">
             <span className="material-symbols-outlined text-2xl">shield_person</span>
           </div>
         </div>
