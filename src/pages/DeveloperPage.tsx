@@ -440,88 +440,167 @@ export default function DeveloperPage() {
   /* ── Configure screen: everything else waits on this ─────────────────────── */
   if (!connectionEstablished) {
     return (
-      <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10 max-w-2xl mx-auto">
+      /* Full page width, like every other screen in the hub. The form keeps its
+         own readable measure inside the card; the column beside it carries the
+         context, so the page does not read as one small box adrift in
+         whitespace. */
+      <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 font-caption text-caption text-outline">
             <span>OmniFlow</span>
             <span className="material-symbols-outlined text-xs">chevron_right</span>
             <span className="text-primary font-semibold">Developer Hub</span>
           </div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-            Connect your Perfox workspace
-          </h1>
-          <p className="font-body-sm text-body-sm text-on-surface-variant">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
+              Connect your Perfox workspace
+            </h1>
+            {platform?.configured && (
+              <span
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${platformStatusClass(platform.status)}`}
+              >
+                {platform.status}
+              </span>
+            )}
+          </div>
+          <p className="font-body-sm text-body-sm text-on-surface-variant max-w-3xl">
             The agents on this page mirror a Perfox workspace, so there is nothing to show until the
             platform credentials are in place.
           </p>
         </div>
 
-        <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
-          <div className="p-5 bg-surface-container-low/60 border-b border-surface-container flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
-              <span className="material-symbols-outlined text-xl">hub</span>
+        {/* Credentials that were saved and then rejected: the reason is the
+            whole point of landing back on this screen, so it leads. */}
+        {platform?.configured && platform.lastError && (
+          <div className="flex items-start gap-3 rounded-2xl border border-error/30 bg-error/5 p-4">
+            <span className="material-symbols-outlined text-xl text-error">error</span>
+            <div className="flex flex-col gap-0.5">
+              <span className="font-title-sm text-title-sm font-bold text-on-surface">
+                Perfox rejected the saved credentials
+              </span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">
+                {platform.lastError}
+              </span>
             </div>
-            <div>
-              <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
-                Platform Credentials
-              </h2>
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Stored on the server — the token never comes back to the browser.
-              </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-space-md items-start">
+          <div className="lg:col-span-3 bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
+            <div className="p-5 bg-surface-container-low/60 border-b border-surface-container flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
+                <span className="material-symbols-outlined text-xl">hub</span>
+              </div>
+              <div>
+                <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
+                  Platform Credentials
+                </h2>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Stored on the server — the token never comes back to the browser.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5">
+              <form onSubmit={handleSavePlatform} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                    API Base URL *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    autoFocus
+                    value={apiUrlInput}
+                    onChange={(e) => setApiUrlInput(e.target.value)}
+                    placeholder="https://your-workspace-api.perfox.ai/api/v1"
+                    className={`h-11 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border focus:outline-none focus:ring-1 focus:ring-primary shadow-inner ${fieldClass(platformFieldErrors, 'apiUrl')}`}
+                  />
+                  <FieldError error={platformFieldErrors.apiUrl} />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                    API Token *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={apiTokenInput}
+                    onChange={(e) => setApiTokenInput(e.target.value)}
+                    placeholder="sk_…"
+                    className={`h-11 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border focus:outline-none focus:ring-1 focus:ring-primary shadow-inner ${fieldClass(platformFieldErrors, 'apiToken')}`}
+                  />
+                  <FieldError error={platformFieldErrors.apiToken} />
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-surface-container">
+                  <p className="text-[11px] text-on-surface-variant sm:max-w-sm">
+                    Rejected credentials are still saved, with the reason shown above, so nothing
+                    you typed is lost.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    type="submit"
+                    startIcon="link"
+                    loading={savingPlatform}
+                    disabled={savingPlatform || !apiUrlInput.trim() || !apiTokenInput.trim()}
+                  >
+                    Connect Workspace
+                  </Button>
+                </div>
+              </form>
             </div>
           </div>
 
-          <div className="p-5 flex flex-col gap-4">
-            <form onSubmit={handleSavePlatform} className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                  API Base URL *
-                </label>
-                <input
-                  type="url"
-                  required
-                  autoFocus
-                  value={apiUrlInput}
-                  onChange={(e) => setApiUrlInput(e.target.value)}
-                  placeholder="https://your-workspace-api.perfox.ai/api/v1"
-                  className={`h-11 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border focus:outline-none focus:ring-1 focus:ring-primary shadow-inner ${fieldClass(platformFieldErrors, 'apiUrl')}`}
-                />
-                <FieldError error={platformFieldErrors.apiUrl} />
+          <div className="lg:col-span-2 flex flex-col gap-space-sm">
+            <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container p-5 flex flex-col gap-4">
+              <h3 className="font-title-sm text-title-sm text-on-surface font-bold">
+                What happens when you connect
+              </h3>
+              <ol className="flex flex-col gap-3">
+                {[
+                  {
+                    title: 'The pair is stored server-side',
+                    body: 'The token is written to the backend and never returned to the browser — after this it only ever appears masked.'
+                  },
+                  {
+                    title: 'Perfox verifies it',
+                    body: `The credentials are checked with a live call to ${platform?.verifyPath || '/kb/folders'}.`
+                  },
+                  {
+                    title: 'The workspace agents appear',
+                    body: 'Agents are a read-only mirror of the workspace; activate and pausing is forwarded to Perfox.'
+                  }
+                ].map((step, index) => (
+                  <li key={step.title} className="flex items-start gap-3">
+                    <span className="mt-0.5 w-6 h-6 shrink-0 rounded-full bg-primary/10 text-primary font-caption text-caption font-bold flex items-center justify-center">
+                      {index + 1}
+                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-body-sm text-body-sm text-on-surface font-semibold">
+                        {step.title}
+                      </span>
+                      <span className="text-[11px] text-on-surface-variant">{step.body}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="rounded-2xl border border-surface-container bg-surface-container-low/60 p-5 flex items-start gap-3">
+              <span className="material-symbols-outlined text-xl text-outline">key</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-body-sm text-body-sm text-on-surface font-semibold">
+                  Changing the credentials later
+                </span>
+                <span className="text-[11px] text-on-surface-variant">
+                  There is no in-place edit: you disconnect the workspace and enter a new pair, so a
+                  half-changed pair can never sit in front of a workspace it does not open.
+                </span>
               </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                  API Token *
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={apiTokenInput}
-                  onChange={(e) => setApiTokenInput(e.target.value)}
-                  placeholder="sk_…"
-                  className={`h-11 px-3 font-mono text-xs rounded-xl bg-surface-container-low text-on-surface border focus:outline-none focus:ring-1 focus:ring-primary shadow-inner ${fieldClass(platformFieldErrors, 'apiToken')}`}
-                />
-                <FieldError error={platformFieldErrors.apiToken} />
-              </div>
-
-              <p className="text-[11px] text-on-surface-variant">
-                Connecting verifies the credentials against{' '}
-                <span className="font-mono">{platform?.verifyPath || '/kb/folders'}</span>. If Perfox
-                rejects them they are still saved, with the reason shown above, so nothing you typed
-                is lost.
-              </p>
-
-              <Button
-                variant="primary"
-                size="md"
-                type="submit"
-                startIcon="link"
-                loading={savingPlatform}
-                disabled={savingPlatform || !apiUrlInput.trim() || !apiTokenInput.trim()}
-              >
-                Connect Workspace
-              </Button>
-            </form>
+            </div>
           </div>
         </div>
 

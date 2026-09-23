@@ -14,6 +14,194 @@ import {
 import { productService } from '../services/product.service';
 import { categoryService } from '../services/category.service';
 
+const renderInline = (str: string): React.ReactNode => {
+  const parts = str.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return (
+        <strong key={i} className="font-bold text-slate-900">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
+      return (
+        <em key={i} className="italic text-slate-800">
+          {part.slice(1, -1)}
+        </em>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return (
+        <code
+          key={i}
+          className="px-1 py-0.5 rounded bg-slate-100 text-blue-600 font-mono text-[11px] border border-slate-200"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+};
+
+const renderSimpleMarkdown = (text: string) => {
+  if (!text.trim()) {
+    return (
+      <p className="text-slate-400 italic text-xs">
+        Nothing to preview yet. Start typing your article in the Write tab.
+      </p>
+    );
+  }
+
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check if line is a table row (starts and ends with |)
+    if (trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+
+      if (tableLines.length >= 1) {
+        const parseRow = (r: string) =>
+          r
+            .slice(1, -1)
+            .split('|')
+            .map((c) => c.trim());
+
+        const isSeparator = (r: string) => /^\|(\s*:?-+:?\s*\|)+$/.test(r);
+
+        const headerLine = tableLines[0];
+        const headers = parseRow(headerLine);
+        const dataLines = tableLines.slice(1).filter((l) => !isSeparator(l));
+        const rows = dataLines.map(parseRow);
+
+        elements.push(
+          <div key={`table-${i}`} className="overflow-x-auto my-2.5 rounded-xl border border-slate-200 shadow-2xs">
+            <table className="min-w-full divide-y divide-slate-200 text-xs text-left">
+              <thead className="bg-slate-100/90 font-semibold text-slate-800">
+                <tr>
+                  {headers.map((h, hIdx) => (
+                    <th key={hIdx} className="px-3.5 py-2.5 border-r last:border-r-0 border-slate-200 font-bold">
+                      {renderInline(h)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {rows.map((row, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-slate-50/60 transition-colors">
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} className="px-3.5 py-2 border-r last:border-r-0 border-slate-100 text-slate-700">
+                        {renderInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+    }
+
+    if (trimmed.startsWith('### ')) {
+      elements.push(
+        <h4 key={`h3-${i}`} className="text-xs sm:text-sm font-bold text-slate-900 mt-2">
+          {renderInline(trimmed.replace('### ', ''))}
+        </h4>
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('## ')) {
+      elements.push(
+        <h3 key={`h2-${i}`} className="text-sm sm:text-base font-bold text-slate-900 mt-3 pb-1 border-b border-slate-100">
+          {renderInline(trimmed.replace('## ', ''))}
+        </h3>
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('# ')) {
+      elements.push(
+        <h2 key={`h1-${i}`} className="text-base sm:text-lg font-black text-slate-900 mt-3 pb-1 border-b border-slate-200">
+          {renderInline(trimmed.replace('# ', ''))}
+        </h2>
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      elements.push(
+        <div key={`list-${i}`} className="flex items-start gap-2 pl-2">
+          <span className="text-blue-600 font-bold">•</span>
+          <span className="text-slate-700">{renderInline(trimmed.substring(2))}</span>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    if (/^\d+\.\s/.test(trimmed)) {
+      const match = trimmed.match(/^(\d+)\.\s(.*)/);
+      elements.push(
+        <div key={`numlist-${i}`} className="flex items-start gap-2 pl-2">
+          <span className="font-semibold text-slate-600 text-xs">{match ? match[1] + '.' : '•'}</span>
+          <span className="text-slate-700">{renderInline(match ? match[2] : trimmed)}</span>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('> ')) {
+      elements.push(
+        <blockquote
+          key={`quote-${i}`}
+          className="border-l-4 border-blue-500 bg-blue-50/60 px-3 py-2 rounded-r-lg text-blue-950 text-xs my-1"
+        >
+          {renderInline(trimmed.replace('> ', ''))}
+        </blockquote>
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      i++;
+      continue;
+    }
+
+    if (!trimmed) {
+      elements.push(<div key={`space-${i}`} className="h-1" />);
+      i++;
+      continue;
+    }
+
+    elements.push(
+      <p key={`p-${i}`} className="leading-relaxed text-slate-700">
+        {renderInline(line)}
+      </p>
+    );
+    i++;
+  }
+
+  return <div className="space-y-2 text-xs sm:text-sm">{elements}</div>;
+};
+
 export default function KnowledgeBasePage() {
   // Data state
   const [files, setFiles] = useState<KbFile[]>([]);
@@ -53,8 +241,9 @@ export default function KnowledgeBasePage() {
   // Create Article Modal State
   const [isCreateArticleOpen, setIsCreateArticleOpen] = useState(false);
   const [articleTitle, setArticleTitle] = useState('');
-  const [articleCategory, setArticleCategory] = useState('Orders & Checkout');
+  const [articleCategory, setArticleCategory] = useState('');
   const [articleContent, setArticleContent] = useState('');
+  const [articleEditorTab, setArticleEditorTab] = useState<'write' | 'preview'>('write');
   const [isPublishingArticle, setIsPublishingArticle] = useState(false);
   const [createArticleError, setCreateArticleError] = useState<string | null>(null);
 
@@ -310,7 +499,8 @@ export default function KnowledgeBasePage() {
       });
       setArticleTitle('');
       setArticleContent('');
-      setArticleCategory('Orders & Checkout');
+      setArticleCategory('');
+      setArticleEditorTab('write');
       setIsCreateArticleOpen(false);
       await loadData(selectedFolderId);
     } catch (err: any) {
@@ -318,6 +508,11 @@ export default function KnowledgeBasePage() {
     } finally {
       setIsPublishingArticle(false);
     }
+  };
+
+  // Insert markdown snippet into article content
+  const handleInsertMarkdownSnippet = (snippet: string) => {
+    setArticleContent((prev) => (prev ? `${prev}\n\n${snippet}` : snippet));
   };
 
   // Create Folder
@@ -1191,16 +1386,31 @@ export default function KnowledgeBasePage() {
         </div>
       )}
 
-      {/* MODAL: Create Article */}
+      {/* ========================================================================= */}
+      {/* MODAL: Create Article (ENHANCED UI)                                       */}
+      {/* ========================================================================= */}
       {isCreateArticleOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 space-y-5">
-            <div className="flex items-center justify-between pb-1">
-              <h3 className="text-xl font-bold text-slate-900">Create Article</h3>
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-2xl w-full p-6 sm:p-7 space-y-5 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
+                  <Icon name="edit_note" size="md" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">Create Article</h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 uppercase tracking-wider">
+                      Knowledge Base
+                    </span>
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsCreateArticleOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               >
                 <Icon name="close" size="sm" />
               </button>
@@ -1214,96 +1424,213 @@ export default function KnowledgeBasePage() {
                 </div>
               )}
 
+              {/* Field 1: Article Title */}
               <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-1.5">
-                  Article Title <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={articleTitle}
-                  onChange={(e) => setArticleTitle(e.target.value)}
-                  placeholder="e.g. Return and Replacement Guidelines"
-                  required
-                  className="w-full text-sm rounded-xl border border-blue-200/80 bg-blue-50/20 px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Article Title <span className="text-rose-500">*</span>
+                  </label>
+                  {articleTitle.trim() && (
+                    <span className="text-[10px] font-medium text-slate-400">
+                      Saved as: <code className="font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{articleTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'article'}.md</code>
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                    <Icon name="title" size="sm" />
+                  </div>
+                  <input
+                    type="text"
+                    value={articleTitle}
+                    onChange={(e) => setArticleTitle(e.target.value)}
+                    placeholder="e.g. Return and Replacement Guidelines"
+                    required
+                    className="w-full text-xs sm:text-sm rounded-xl border border-blue-200/80 bg-blue-50/15 pl-10 pr-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all shadow-2xs font-medium"
+                  />
+                </div>
               </div>
 
+              {/* Field 2: Target Folder */}
               <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-1.5">
-                  Category
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Target Folder
                 </label>
                 <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-amber-500">
+                    <Icon name="folder" size="sm" />
+                  </div>
                   <select
                     value={articleCategory}
                     onChange={(e) => setArticleCategory(e.target.value)}
-                    className="w-full text-sm rounded-xl border border-blue-200/80 bg-blue-50/20 px-3.5 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white appearance-none transition-all pr-10 cursor-pointer"
+                    className="w-full text-xs sm:text-sm rounded-xl border border-blue-200/80 bg-blue-50/15 pl-10 pr-10 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white appearance-none transition-all cursor-pointer shadow-2xs font-medium"
                   >
-                    <option value="Orders & Checkout">Orders & Checkout</option>
-                    <option value="Product Guides">Product Guides</option>
-                    <option value="Returns & Refunds">Returns & Refunds</option>
-                    <option value="Shipping & Delivery">Shipping & Delivery</option>
-                    <option value="Policies & Terms">Policies & Terms</option>
-                    {folders
-                      .filter(
-                        (f) =>
-                          ![
-                            'Orders & Checkout',
-                            'Product Guides',
-                            'Returns & Refunds',
-                            'Shipping & Delivery',
-                            'Policies & Terms',
-                          ].includes(f.name)
-                      )
-                      .map((folder) => (
-                        <option key={folder.id} value={folder.id}>
-                          {folder.name}
-                        </option>
-                      ))}
+                    <option value="">Root level (No folder)</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </option>
+                    ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-600">
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-500">
                     <Icon name="expand_more" size="sm" />
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-1.5">
-                  Content (Markdown)
-                </label>
-                <textarea
-                  rows={5}
-                  value={articleContent}
-                  onChange={(e) => setArticleContent(e.target.value)}
-                  placeholder="Write article instructions or guidelines..."
-                  required
-                  className="w-full text-sm rounded-xl border border-blue-200/80 bg-blue-50/20 px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all resize-y"
-                />
+
+              {/* Field 3: Content (Markdown) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                    <span>Content (Markdown)</span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setArticleEditorTab('write')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        articleEditorTab === 'write'
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Write
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setArticleEditorTab('preview')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        articleEditorTab === 'preview'
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                </div>
+
+                {/* Markdown Formatting Helper Toolbar */}
+                {articleEditorTab === 'write' && (
+                  <div className="flex flex-wrap items-center justify-between gap-1 p-1.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('## Section Heading')}
+                        className="px-2 py-0.5 text-[11px] font-bold rounded-md hover:bg-slate-200 text-slate-700"
+                        title="Heading 2"
+                      >
+                        H2
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('### Subsection')}
+                        className="px-2 py-0.5 text-[11px] font-bold rounded-md hover:bg-slate-200 text-slate-700"
+                        title="Heading 3"
+                      >
+                        H3
+                      </button>
+                      <span className="w-px h-3.5 bg-slate-300 mx-0.5"></span>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('**bold text**')}
+                        className="px-2 py-0.5 text-[11px] font-bold rounded-md hover:bg-slate-200 text-slate-700"
+                        title="Bold"
+                      >
+                        <b>B</b>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('*italic text*')}
+                        className="px-2 py-0.5 text-[11px] italic rounded-md hover:bg-slate-200 text-slate-700"
+                        title="Italic"
+                      >
+                        <i>I</i>
+                      </button>
+                      <span className="w-px h-3.5 bg-slate-300 mx-0.5"></span>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('- List item\n- Second item')}
+                        className="px-2 py-0.5 text-[11px] rounded-md hover:bg-slate-200 text-slate-700 flex items-center gap-1"
+                        title="Bullet List"
+                      >
+                        <Icon name="format_list_bulleted" size="xs" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('> **Note:** Important customer guideline')}
+                        className="px-2 py-0.5 text-[11px] rounded-md hover:bg-slate-200 text-slate-700 flex items-center gap-1"
+                        title="Callout Quote"
+                      >
+                        <Icon name="format_quote" size="xs" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertMarkdownSnippet('| Policy | Details |\n| --- | --- |\n| Return window | 30 days |')}
+                        className="px-2 py-0.5 text-[11px] rounded-md hover:bg-slate-200 text-slate-700 flex items-center gap-1"
+                        title="Markdown Table"
+                      >
+                        <Icon name="table_chart" size="xs" />
+                      </button>
+                    </div>
+
+                    <span className="text-[10px] text-slate-400 pr-1 font-medium">
+                      {articleContent.trim() ? `${articleContent.trim().split(/\s+/).length} words` : '0 words'}
+                    </span>
+                  </div>
+                )}
+
+                {articleEditorTab === 'write' ? (
+                  <textarea
+                    rows={6}
+                    value={articleContent}
+                    onChange={(e) => setArticleContent(e.target.value)}
+                    placeholder="Write article instructions or guidelines..."
+                    required
+                    className="w-full text-xs sm:text-sm rounded-xl border border-blue-200/80 bg-blue-50/15 p-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all resize-y shadow-2xs font-mono leading-relaxed"
+                  />
+                ) : (
+                  <div className="min-h-[150px] max-h-[220px] overflow-y-auto p-4 rounded-xl border border-slate-200 bg-slate-50/70 text-xs sm:text-sm text-slate-800 space-y-2.5">
+                    {renderSimpleMarkdown(articleContent)}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateArticleOpen(false)}
-                  disabled={isPublishingArticle}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={!articleTitle.trim() || !articleContent.trim() || isPublishingArticle}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl px-5 py-2.5 shadow-sm text-sm flex items-center gap-2"
-                >
-                  {isPublishingArticle ? (
-                    <>
-                      <Icon name="sync" className="animate-spin" size="sm" />
-                      Publishing...
-                    </>
-                  ) : (
-                    'Publish Article'
-                  )}
-                </Button>
+              {/* Modal Footer */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  {/* <Icon name="bolt" size="xs" className="text-amber-500" /> */}
+                  {/* <span>Auto-indexed for AI customer support queries.</span> */}
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateArticleOpen(false)}
+                    disabled={isPublishingArticle}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={!articleTitle.trim() || !articleContent.trim() || isPublishingArticle}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl px-5 py-2.5 shadow-sm text-xs flex items-center gap-2"
+                  >
+                    {isPublishingArticle ? (
+                      <>
+                        <Icon name="sync" className="animate-spin" size="xs" />
+                        Publishing...
+                      </>
+                    ) : (
+                      'Publish Article'
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
