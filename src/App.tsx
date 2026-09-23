@@ -107,7 +107,7 @@ function AppRoutes(): JSX.Element {
 
   return (
     <Routes>
-      {/* Auth Routes */}
+      {/* Auth & Legal Routes */}
       <Route
         path="/login"
         element={
@@ -130,6 +130,22 @@ function AppRoutes(): JSX.Element {
             />
           )
         }
+      />
+      <Route
+        path="/privacy"
+        element={<SignupPage onSignupSuccess={handleLoginSuccess} onSwitchToLogin={() => navigate('/login')} />}
+      />
+      <Route
+        path="/terms"
+        element={<SignupPage onSignupSuccess={handleLoginSuccess} onSwitchToLogin={() => navigate('/login')} />}
+      />
+      <Route
+        path="/help"
+        element={<SignupPage onSignupSuccess={handleLoginSuccess} onSwitchToLogin={() => navigate('/login')} />}
+      />
+      <Route
+        path="/support"
+        element={<SignupPage onSignupSuccess={handleLoginSuccess} onSwitchToLogin={() => navigate('/login')} />}
       />
 
       {/* Protected App Layout Routes */}

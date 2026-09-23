@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Icon } from '../components/common';
+import { Button, Icon, LegalModal, LegalModalTab } from '../components/common';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole } from '../types/auth.types';
 
@@ -19,7 +19,28 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Legal & Support Modal State
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [legalModalTab, setLegalModalTab] = useState<LegalModalTab>('privacy');
+
+  const openLegalModal = (tab: LegalModalTab) => {
+    setLegalModalTab(tab);
+    setIsLegalModalOpen(true);
+  };
+
+  React.useEffect(() => {
+    const path = window.location.pathname;
+    if (path === '/privacy') {
+      openLegalModal('privacy');
+    } else if (path === '/terms') {
+      openLegalModal('terms');
+    } else if (path === '/help' || path === '/support') {
+      openLegalModal('help');
+    }
+  }, []);
 
   const passwordCriteria = {
     hasMinLength: password.length >= 8,
@@ -39,6 +60,19 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setEmailError(null);
+
+    if (!fullName.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email.trim() || !EMAIL_REGEX.test(email.trim())) {
+      setError('Please enter a valid email address (e.g. name@company.com).');
+      setEmailError('Please enter a valid email format (e.g. name@company.com).');
+      return;
+    }
 
     if (!passwordCriteria.hasMinLength) {
       setError('Password must be at least 8 characters long.');
@@ -72,7 +106,15 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
       });
       onSignupSuccess?.();
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.');
+      const msg = err.message || 'Registration failed. Please try again.';
+      setError(msg);
+      if (
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('already registered') ||
+        err.status === 409
+      ) {
+        setEmailError('This email is already registered. Please sign in or use another email.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -114,9 +156,20 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
 
           {/* Error Banner */}
           {error && (
-            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center gap-2 border border-error/20 animate-fadeIn">
-              <Icon name="error" size="sm" color="error" />
-              <span>{error}</span>
+            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center justify-between gap-2 border border-error/20 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <Icon name="error" size="sm" color="error" />
+                <span>{error}</span>
+              </div>
+              {(error.toLowerCase().includes('already') || emailError) && onSwitchToLogin && (
+                <button
+                  type="button"
+                  onClick={onSwitchToLogin}
+                  className="px-2.5 py-1 text-xs font-semibold bg-surface-container-lowest text-primary rounded-lg border border-primary/20 shadow-xs hover:bg-primary hover:text-white transition-all cursor-pointer shrink-0"
+                >
+                  Sign In
+                </button>
+              )}
             </div>
           )}
 
@@ -137,7 +190,10 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                   required
                   autoComplete="off"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    if (error) setError(null);
+                  }}
                   placeholder="e.g. Sarah Jenkins"
                   className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
@@ -151,7 +207,7 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
               </label>
               <div className="relative flex items-center">
                 <span className="absolute left-3 pointer-events-none select-none flex items-center">
-                  <Icon name="mail" size="md" color="outline" />
+                  <Icon name="mail" size="md" color={emailError ? 'error' : 'outline'} />
                 </span>
                 <input
                   id="email"
@@ -159,11 +215,36 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                   required
                   autoComplete="off"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailError) setEmailError(null);
+                    if (error) setError(null);
+                  }}
                   placeholder="name@company.com"
-                  className="w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className={`w-full h-10 pl-10 pr-4 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border ${
+                    emailError
+                      ? 'border-error focus:border-error focus:ring-error/20'
+                      : 'border-surface-container-high focus:border-primary focus:ring-primary/20'
+                  } placeholder:text-outline/60 transition-all focus:outline-none focus:ring-2`}
                 />
               </div>
+              {emailError && (
+                <div className="flex items-center justify-between text-xs text-error mt-0.5 animate-fadeIn">
+                  <div className="flex items-center gap-1">
+                    <Icon name="error" size="xs" color="error" />
+                    <span>{emailError}</span>
+                  </div>
+                  {onSwitchToLogin && (
+                    <button
+                      type="button"
+                      onClick={onSwitchToLogin}
+                      className="text-primary font-semibold hover:underline cursor-pointer ml-2 shrink-0"
+                    >
+                      Sign in &rarr;
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Role Selection */}
@@ -317,13 +398,21 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
               />
               <label htmlFor="agree-terms" className="font-label-md text-label-md text-on-surface-variant cursor-pointer select-none leading-tight">
                 I agree to the{' '}
-                <a href="#terms" onClick={(e) => e.preventDefault()} className="text-primary hover:underline font-medium">
+                <button
+                  type="button"
+                  onClick={() => openLegalModal('terms')}
+                  className="text-primary hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer inline"
+                >
                   Terms of Service
-                </a>{' '}
+                </button>{' '}
                 and{' '}
-                <a href="#privacy" onClick={(e) => e.preventDefault()} className="text-primary hover:underline font-medium">
+                <button
+                  type="button"
+                  onClick={() => openLegalModal('privacy')}
+                  className="text-primary hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer inline"
+                >
                   Privacy Policy
-                </a>
+                </button>
               </label>
             </div>
 
@@ -358,13 +447,38 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
 
         {/* Footer Links */}
         <div className="mt-space-md flex items-center gap-space-md text-outline font-caption text-caption">
-          <a className="hover:text-on-surface transition-colors" href="#privacy">Privacy Policy</a>
+          <button
+            type="button"
+            onClick={() => openLegalModal('privacy')}
+            className="hover:text-on-surface transition-colors bg-transparent border-0 p-0 cursor-pointer text-outline hover:underline"
+          >
+            Privacy Policy
+          </button>
           <span>•</span>
-          <a className="hover:text-on-surface transition-colors" href="#terms">Terms of Service</a>
+          <button
+            type="button"
+            onClick={() => openLegalModal('terms')}
+            className="hover:text-on-surface transition-colors bg-transparent border-0 p-0 cursor-pointer text-outline hover:underline"
+          >
+            Terms of Service
+          </button>
           <span>•</span>
-          <a className="hover:text-on-surface transition-colors" href="#help">Help &amp; Support</a>
+          <button
+            type="button"
+            onClick={() => openLegalModal('help')}
+            className="hover:text-on-surface transition-colors bg-transparent border-0 p-0 cursor-pointer text-outline hover:underline"
+          >
+            Help &amp; Support
+          </button>
         </div>
       </div>
+
+      {/* Interactive Legal & Support Modal */}
+      <LegalModal
+        isOpen={isLegalModalOpen}
+        initialTab={legalModalTab}
+        onClose={() => setIsLegalModalOpen(false)}
+      />
     </div>
   );
 }
