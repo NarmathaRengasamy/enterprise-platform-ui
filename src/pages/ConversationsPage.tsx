@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/common';
+import { useAuth } from '../hooks/useAuth';
 import { conversationService } from '../services/conversation.service';
 import type {
   ConversationAgentOption,
   ConversationItem,
   ConversationMessage,
   ConversationSource,
-  NewConversationPayload
+  NewConversationPayload,
+  OutboundChannel
 } from '../types/conversation.types';
 import { clockTime, dayKey, dayLabel, fullTimestamp, relativeLabel } from '../utils/datetime';
 
@@ -83,6 +85,19 @@ const EMPTY_CONVO: ConversationItem = {
   messages: []
 };
 
+/**
+ * Only the keys that actually came back.
+ *
+ * The detail route does not repeat every field a list row carries — `agentId`
+ * is one it leaves out, naming the agent but identifying it as `workflowId` —
+ * so a plain `{ ...row, ...detail }` merge would write `undefined` over what the
+ * row already knew and make an agent-backed thread look agent-less.
+ */
+const definedFields = <T extends object>(fields: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined)
+  ) as Partial<T>;
+
 const initialsOf = (name: string) => {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '';
@@ -93,6 +108,11 @@ export default function ConversationsPage({
   selectedConversationId: propSelectedConvoId,
   setSelectedConversationId: propSetSelectedConvoId
 }: ConversationsPageProps = {}) {
+  /* Sending is Admin or Editor. Mirrored here so a Viewer is not offered a
+     button the server is going to refuse. */
+  const { user } = useAuth();
+  const canSendOutbound = user?.role === 'Admin' || user?.role === 'Editor';
+
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [total, setTotal] = useState(0);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -100,6 +120,9 @@ export default function ConversationsPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [sendError, setSendError] = useState('');
+  /* What became of the last send. Perfox can accept a request and still not put
+     it out, so the outcome is reported rather than assumed from a 200. */
+  const [sendNotice, setSendNotice] = useState('');
 
   const [internalActiveConvoId, setInternalActiveConvoId] = useState<string | null>(
     propSelectedConvoId || null
@@ -112,6 +135,14 @@ export default function ConversationsPage({
      empty `messages`, so a set of ids would suppress the refetch and leave the
      thread looking empty. The cache is what re-fills it. */
   const transcriptCache = useRef<Map<string, ConversationMessage[]>>(new Map());
+
+  /* The fields only the detail route resolves — above all `agentTriggerChannels`,
+     which the composer gates on. A list refetch replaces the open thread's row
+     with a plain list row that carries none of them, and re-fetching the detail
+     is suppressed by the transcript cache, so they are kept here and merged back
+     in. Only these fields: taking the whole detail would also restore its `unread`
+     and `lastMessage`, undoing a mark-as-read or a just-sent message. */
+  const detailCache = useRef<Map<string, Partial<ConversationItem>>>(new Map());
 
   /* Which store answered, and why the live one did not. A list served from the
      mirror looks exactly like a live one, so it has to say so. */
@@ -245,6 +276,22 @@ export default function ConversationsPage({
         if (signal.aborted) return;
         const messages = (detail.messages || []).filter(isChatMessage);
         transcriptCache.current.set(id, messages);
+        detailCache.current.set(
+          id,
+          definedFields({
+            agentId: detail.agentId,
+            workflowId: detail.workflowId,
+            agentName: detail.agentName,
+            agentStatus: detail.agentStatus,
+            agentChannels: detail.agentChannels,
+            agentSenderChannels: detail.agentSenderChannels,
+            agentTriggerChannels: detail.agentTriggerChannels,
+            /* Resolved from the customer record by id, which is the only place
+               an anonymous visitor's address ever comes from. */
+            phone: detail.phone,
+            email: detail.email
+          })
+        );
         setConversations((prev) => {
           const exists = prev.some((c) => c.id === id);
           if (!exists) return [{ ...detail, messages }, ...prev];
@@ -286,51 +333,79 @@ export default function ConversationsPage({
   const activeConvo = useMemo(() => {
     const row = conversations.find((c) => c.id === displayedId);
     if (!row) return EMPTY_CONVO;
-    // List rows carry no messages, so a row that came back from a refetch needs
-    // its transcript put back from the cache
-    if (row.messages.length > 0) return row;
+
+    // A refetched row is a plain list row: no transcript and none of the
+    // detail-only fields. Both caches are what put them back.
+    const detail = detailCache.current.get(row.id);
+    const base = detail ? { ...row, ...detail } : row;
+
+    if (base.messages.length > 0) return base;
     const cached = transcriptCache.current.get(row.id);
-    return cached && cached.length > 0 ? { ...row, messages: cached } : row;
+    return cached && cached.length > 0 ? { ...base, messages: cached } : base;
   }, [conversations, displayedId]);
+
+  /* A thread with no Perfox agent behind it — one started in this UI. Nothing
+     can send on its behalf, and `POST /:id/send` refuses it with a 409, so the
+     composer offers nothing rather than writing a message that reaches no one. */
+  /* `agentId` is the list row's name for it; the detail route calls the same id
+     `workflowId`. Either one means there is an agent. */
+  const threadAgentId = activeConvo.agentId || activeConvo.workflowId || '';
+  const isLocalThread = Boolean(activeConvo.id) && !threadAgentId;
 
   /* Which channels the composer may offer.
 
-     The agent that handled the thread decides this, not the customer's contact
-     details: holding a phone number does not mean an SMS integration exists to
-     send through, and `agentChannels` is exactly the list of what that agent is
-     integrated with. It arrives on the list row and again on the thread detail.
+     These are the conditions `POST /conversations/:id/send` enforces, in the
+     same order, so the button and the server cannot disagree:
 
-     A thread started in this UI has no Perfox agent behind it, so it falls back
-     to the channel it was created with — otherwise a local thread could never be
-     replied to at all.
+       1. the caller may send at all — Admin or Editor
+       2. the thread has an agent
+       3. the agent is published; a paused or draft agent cannot send
+       4. the channel is named by a TRIGGER on the agent's graph
+          (`agentTriggerChannels`, detail-only — `agentChannels` comes from the
+          cached list, which does not report every trigger, and gating on it
+          hides channels that would work)
+       5. the customer holds the matching address: an email for email, a phone
+          for WhatsApp and SMS
+
+     The customer's phone is never the test on its own — holding a number does
+     not mean there is an integration to send through it.
 
      Unavailable channels are disabled rather than hidden, so it stays visible
-     that they exist and are simply not wired up. */
+     that they exist and why they are not offered. The disabled state is a
+     convenience: the server answers 409 either way. */
   const channelOptions = useMemo(() => {
-    const integrated = (activeConvo.agentChannels ?? []).map((c) => c.toLowerCase());
-    const isLocalThread = !activeConvo.agentId;
+    const triggers = (activeConvo.agentTriggerChannels ?? []).map((c) => c.toLowerCase());
+    const agentLabel = activeConvo.agentName || 'The agent handling this thread';
 
     return SENDABLE.map((option) => {
-      const available = isLocalThread
-        ? activeConvo.channel === option.key
-        : integrated.some((c) => c.includes(option.key));
+      const address = option.key === 'email' ? activeConvo.email : activeConvo.phone;
 
-      return {
-        ...option,
-        available,
-        reason: available
-          ? ''
-          : isLocalThread
-            ? `This thread was started on ${activeConvo.channelLabel || 'another channel'}`
-            : `${activeConvo.agentName || 'The agent handling this thread'} is not integrated with ${option.label}`
-      };
+      let reason = '';
+      if (!canSendOutbound) {
+        reason = 'Only an Admin or Editor can send';
+      } else if (isLocalThread) {
+        reason = 'This conversation has no agent, so nothing can send on its behalf';
+      } else if (activeConvo.agentStatus && activeConvo.agentStatus !== 'published') {
+        reason = `${agentLabel} is ${activeConvo.agentStatus} — only a published agent can send`;
+      } else if (!triggers.includes(option.key)) {
+        reason = `${agentLabel} has no ${option.label} trigger configured`;
+      } else if (!address) {
+        reason =
+          option.key === 'email'
+            ? 'No email address on this customer'
+            : 'No phone number on this customer';
+      }
+
+      return { ...option, available: !reason, reason };
     });
   }, [
-    activeConvo.agentChannels,
-    activeConvo.agentId,
     activeConvo.agentName,
-    activeConvo.channel,
-    activeConvo.channelLabel
+    activeConvo.agentStatus,
+    activeConvo.agentTriggerChannels,
+    activeConvo.email,
+    activeConvo.phone,
+    canSendOutbound,
+    isLocalThread
   ]);
 
   const activeChannelOption = channelOptions.find((o) => o.key === composerChannel);
@@ -441,27 +516,49 @@ export default function ConversationsPage({
           : c
       )
     );
-    const sentAttachment = attachment;
     setInputMessage('');
     setSendError('');
+    setSendNotice('');
     setSending(true);
 
-    try {
-      const updated = await conversationService.sendMessage(convoId, {
-        text,
-        sender: 'me',
-        channel: composerChannel,
-        attachment: sentAttachment || undefined
-      });
-      transcriptCache.current.set(convoId, updated.messages || nextMessages);
-      setConversations((prev) => prev.map((c) => (c.id === convoId ? { ...c, ...updated } : c)));
-    } catch (err: any) {
-      // Put the text back so nothing is silently lost
+    /* Undo the optimistic bubble and give the operator their text back. Used
+       for a refusal as well as a failure: a message that did not go out must
+       not be left on screen looking as though it did. */
+    const rollBack = () => {
       transcriptCache.current.set(convoId, previousMessages);
       setConversations((prev) =>
         prev.map((c) => (c.id === convoId ? { ...c, messages: previousMessages } : c))
       );
       setInputMessage(text);
+    };
+
+    try {
+      const result = await conversationService.sendOutbound(convoId, {
+        channel: composerChannel as OutboundChannel,
+        text
+      });
+
+      /* Perfox took the request but the agent may still not be authorized to
+         put it out, and that answer arrives with a 200. */
+      if (!result.sendAuthorized) {
+        rollBack();
+        setSendError(
+          result.message ||
+            `Perfox accepted the request but ${activeConvo.agentName || 'the agent'} is not authorized to send on ${composerChannel}. The customer did not receive it.`
+        );
+        return;
+      }
+
+      setSendNotice(
+        /* Outbound opens a NEW conversation upstream, so the reply does not join
+           this transcript — saying so is better than leaving someone to wonder
+           why it never appears after a refresh. */
+        result.conversationId && result.conversationId !== convoId
+          ? `Sent to ${result.to} via ${result.channel}. Perfox opened a new conversation for it, so it will not appear in this transcript.`
+          : `Sent to ${result.to} via ${result.channel}.`
+      );
+    } catch (err: any) {
+      rollBack();
       setSendError(err?.message || 'Message could not be sent.');
     } finally {
       setSending(false);
@@ -481,6 +578,13 @@ export default function ConversationsPage({
   useEffect(() => {
     setMatchIndex(0);
   }, [messageSearch, activeConvo.id]);
+
+  /* The outcome of a send belongs to the thread it was sent from — carrying it
+     over to the next one would report it against a customer it never concerned. */
+  useEffect(() => {
+    setSendError('');
+    setSendNotice('');
+  }, [activeConvo.id]);
 
   // Bring the current hit into view
   useEffect(() => {
@@ -1059,6 +1163,13 @@ export default function ConversationsPage({
             </div>
           )}
 
+          {sendNotice && !sendError && (
+            <div className="mb-2 px-3 py-2 rounded-lg bg-surface-container text-on-surface-variant font-body-sm text-body-sm flex items-start gap-2">
+              <span className="material-symbols-outlined text-[18px] shrink-0">info</span>
+              <span>{sendNotice}</span>
+            </div>
+          )}
+
           {/* Channel Selector Chips — a channel the handling agent is not
               integrated with is disabled rather than failing at send time */}
           <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
@@ -1079,21 +1190,22 @@ export default function ConversationsPage({
             ))}
           </div>
 
+          {/* Why nothing can be sent, in the server's own terms — the reason on
+              the chosen channel, or the first one standing in the way. */}
           {activeConvo.id && !canSendOnChannel && (
             <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
-              {activeConvo.agentId
-                ? `${activeConvo.agentName || 'The agent handling this thread'} is not integrated with any channel this composer can send on.`
-                : 'This thread was started here, so only the channel it was created with is available.'}
+              {activeChannelOption?.reason ||
+                channelOptions.find((o) => o.reason)?.reason ||
+                'This thread cannot be replied to.'}
             </p>
           )}
 
-          {/* Sending is not wired to Perfox: the message is written to this
-              workspace and the customer never receives it. Saying so beside the
-              box is the difference between a draft and a message believed sent. */}
+          {/* What pressing Send actually does — this goes out to the customer,
+              which is worth knowing before it is sent rather than after. */}
           {activeConvo.id && canSendOnChannel && (
             <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
-              Replies are recorded on this thread only — there is no send endpoint yet, so the
-              customer will not receive them.
+              Sent through {activeConvo.agentName || 'the agent'} on Perfox — the customer
+              receives this.
             </p>
           )}
 
@@ -1232,8 +1344,8 @@ export default function ConversationsPage({
             </label>
 
             <p className="font-body-sm text-[11px] text-on-surface-variant">
-              This thread is stored locally. It will not appear in the list after a refresh until the
-              backend merges local threads into <code>GET /conversations</code>.
+              This thread is stored locally: it has no Perfox agent behind it, so nothing can be
+              sent from it and it will not appear in the list after a refresh.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-1">

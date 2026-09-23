@@ -6,6 +6,8 @@ import {
   ConversationListResult,
   NewConversationPayload,
   SendMessagePayload,
+  SendOutboundPayload,
+  SendOutboundResult,
   UnreadCount,
 } from '../types/conversation.types';
 
@@ -92,7 +94,34 @@ export const conversationService = {
     return response.data;
   },
 
-  /** Append a message to a thread. Returns the updated thread. */
+  /**
+   * Send for real, through Perfox.
+   *
+   * Admin or Editor only. The server re-checks everything the composer checks —
+   * the agent exists, is published, has a trigger for that channel, and the
+   * customer holds the matching address — and answers 409 with the specific
+   * reason, so a caller that skips the UI cannot send where the UI would not.
+   *
+   * A resolved promise is **not** delivery: read `sendAuthorized` before
+   * showing the message as sent.
+   */
+  async sendOutbound(id: string, payload: SendOutboundPayload): Promise<SendOutboundResult> {
+    const response = await client.post<SendOutboundResult>(
+      `/conversations/${encodeURIComponent(id)}/send`,
+      payload
+    );
+    if (!response.data) {
+      throw new Error(response.message || 'The message could not be sent');
+    }
+    return { ...response.data, message: response.message };
+  },
+
+  /**
+   * Append a message to this thread **locally**.
+   *
+   * Nothing leaves the building: it is a record on the thread, not a message to
+   * the customer. Use `sendOutbound` to actually reach them.
+   */
   async sendMessage(id: string, payload: SendMessagePayload): Promise<ConversationItem> {
     const response = await client.post<ConversationItem>(
       `/conversations/${encodeURIComponent(id)}/messages`,

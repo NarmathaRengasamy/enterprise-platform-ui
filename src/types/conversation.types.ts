@@ -64,10 +64,24 @@ export interface ConversationItem {
       agent filter uses. Empty for a thread started in this UI. */
   agentId?: string;
   agentName?: string;
-  /** The channels that agent is integrated with. This, not the customer's phone
-      or email, decides what the composer may offer: holding a number does not
-      mean there is an SMS integration to send through. */
+  /** Perfox's own vocabulary: published | paused | draft. Only a published
+      agent can send, which is enforced server-side with a 409. */
+  agentStatus?: string;
+  /** How conversations with this agent START, as the cached agent list reports
+      it. **Not** the composer's gate: that list does not report every trigger an
+      agent has, so gating on it hides channels that would work. */
   agentChannels?: string[];
+  /** The sender nodes wired on the agent's canvas — how it *could* reach out.
+      Informational; the send route does not check it. */
+  agentSenderChannels?: string[];
+  /**
+   * The channels named by trigger nodes on the agent's own graph, and the one
+   * thing the composer may gate on — it is the same list the send route checks.
+   *
+   * **Detail response only.** Reading it costs one Perfox call per agent, so no
+   * list row carries it: the composer can only be gated once a thread is open.
+   */
+  agentTriggerChannels?: string[];
 
   /** A Perfox conversation carries only a `customer_id`; the backend resolves
       the record and folds these in so a row can name who it is about. */
@@ -146,4 +160,34 @@ export interface SendMessagePayload {
   sender?: 'me' | 'them' | 'system';
   channel?: string;
   attachment?: ConversationAttachment;
+}
+
+/** The channels a reply can actually go out on. `phone` is not among them:
+    Perfox opens a new conversation for a call, so it is not a reply here. */
+export type OutboundChannel = 'whatsapp' | 'sms' | 'email';
+
+export interface SendOutboundPayload {
+  channel: OutboundChannel;
+  text: string;
+}
+
+export interface SendOutboundResult {
+  /** Perfox opens a **new** conversation for an outbound message, so this is
+      not necessarily the thread it was sent from. */
+  conversationId: string;
+  executionId: string;
+  status: string;
+  channel: string;
+  /**
+   * Whether it will actually go out.
+   *
+   * A 200 only means Perfox accepted the request. `false` means the agent is
+   * not authorized to send on that channel, so the customer receives nothing —
+   * it must be surfaced, never shown as sent.
+   */
+  sendAuthorized: boolean;
+  /** The address it was sent to, from the customer record. */
+  to: string;
+  /** The server's own wording, which explains an unauthorized send. */
+  message?: string;
 }
