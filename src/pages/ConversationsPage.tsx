@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../components/common';
 import { conversationService } from '../services/conversation.service';
 import type {
+  ConversationAgentOption,
   ConversationItem,
   ConversationMessage,
+  ConversationSource,
   NewConversationPayload
 } from '../types/conversation.types';
 import { clockTime, dayKey, dayLabel, fullTimestamp, relativeLabel } from '../utils/datetime';
@@ -49,6 +51,17 @@ const CHANNEL_TABS = [
   { key: 'web', label: 'Web' },
   { key: 'whatsapp', label: 'WhatsApp' },
   { key: 'voice', label: 'Phone' },
+  { key: 'sms', label: 'SMS' },
+  { key: 'email', label: 'Email' }
+];
+
+/* The channels a reply could go out on. Which of them are offered for a given
+   thread is data-driven — see `channelOptions` — but that it is these three is
+   not: a channel Perfox adds later would arrive in `agentChannels` and never
+   render until it is listed here. `web` and `voice` are deliberately absent;
+   the widget has no outbound address and a call is the Call button. */
+const SENDABLE = [
+  { key: 'whatsapp', label: 'WhatsApp' },
   { key: 'sms', label: 'SMS' },
   { key: 'email', label: 'Email' }
 ];
@@ -100,6 +113,15 @@ export default function ConversationsPage({
      thread looking empty. The cache is what re-fills it. */
   const transcriptCache = useRef<Map<string, ConversationMessage[]>>(new Map());
 
+  /* Which store answered, and why the live one did not. A list served from the
+     mirror looks exactly like a live one, so it has to say so. */
+  const [source, setSource] = useState<ConversationSource>('perfox');
+  const [sourceError, setSourceError] = useState('');
+
+  /* The agent filter rides on the list response — no separate call. */
+  const [agentOptions, setAgentOptions] = useState<ConversationAgentOption[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState('all');
+
   const [selectedChannelFilter, setSelectedChannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -147,13 +169,22 @@ export default function ConversationsPage({
 
     (async () => {
       try {
-        const rows = await conversationService.getConversations({
-          channel: selectedChannelFilter,
-          search: debouncedSearch
-        });
+        const result = await conversationService.getConversations(
+          {
+            channel: selectedChannelFilter,
+            search: debouncedSearch,
+            agentId: selectedAgentId
+          },
+          { signal }
+        );
         if (signal.aborted) return;
-        setConversations(rows);
-        setTotal(rows.length);
+        setConversations(result.conversations);
+        setTotal(result.total);
+        setSource(result.source);
+        setSourceError(result.sourceError);
+        /* The options are counted against the channel and search in force but
+           before the agent filter is applied, so they stay switchable. */
+        setAgentOptions(result.agents);
         setVisibleCount(PAGE_SIZE);
         setLoading(false);
       } catch (err: any) {
@@ -166,7 +197,15 @@ export default function ConversationsPage({
     })();
 
     return () => controller.abort();
-  }, [selectedChannelFilter, debouncedSearch]);
+  }, [selectedChannelFilter, debouncedSearch, selectedAgentId]);
+
+  /* An agent that no longer appears under the current channel and search cannot
+     be cleared from a dropdown that no longer lists it, so clear it here. */
+  useEffect(() => {
+    if (selectedAgentId === 'all') return;
+    if (agentOptions.some((a) => a.id === selectedAgentId)) return;
+    setSelectedAgentId('all');
+  }, [agentOptions, selectedAgentId]);
 
   const visibleConversations = useMemo(
     () => conversations.slice(0, visibleCount),
@@ -230,6 +269,20 @@ export default function ConversationsPage({
     return () => controller.abort();
   }, [displayedId]);
 
+  /* Opening a thread reads it. The badge is cleared locally as well as on the
+     server so the row does not sit there looking unread until the next refetch;
+     a failed call is not worth reporting — nothing the operator did failed. */
+  useEffect(() => {
+    if (!displayedId) return;
+    const row = conversations.find((c) => c.id === displayedId);
+    if (!row || row.unread <= 0) return;
+
+    setConversations((prev) =>
+      prev.map((c) => (c.id === displayedId ? { ...c, unread: 0 } : c))
+    );
+    conversationService.markAsRead(displayedId).catch(() => {});
+  }, [displayedId, conversations]);
+
   const activeConvo = useMemo(() => {
     const row = conversations.find((c) => c.id === displayedId);
     if (!row) return EMPTY_CONVO;
@@ -240,19 +293,45 @@ export default function ConversationsPage({
     return cached && cached.length > 0 ? { ...row, messages: cached } : row;
   }, [conversations, displayedId]);
 
-  /* Which channels can actually reach this customer. The Perfox sender nodes
-     target the conversation contact, so with no phone there is nowhere for a
-     WhatsApp or SMS to go, and no address means no email. `web` is the in-app
-     widget — it has no outbound address at all. */
+  /* Which channels the composer may offer.
+
+     The agent that handled the thread decides this, not the customer's contact
+     details: holding a phone number does not mean an SMS integration exists to
+     send through, and `agentChannels` is exactly the list of what that agent is
+     integrated with. It arrives on the list row and again on the thread detail.
+
+     A thread started in this UI has no Perfox agent behind it, so it falls back
+     to the channel it was created with — otherwise a local thread could never be
+     replied to at all.
+
+     Unavailable channels are disabled rather than hidden, so it stays visible
+     that they exist and are simply not wired up. */
   const channelOptions = useMemo(() => {
-    const hasPhone = Boolean(activeConvo.phone);
-    const hasEmail = Boolean(activeConvo.email);
-    return [
-      { key: 'whatsapp', label: 'WhatsApp', available: hasPhone, need: 'a phone number' },
-      { key: 'sms', label: 'SMS', available: hasPhone, need: 'a phone number' },
-      { key: 'email', label: 'Email', available: hasEmail, need: 'an email address' }
-    ];
-  }, [activeConvo.phone, activeConvo.email]);
+    const integrated = (activeConvo.agentChannels ?? []).map((c) => c.toLowerCase());
+    const isLocalThread = !activeConvo.agentId;
+
+    return SENDABLE.map((option) => {
+      const available = isLocalThread
+        ? activeConvo.channel === option.key
+        : integrated.some((c) => c.includes(option.key));
+
+      return {
+        ...option,
+        available,
+        reason: available
+          ? ''
+          : isLocalThread
+            ? `This thread was started on ${activeConvo.channelLabel || 'another channel'}`
+            : `${activeConvo.agentName || 'The agent handling this thread'} is not integrated with ${option.label}`
+      };
+    });
+  }, [
+    activeConvo.agentChannels,
+    activeConvo.agentId,
+    activeConvo.agentName,
+    activeConvo.channel,
+    activeConvo.channelLabel
+  ]);
 
   const activeChannelOption = channelOptions.find((o) => o.key === composerChannel);
   const canSendOnChannel = Boolean(activeChannelOption?.available);
@@ -521,12 +600,55 @@ export default function ConversationsPage({
               </Button>
             ))}
           </div>
+
+          {/* Agent filter. The options come back with the list itself, counted
+              against the channel and search already applied, so each one says
+              how many threads it would actually show. */}
+          {agentOptions.length > 0 && (
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px] pointer-events-none">
+                smart_toy
+              </span>
+              <select
+                value={selectedAgentId}
+                onChange={(e) => setSelectedAgentId(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:bg-surface-container transition-colors appearance-none cursor-pointer"
+              >
+                <option value="all">All agents</option>
+                {agentOptions.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name || agent.id} ({agent.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="h-px bg-surface-container w-full"></div>
 
         {/* Conversation Thread List */}
         <div className="flex-1 overflow-y-auto p-space-xs space-y-1">
+          {/* Served from the local mirror because Perfox could not be reached.
+              Saying nothing here is how a dead thread gets acted on. */}
+          {source === 'local' && !loading && (
+            <div className="m-2 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2">
+              <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">
+                cloud_off
+              </span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="font-label-lg text-label-lg text-amber-900 font-semibold">
+                  Showing a mirrored copy
+                </span>
+                <span className="font-body-sm text-[11px] text-amber-800">
+                  Perfox could not be reached, so these threads come from this workspace's own
+                  copy and may be out of date.
+                  {sourceError ? ` ${sourceError}` : ''}
+                </span>
+              </div>
+            </div>
+          )}
+
           {loadError && (
             <div className="m-2 p-3 rounded-xl bg-error/10 text-error font-body-sm text-body-sm">
               {loadError}
@@ -666,9 +788,36 @@ export default function ConversationsPage({
                 )}
               </div>
               <div className="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm truncate">
+                {/* The agent is resolved server-side from `workflowId`; an id on
+                    its own means nothing to the person reading this. */}
+                {activeConvo.agentName && (
+                  <span className="flex items-center gap-1 shrink-0" title="Agent that handled this thread">
+                    <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+                    {activeConvo.agentName}
+                  </span>
+                )}
+                {activeConvo.agentName && (activeConvo.phone || activeConvo.email) && <span>•</span>}
                 <span>{activeConvo.phone}</span>
                 {activeConvo.phone && activeConvo.email && <span>•</span>}
                 <span className="truncate">{activeConvo.email}</span>
+                {/* Absent from the identified-customer index: everything known
+                    about them is what they said in the thread. */}
+                {activeConvo.id && activeConvo.customerKnown === false && (
+                  <span
+                    className="px-2 py-0.5 rounded-full bg-surface-container text-[10px] font-medium shrink-0"
+                    title="This visitor never identified themselves"
+                  >
+                    Anonymous
+                  </span>
+                )}
+                {(activeConvo.customerTags ?? []).slice(0, 3).map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2 py-0.5 rounded-full bg-primary-container/40 text-on-primary-container text-[10px] font-medium shrink-0"
+                  >
+                    {tag}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -910,8 +1059,8 @@ export default function ConversationsPage({
             </div>
           )}
 
-          {/* Channel Selector Chips — a channel with no address to send to is
-              disabled rather than failing at send time */}
+          {/* Channel Selector Chips — a channel the handling agent is not
+              integrated with is disabled rather than failing at send time */}
           <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
             <span className="text-on-surface-variant font-label-sm text-label-sm mr-1 font-medium">
               Send via:
@@ -923,11 +1072,7 @@ export default function ConversationsPage({
                 size="xs"
                 disabled={!option.available}
                 onClick={() => setComposerChannel(option.key)}
-                title={
-                  option.available
-                    ? `Send over ${option.label}`
-                    : `${activeConvo.name || 'This customer'} has no ${option.need} on file`
-                }
+                title={option.available ? `Send over ${option.label}` : option.reason}
               >
                 {option.label} {composerChannel === option.key ? '(Active)' : ''}
               </Button>
@@ -936,8 +1081,19 @@ export default function ConversationsPage({
 
           {activeConvo.id && !canSendOnChannel && (
             <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
-              No channel can reach this customer — add {channelOptions.map((o) => o.need).join(' or ')}{' '}
-              to their record first.
+              {activeConvo.agentId
+                ? `${activeConvo.agentName || 'The agent handling this thread'} is not integrated with any channel this composer can send on.`
+                : 'This thread was started here, so only the channel it was created with is available.'}
+            </p>
+          )}
+
+          {/* Sending is not wired to Perfox: the message is written to this
+              workspace and the customer never receives it. Saying so beside the
+              box is the difference between a draft and a message believed sent. */}
+          {activeConvo.id && canSendOnChannel && (
+            <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
+              Replies are recorded on this thread only — there is no send endpoint yet, so the
+              customer will not receive them.
             </p>
           )}
 

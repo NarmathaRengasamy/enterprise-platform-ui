@@ -2,6 +2,8 @@ import { client } from './client';
 import {
   ConversationFilters,
   ConversationItem,
+  ConversationListEnvelope,
+  ConversationListResult,
   NewConversationPayload,
   SendMessagePayload,
   UnreadCount,
@@ -11,17 +13,42 @@ export const conversationService = {
   /**
    * List threads, newest first.
    *
+   * Every filter runs on the server — channel, search and agent are query
+   * parameters, not something to do to the returned array.
+   *
    * The endpoint documents `page` / `limit` in Swagger but ignores them — every
    * call returns the whole set — so the caller windows the list itself. Once the
    * backend honours its own paging this can pass the params through.
+   *
+   * The whole envelope is returned, not just `data`: which store answered,
+   * why the live read failed, and the agents present in the list all travel
+   * alongside the rows, and dropping them is how a mirrored copy ends up being
+   * shown as live.
    */
-  async getConversations(filters?: ConversationFilters): Promise<ConversationItem[]> {
+  async getConversations(
+    filters?: ConversationFilters,
+    options?: { signal?: AbortSignal }
+  ): Promise<ConversationListResult> {
     const params: Record<string, string | undefined> = {};
     if (filters?.channel && filters.channel !== 'all') params.channel = filters.channel;
     if (filters?.search) params.search = filters.search;
+    if (filters?.agentId && filters.agentId !== 'all') params.agentId = filters.agentId;
 
-    const response = await client.get<ConversationItem[]>('/conversations', { params });
-    return response.data || [];
+    const response = (await client.get<ConversationItem[]>('/conversations', {
+      ...options,
+      params,
+    })) as ConversationListEnvelope;
+
+    const conversations = response.data || [];
+    return {
+      conversations,
+      total: response.total ?? conversations.length,
+      /* Absent means the response came from a build that predates the field;
+         treating that as `perfox` keeps the bar hidden rather than crying wolf. */
+      source: response.source || 'perfox',
+      sourceError: response.sourceError || '',
+      agents: response.agents || [],
+    };
   },
 
   /** One thread with its full `messages` array. */
