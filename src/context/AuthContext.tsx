@@ -48,7 +48,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     try {
-      setIsLoading(true);
       setError(null);
       const authData = await authService.login(credentials);
       setUser(authData.user);
@@ -57,14 +56,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const msg = err.message || 'Login failed. Please verify your credentials.';
       setError(msg);
       throw err;
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {
     try {
-      setIsLoading(true);
       setError(null);
       const authData = await authService.register(data);
       setUser(authData.user);
@@ -73,8 +69,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const msg = err.message || 'Registration failed. Please try again.';
       setError(msg);
       throw err;
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
