@@ -21,12 +21,32 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const passwordCriteria = {
+    hasMinLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  };
+
+  const isPasswordComplex =
+    passwordCriteria.hasMinLength &&
+    passwordCriteria.hasUppercase &&
+    passwordCriteria.hasLowercase &&
+    passwordCriteria.hasNumber &&
+    passwordCriteria.hasSpecialChar;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (!passwordCriteria.hasMinLength) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (!isPasswordComplex) {
+      setError('Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.');
       return;
     }
 
@@ -186,11 +206,15 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     required
-                    minLength={6}
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min. 6 characters"
-                    className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    placeholder="Min. 8 characters"
+                    className={`w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border ${
+                      password.length > 0 && !isPasswordComplex
+                        ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500/20'
+                        : 'border-surface-container-high focus:border-primary focus:ring-primary/20'
+                    } placeholder:text-outline/60 transition-all focus:outline-none focus:ring-2`}
                   />
                   <button
                     type="button"
@@ -219,7 +243,11 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter password"
-                    className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high placeholder:text-outline/60 transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    className={`w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border ${
+                      confirmPassword && confirmPassword !== password
+                        ? 'border-error focus:border-error focus:ring-error/20'
+                        : 'border-surface-container-high focus:border-primary focus:ring-primary/20'
+                    } placeholder:text-outline/60 transition-all focus:outline-none focus:ring-2`}
                   />
                   <button
                     type="button"
@@ -232,6 +260,50 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                 </div>
               </div>
             </div>
+
+            {/* Live Password Complexity Checklist */}
+            {password.length > 0 && (
+              <div className="p-3 bg-surface-container-low/60 rounded-xl border border-surface-container-high text-xs flex flex-col gap-1.5 animate-fadeIn">
+                <div className="text-[11px] font-semibold text-on-surface-variant flex items-center justify-between">
+                  <span>Password Requirements:</span>
+                  <span className={isPasswordComplex ? 'text-emerald-600 font-bold' : 'text-amber-600 font-medium'}>
+                    {isPasswordComplex ? '✓ Strong password' : 'Must meet all rules'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                  <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength ? 'text-emerald-600 font-medium' : 'text-outline'}`}>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {passwordCriteria.hasMinLength ? 'check_circle' : 'cancel'}
+                    </span>
+                    <span>8+ characters</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-600 font-medium' : 'text-outline'}`}>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {passwordCriteria.hasUppercase ? 'check_circle' : 'cancel'}
+                    </span>
+                    <span>Uppercase (A-Z)</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${passwordCriteria.hasLowercase ? 'text-emerald-600 font-medium' : 'text-outline'}`}>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {passwordCriteria.hasLowercase ? 'check_circle' : 'cancel'}
+                    </span>
+                    <span>Lowercase (a-z)</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${passwordCriteria.hasNumber ? 'text-emerald-600 font-medium' : 'text-outline'}`}>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {passwordCriteria.hasNumber ? 'check_circle' : 'cancel'}
+                    </span>
+                    <span>Number (0-9)</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 col-span-2 ${passwordCriteria.hasSpecialChar ? 'text-emerald-600 font-medium' : 'text-outline'}`}>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {passwordCriteria.hasSpecialChar ? 'check_circle' : 'cancel'}
+                    </span>
+                    <span>Special character (!@#$%^&*...)</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Terms checkbox */}
             <div className="flex items-start gap-2 pt-space-2xs">
