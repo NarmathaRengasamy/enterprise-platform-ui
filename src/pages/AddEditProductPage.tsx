@@ -107,11 +107,11 @@ export default function AddEditProductPage({
           videos: v.videos || [],
           title: v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : 'Standard Package'),
           attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
-          sku: v.sku || `${selectedProduct?.sku || ''}-${(v.value || 'STD').substring(0, 3).toUpperCase()}`,
+          sku: v.sku || `${selectedProduct?.sku || sku || 'PROD001'}-${i + 1}`,
           price: Number(v.price) || 0,
           capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock ?? v.capacity) || 0,
           capacityUnit: v.capacityUnit || 'units',
-          status: v.status || (String(v.stock || '').toLowerCase().includes('low') ? 'Limited' : 'Available')
+          status: v.status || 'Available'
         }))
       : []
   );
@@ -141,9 +141,42 @@ export default function AddEditProductPage({
   const [matrixCapacityUnit, setMatrixCapacityUnit] = useState('units');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
-
-  // Turning variants off discards the whole matrix, so it asks first
   const [isDiscardVariantsOpen, setIsDiscardVariantsOpen] = useState(false);
+
+  // Bulk selection and common pricing
+  const [selectedVariantIndices, setSelectedVariantIndices] = useState<number[]>([]);
+  const [commonPriceInput, setCommonPriceInput] = useState<string>('');
+
+  // Helper to generate the next sequential SKU starting from PROD001
+  const generateNextSku = async (): Promise<string> => {
+    try {
+      const res = await productService.getProducts({ limit: 1000 });
+      const existing = res.data || [];
+      let maxNum = 0;
+      for (const p of existing) {
+        const match = p.sku?.match(/PROD(\d+)/i) || p.sku?.match(/PRD(\d+)/i) || p.sku?.match(/(\d+)/);
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+      const nextNum = maxNum + 1;
+      return `PROD${String(nextNum).padStart(3, '0')}`;
+    } catch {
+      return 'PROD001';
+    }
+  };
+
+  // Auto-generate next SKU (starting from PROD001) for new product
+  useEffect(() => {
+    if (!id && !selectedProductProp && !sku) {
+      generateNextSku().then((nextSku) => {
+        setSku((prev) => (prev ? prev : nextSku));
+      });
+    }
+  }, [id, selectedProductProp]);
 
   // Fetch categories from backend API on mount
   useEffect(() => {
@@ -197,7 +230,7 @@ export default function AddEditProductPage({
                 videos: v.videos || [],
                 title: v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : `Option ${i + 1}`),
                 attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
-                sku: v.sku || `${prod.sku}-${(v.value || 'VAR').substring(0, 3).toUpperCase()}`,
+                sku: v.sku || `${prod.sku}-${i + 1}`,
                 price: Number(v.price) || 0,
                 capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock ?? v.capacity) || 0,
                 capacityUnit: v.capacityUnit || 'units',
@@ -228,9 +261,58 @@ export default function AddEditProductPage({
   const handleConfirmDiscardVariants = () => {
     variants.forEach(releaseVariantMedia);
     setVariants([]);
+    setSelectedVariantIndices([]);
     setHasVariants(false);
     setSaveError('');
     setIsDiscardVariantsOpen(false);
+  };
+
+  // Selection & Bulk Price Logic
+  const isAllVariantsSelected = variants.length > 0 && selectedVariantIndices.length === variants.length;
+  const isSomeVariantsSelected = selectedVariantIndices.length > 0 && !isAllVariantsSelected;
+
+  const handleToggleSelectAllVariants = () => {
+    if (isAllVariantsSelected) {
+      setSelectedVariantIndices([]);
+    } else {
+      setSelectedVariantIndices(variants.map((_, i) => i));
+    }
+  };
+
+  const handleToggleSelectVariant = (index: number) => {
+    setSelectedVariantIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  };
+
+  const handleApplyCommonPrice = (target: 'all' | 'selected' = 'all') => {
+    const parsedPrice = parseFloat(commonPriceInput);
+    if (isNaN(parsedPrice) || parsedPrice < 0) return;
+
+    if (target === 'all' || selectedVariantIndices.length === 0) {
+      setVariants((prev) =>
+        prev.map((v) => ({ ...v, price: parsedPrice }))
+      );
+    } else {
+      const selectedSet = new Set(selectedVariantIndices);
+      setVariants((prev) =>
+        prev.map((v, i) => (selectedSet.has(i) ? { ...v, price: parsedPrice } : v))
+      );
+    }
+
+    // Clear selections and reset input so banner closes automatically
+    setSelectedVariantIndices([]);
+    setCommonPriceInput('');
+  };
+
+  const handleDeleteSelectedVariants = () => {
+    if (selectedVariantIndices.length === 0) return;
+    const indicesSet = new Set(selectedVariantIndices);
+    variants.forEach((v, i) => {
+      if (indicesSet.has(i)) releaseVariantMedia(v);
+    });
+    setVariants((prev) => prev.filter((_, i) => !indicesSet.has(i)));
+    setSelectedVariantIndices([]);
   };
 
   // Inline row editing straight from the combinations table
@@ -282,35 +364,29 @@ export default function AddEditProductPage({
   const handleDeleteVariant = (index) => {
     releaseVariantMedia(variants[index]);
     setVariants(variants.filter((_, idx) => idx !== index));
+    setSelectedVariantIndices((prev) =>
+      prev.filter((idx) => idx !== index).map((idx) => (idx > index ? idx - 1 : idx))
+    );
   };
 
-  /* Only a missing price means "not set up yet". Once a price exists the row is a
-     real offering, so zero stock is a genuine Unavailable rather than incomplete. */
-  const LOW_STOCK_THRESHOLD = 5;
+  const getVariantState = (v: any) => {
+    const s = String(v.status || 'Available').toLowerCase();
 
-  const getVariantState = (v) => {
-    const price = Number(v.price) || 0;
-    const stock = Number(v.capacity) || 0;
-    if (price <= 0) {
-      return { key: 'incomplete', label: 'Needs pricing', tone: 'bg-surface-container text-on-surface-variant', dot: 'bg-outline' };
-    }
-    if (v.status === 'Sold Out' || stock <= 0) {
+    if (s.includes('out') || s.includes('unavail') || s.includes('sold')) {
       return { key: 'unavailable', label: 'Unavailable', tone: 'bg-rose-500/15 text-rose-600', dot: 'bg-rose-500' };
     }
-    if (v.status === 'Limited' || stock <= LOW_STOCK_THRESHOLD) {
+    if (s.includes('limit') || s.includes('low')) {
       return { key: 'limited', label: 'Limited', tone: 'bg-amber-500/15 text-amber-600', dot: 'bg-amber-500' };
     }
     return { key: 'available', label: 'Available', tone: 'bg-emerald-500/15 text-emerald-600', dot: 'bg-emerald-500' };
   };
-
-  const incompleteCount = variants.filter((v) => getVariantState(v).key === 'incomplete').length;
 
   // Open Single Option Modal in Edit Mode
   const handleEditSingle = (index) => {
     const v = variants[index];
     setEditingVariantIndex(index);
     setSingleTitle(v.title || '');
-    setSingleSku(v.sku || `${sku}-${index + 1}`);
+    setSingleSku(v.sku || `${sku || 'PROD001'}-${index + 1}`);
     setSinglePrice(v.price !== undefined ? v.price : '');
     setSingleCapacity(v.capacity !== undefined ? v.capacity : '10');
     setSingleCapacityUnit(v.capacityUnit || 'units');
@@ -327,6 +403,7 @@ export default function AddEditProductPage({
     if (e && e.preventDefault) e.preventDefault();
     if (!singleTitle) return;
 
+    const variantIndex = editingVariantIndex !== null ? editingVariantIndex : variants.length;
     const updatedItem = {
       id: editingVariantIndex !== null ? variants[editingVariantIndex].id : `var-${Date.now()}`,
       images: editingVariantIndex !== null ? variants[editingVariantIndex].images ?? [] : [],
@@ -335,7 +412,7 @@ export default function AddEditProductPage({
       attributes: editingVariantIndex !== null && variants[editingVariantIndex].attributes?.length
         ? variants[editingVariantIndex].attributes
         : [{ name: 'Configuration', value: singleTitle }],
-      sku: singleSku || `${sku}-${variants.length + 1}`,
+      sku: singleSku || `${sku || 'PROD001'}-${variantIndex + 1}`,
       price: Number(singlePrice) || 0,
       capacity: Number(singleCapacity) || 0,
       capacityUnit: singleCapacityUnit || 'units',
@@ -437,15 +514,13 @@ export default function AddEditProductPage({
       }));
 
       const title = combo.join(' · ');
-      const skuSuffix = combo
-        .map((c) => c.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase())
-        .join('-');
+      const variantNumber = idx + 1;
 
       return {
         id: `gen-${Date.now()}-${idx}`,
         title,
         attributes,
-        sku: `${sku}-${skuSuffix}`,
+        sku: `${sku || 'PROD001'}-${variantNumber}`,
         images: [],
         videos: [],
         price: 0,
@@ -456,6 +531,7 @@ export default function AddEditProductPage({
     });
 
     setVariants(generatedVariants);
+    setSelectedVariantIndices([]);
     setIsMatrixModalOpen(false);
   };
 
@@ -537,40 +613,26 @@ export default function AddEditProductPage({
       setSaveError('Title / Service Name is required.');
       return;
     }
-    if (!sku.trim()) {
-      setSaveError('Base Identifier / SKU is required.');
-      return;
-    }
     if (!category) {
       setSaveError('Please select a Domain / Category.');
       return;
     }
 
-    if (hasVariants) {
-      if (variants.length === 0) {
-        setSaveError('Add at least one combination, or turn off "This offering has variants" to use a single price.');
-        return;
-      }
-      if (incompleteCount > 0) {
-        setSaveError(
-          `${incompleteCount} combination${incompleteCount === 1 ? '' : 's'} still ${incompleteCount === 1 ? 'needs' : 'need'} a price.`
-        );
-        return;
-      }
-    } else {
-      if (basePrice === '' || Number(basePrice) <= 0) {
-        setSaveError('Price / Rate must be greater than 0.');
-        return;
-      }
+    if (hasVariants && variants.length === 0) {
+      setSaveError('Add at least one combination, or turn off "This offering has variants" to use a single price.');
+      return;
     }
 
     setIsSaving(true);
     setSaveError('');
 
     try {
-      const normalizeVariantStatus = (statusStr?: string, stockVal?: number) => {
+      const activeSku = sku.trim() || (await generateNextSku());
+      if (!sku.trim()) setSku(activeSku);
+
+      const normalizeVariantStatus = (statusStr?: string) => {
         const s = String(statusStr || '').toLowerCase();
-        if (s.includes('out') || s.includes('unavail') || s.includes('sold') || stockVal === 0) {
+        if (s.includes('out') || s.includes('unavail') || s.includes('sold')) {
           return 'Out of Stock';
         }
         if (s.includes('low') || s.includes('limit')) {
@@ -580,35 +642,39 @@ export default function AddEditProductPage({
       };
 
       const formattedVariants = hasVariants
-        ? variants.map((v) => {
+        ? variants.map((v, idx) => {
             const cap = typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0;
             return {
               option: v.attributes?.[0]?.name || 'Option',
               value: v.attributes?.[0]?.value || v.title || 'Standard',
               title: v.title,
-              sku: v.sku || `${sku.trim()}-${(v.title || 'VAR').substring(0, 3).toUpperCase()}`,
+              sku: v.sku || `${activeSku}-${idx + 1}`,
               price: Number(v.price) || 0,
               stock: cap,
               capacity: cap,
               capacityUnit: v.capacityUnit || 'units',
-              status: normalizeVariantStatus(v.status, cap),
+              status: normalizeVariantStatus(v.status || 'Available'),
               images: v.images || [],
               videos: v.videos || [],
             };
           })
         : [];
 
+      const pricedVariants = formattedVariants
+        .map((v) => Number(v.price) || 0)
+        .filter((n) => n > 0 && isFinite(n));
+
       const computedPrice = hasVariants
-        ? Math.min(...formattedVariants.map((v) => v.price || 0).filter((n) => n > 0)) || 0
-        : Number(basePrice) || 0;
+        ? (pricedVariants.length > 0 ? Math.min(...pricedVariants) : 0)
+        : (isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : 0);
 
       const computedStock = hasVariants
-        ? formattedVariants.reduce((sum, v) => sum + (v.capacity || 0), 0)
-        : Number(flatStock) || 0;
+        ? formattedVariants.reduce((sum, v) => sum + (Number(v.capacity) || 0), 0)
+        : (Number(flatStock) || 0);
 
       const payload: CreateProductInput = {
         name: productName.trim(),
-        sku: sku.trim(),
+        sku: activeSku,
         categoryId: category,
         price: computedPrice,
         stock: computedStock,
@@ -745,18 +811,15 @@ export default function AddEditProductPage({
                   <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="offering-code">
                     Base Identifier / SKU <span className="text-error">*</span>
                   </label>
-                  <div className="relative flex items-center">
-                    <input
-                      id="offering-code"
-                      type="text"
-                      value={sku}
-                      onChange={(e) => setSku(e.target.value)}
-                      placeholder="e.g. SRV-001 or PRD-009"
-                      className="w-full h-[42px] px-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline uppercase focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                      required
-                    />
-                    <span className="material-symbols-outlined absolute right-3 text-outline text-lg pointer-events-none">qr_code_2</span>
-                  </div>
+                  <input
+                    id="offering-code"
+                    type="text"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value)}
+                    placeholder="e.g. PROD001"
+                    className="w-full h-[42px] px-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline uppercase focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    required
+                  />
                 </div>
 
                 {/* Domain / Category */}
@@ -926,6 +989,9 @@ export default function AddEditProductPage({
                         <img
                           src={m.src}
                           alt={m.label}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                         {idx === 0 && (
@@ -1035,10 +1101,10 @@ export default function AddEditProductPage({
             ) : (
               <>
                 <label
-                  className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1 whitespace-nowrap"
+                  className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1.5 whitespace-nowrap"
                   htmlFor="offering-price"
                 >
-                  Price / Rate <span className="text-error">*</span>
+                  Price / Rate <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
                 </label>
                 <div className="relative flex items-center">
                   <span className="absolute left-space-sm font-body-md text-body-md text-on-surface-variant pointer-events-none">
@@ -1052,7 +1118,6 @@ export default function AddEditProductPage({
                     onChange={(e) => setBasePrice(e.target.value)}
                     placeholder="e.g. 3499"
                     className="w-40 h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                    required
                   />
                 </div>
               </>
@@ -1109,12 +1174,6 @@ export default function AddEditProductPage({
                   <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-primary/10 text-primary font-semibold">
                     {variants.length} combination{variants.length === 1 ? '' : 's'}
                   </span>
-                  {incompleteCount > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
-                      {incompleteCount} need{incompleteCount === 1 ? 's' : ''} pricing
-                    </span>
-                  )}
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant">
                   Generate combinations across custom dimensions (e.g. Tiers × Cycles, Rooms × Meal Plans, Services × Turnaround)
@@ -1122,7 +1181,46 @@ export default function AddEditProductPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+            <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
+              {/* Common / Bulk Price Setter — only enabled when items are selected */}
+              {variants.length > 0 && (
+                <div
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border transition-all ${
+                    selectedVariantIndices.length > 0
+                      ? 'bg-surface-container-low/70 border-surface-container-high shadow-xs'
+                      : 'bg-surface-container-low/30 border-surface-container-high/40 opacity-60'
+                  }`}
+                >
+                  <span className="font-caption text-caption text-on-surface-variant font-medium whitespace-nowrap">
+                    Common Price:
+                  </span>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2 text-xs font-semibold text-on-surface-variant pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 500"
+                      disabled={selectedVariantIndices.length === 0}
+                      value={commonPriceInput}
+                      onChange={(e) => setCommonPriceInput(e.target.value)}
+                      className="w-24 h-7 pl-5 pr-2 rounded-lg bg-surface-container-lowest text-on-surface text-xs font-semibold border border-surface-container-high focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCommonPrice('selected')}
+                    disabled={selectedVariantIndices.length === 0 || !commonPriceInput || isNaN(Number(commonPriceInput))}
+                    className="px-2.5 py-1 rounded-lg bg-primary text-on-primary font-semibold text-xs hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1"
+                    title={selectedVariantIndices.length > 0 ? `Apply price to ${selectedVariantIndices.length} selected items` : 'Select items to enable common price'}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">price_check</span>
+                    <span>Apply ({selectedVariantIndices.length})</span>
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={handleOpenMatrixModal}
@@ -1135,14 +1233,57 @@ export default function AddEditProductPage({
             </div>
           </div>
 
-
+          {/* Bulk Selection Action Banner */}
+          {selectedVariantIndices.length > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-primary/10 border border-primary/25 rounded-xl text-on-surface animate-in fade-in duration-150 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-[11px]">
+                  {selectedVariantIndices.length}
+                </span>
+                <span className="font-label-md text-label-md font-semibold text-primary">
+                  {selectedVariantIndices.length} of {variants.length} combinations selected
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAllVariants}
+                  className="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-xs transition-colors cursor-pointer"
+                >
+                  {isAllVariantsSelected ? 'Deselect All' : 'Select All'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedVariants}
+                  className="px-2.5 py-1 rounded-lg bg-error-container text-on-error-container hover:bg-error-container/80 font-label-sm text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                  Delete ({selectedVariantIndices.length})
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Universal Combinations Table */}
           <div className="w-full overflow-x-auto rounded-xl border border-surface-container-high shadow-xs">
             <table className="w-full text-left text-on-surface min-w-[980px]">
               <thead className="bg-surface-container font-caption text-caption text-on-surface-variant uppercase tracking-wider border-b border-surface-container-high">
                 <tr>
-                  <th className="py-3 pl-space-lg pr-space-2xs font-semibold w-12" scope="col">S.No</th>
+                  <th className="py-3 pl-space-lg pr-space-2xs font-semibold w-20" scope="col">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isAllVariantsSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = isSomeVariantsSelected;
+                        }}
+                        onChange={handleToggleSelectAllVariants}
+                        className="w-4 h-4 rounded text-primary border-surface-container-high focus:ring-primary/20 cursor-pointer accent-primary"
+                        title="Select All Combinations"
+                      />
+                      <span>S.No</span>
+                    </div>
+                  </th>
                   <th className="py-3 px-space-sm font-semibold w-32" scope="col">Images</th>
                   <th className="py-3 px-space-sm font-semibold w-32" scope="col">Videos</th>
                   <th className="py-3 px-space-sm font-semibold" scope="col">Option Descriptor / Dimensions</th>
@@ -1179,15 +1320,29 @@ export default function AddEditProductPage({
                   </tr>
                 ) : (
                   variants.map((v, i) => (
-                    <tr key={v.id || i} className="hover:bg-surface-container-low/40 transition-colors align-top">
-                      {/* Serial Number */}
+                    <tr
+                      key={v.id || i}
+                      className={`transition-colors align-top ${
+                        selectedVariantIndices.includes(i)
+                          ? 'bg-primary/5'
+                          : 'hover:bg-surface-container-low/40'
+                      }`}
+                    >
+                      {/* Serial Number & Row Checkbox */}
                       <td className="py-3.5 pl-space-lg pr-space-2xs font-title-sm text-title-sm text-on-surface-variant font-semibold tabular-nums">
-                        {i + 1}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedVariantIndices.includes(i)}
+                            onChange={() => handleToggleSelectVariant(i)}
+                            className="w-4 h-4 rounded text-primary border-surface-container-high focus:ring-primary/20 cursor-pointer accent-primary"
+                            title={`Select row ${i + 1}`}
+                          />
+                          <span>{i + 1}</span>
+                        </div>
                       </td>
 
-                      {/* Per-combination images — the table takes the cover shot only;
-                          any further image is added from the Edit dialog, and its
-                          count rides in the corner of the cover thumbnail */}
+                      {/* Per-combination images */}
                       <td className="py-3.5 px-space-sm">
                         {(v.images || []).length === 0 ? (
                           <label
@@ -1217,6 +1372,9 @@ export default function AddEditProductPage({
                             <img
                               src={v.images[0]}
                               alt={v.title}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                              }}
                               className="w-full h-full rounded-lg object-cover border border-surface-container-high"
                             />
                             {v.images.length > 1 && (
@@ -1228,8 +1386,7 @@ export default function AddEditProductPage({
                         )}
                       </td>
 
-                      {/* Per-combination videos — add tile plus one marker whose corner
-                          carries the count of the rest */}
+                      {/* Per-combination videos */}
                       <td className="py-3.5 px-space-sm">
                         <div className="flex items-center gap-1.5">
                           {(v.videos || []).length > 0 && (
@@ -1299,14 +1456,16 @@ export default function AddEditProductPage({
                         </span>
                       </td>
 
-                      {/* Price / Commercial Rate */}
+                      {/* Price / Commercial Rate (Static Display) */}
                       <td className="py-3.5 px-space-sm">
                         {Number(v.price) > 0 ? (
                           <span className="font-bold text-on-surface text-base">
                             ₹ {Number(v.price).toLocaleString()}.00
                           </span>
                         ) : (
-                          <span className="font-body-sm text-body-sm text-outline italic">Not set</span>
+                          <span className="font-body-sm text-body-sm text-on-surface-variant font-mono">
+                            ₹ 0.00
+                          </span>
                         )}
                       </td>
 
@@ -1320,17 +1479,25 @@ export default function AddEditProductPage({
                         </span>
                       </td>
 
-                      {/* Status Badge — derived from what has actually been filled in */}
+                      {/* Status Selector in Table Row */}
                       <td className="py-3.5 px-space-sm">
-                        {(() => {
-                          const state = getVariantState(v);
-                          return (
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-label-sm font-semibold ${state.tone}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${state.dot}`}></span>
-                              {state.label}
-                            </span>
-                          );
-                        })()}
+                        <select
+                          value={
+                            String(v.status || '').toLowerCase().includes('out') || String(v.status || '').toLowerCase().includes('unavail') || String(v.status || '').toLowerCase().includes('sold')
+                              ? 'Unavailable'
+                              : String(v.status || '').toLowerCase().includes('low') || String(v.status || '').toLowerCase().includes('limit')
+                              ? 'Limited'
+                              : 'Available'
+                          }
+                          onChange={(e) => handleVariantField(i, 'status', e.target.value)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
+                            getVariantState(v).tone
+                          }`}
+                        >
+                          <option value="Available">Available</option>
+                          <option value="Limited">Limited</option>
+                          <option value="Unavailable">Unavailable</option>
+                        </select>
                       </td>
 
                       {/* Action Buttons */}
@@ -1785,12 +1952,12 @@ export default function AddEditProductPage({
 
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Commercial Rate / Price (₹) <span className="text-error">*</span>
+                    Price (₹) <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
                   </label>
                   <input
                     type="number"
-                    required
-                    placeholder="e.g. 4999"
+                    min="0"
+                    placeholder="e.g. 4999 (0 if unpriced)"
                     value={singlePrice}
                     onChange={(e) => setSinglePrice(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md"
@@ -1836,13 +2003,19 @@ export default function AddEditProductPage({
                     Status
                   </label>
                   <select
-                    value={singleStatus}
+                    value={
+                      String(singleStatus || '').toLowerCase().includes('out') || String(singleStatus || '').toLowerCase().includes('unavail') || String(singleStatus || '').toLowerCase().includes('sold')
+                        ? 'Unavailable'
+                        : String(singleStatus || '').toLowerCase().includes('low') || String(singleStatus || '').toLowerCase().includes('limit')
+                        ? 'Limited'
+                        : 'Available'
+                    }
                     onChange={(e) => setSingleStatus(e.target.value)}
                     className="w-full h-11 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md cursor-pointer"
                   >
                     <option value="Available">Available</option>
                     <option value="Limited">Limited</option>
-                    <option value="Sold Out">Unavailable</option>
+                    <option value="Unavailable">Unavailable</option>
                   </select>
                 </div>
               </div>
