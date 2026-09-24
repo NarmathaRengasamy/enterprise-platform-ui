@@ -110,6 +110,48 @@ export const knowledgeService = {
   },
 
   /**
+   * Create and upload a Markdown article directly from text.
+   * Corresponds to POST /api/v1/knowledge/files
+   */
+  async createMarkdownFile(payload: {
+    name: string;
+    content: string;
+    folderId?: string;
+  }): Promise<KbFile> {
+    const res = await client.post<{ file: KbFile }>('/knowledge/files', payload);
+    if (!res.data?.file) {
+      throw new Error(res.message || 'Failed to upload markdown file');
+    }
+    return res.data.file;
+  },
+
+  /**
+   * Rename an existing knowledge base folder.
+   * Corresponds to PATCH /api/v1/knowledge/folders/:id
+   */
+  async renameFolder(id: string, name: string): Promise<KbFolder> {
+    const res = await client.patch<{ folder: KbFolder }>(
+      `/knowledge/folders/${encodeURIComponent(id)}`,
+      { name }
+    );
+    if (!res.data?.folder) {
+      throw new Error(res.message || 'Failed to rename folder');
+    }
+    return res.data.folder;
+  },
+
+  /**
+   * Delete an empty folder from the knowledge base.
+   * Corresponds to DELETE /api/v1/knowledge/folders/:id
+   */
+  async deleteFolder(id: string): Promise<{ id: string; deleted: boolean; affectedAgents?: string[] }> {
+    const res = await client.delete<{ id: string; deleted: boolean; affectedAgents?: string[] }>(
+      `/knowledge/folders/${encodeURIComponent(id)}`
+    );
+    return res.data || { id, deleted: true };
+  },
+
+  /**
    * Delete a knowledge base file by ID.
    * Corresponds to DELETE /api/v1/knowledge/files/:id
    */

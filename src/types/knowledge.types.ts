@@ -18,8 +18,10 @@ export interface KbFolder {
   name: string;
   parentId: string | null;
   path: string;
+  depth?: number;
+  displayPath?: string;
   fileCount: number;
-  summary: string;
+  summary?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +37,18 @@ export interface KnowledgeStats {
 export interface CreateFolderInput {
   name: string;
   parentId?: string;
+}
+
+export interface CreateMarkdownFileInput {
+  name: string;
+  content: string;
+  folderId?: string;
+}
+
+export interface DeleteFolderResult {
+  id: string;
+  deleted: boolean;
+  affectedAgents?: string[];
 }
 
 export interface GenerateCatalogInput {
