@@ -568,20 +568,34 @@ export default function AddEditProductPage({
     setSaveError('');
 
     try {
+      const normalizeVariantStatus = (statusStr?: string, stockVal?: number) => {
+        const s = String(statusStr || '').toLowerCase();
+        if (s.includes('out') || s.includes('unavail') || s.includes('sold') || stockVal === 0) {
+          return 'Out of Stock';
+        }
+        if (s.includes('low') || s.includes('limit')) {
+          return 'Low Stock';
+        }
+        return 'In Stock';
+      };
+
       const formattedVariants = hasVariants
-        ? variants.map((v) => ({
-            option: v.attributes?.[0]?.name || 'Option',
-            value: v.attributes?.[0]?.value || v.title || 'Standard',
-            title: v.title,
-            sku: v.sku || `${sku.trim()}-${(v.title || 'VAR').substring(0, 3).toUpperCase()}`,
-            price: Number(v.price) || 0,
-            stock: typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0,
-            capacity: typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0,
-            capacityUnit: v.capacityUnit || 'units',
-            status: v.status || 'Available',
-            images: v.images || [],
-            videos: v.videos || [],
-          }))
+        ? variants.map((v) => {
+            const cap = typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0;
+            return {
+              option: v.attributes?.[0]?.name || 'Option',
+              value: v.attributes?.[0]?.value || v.title || 'Standard',
+              title: v.title,
+              sku: v.sku || `${sku.trim()}-${(v.title || 'VAR').substring(0, 3).toUpperCase()}`,
+              price: Number(v.price) || 0,
+              stock: cap,
+              capacity: cap,
+              capacityUnit: v.capacityUnit || 'units',
+              status: normalizeVariantStatus(v.status, cap),
+              images: v.images || [],
+              videos: v.videos || [],
+            };
+          })
         : [];
 
       const computedPrice = hasVariants
