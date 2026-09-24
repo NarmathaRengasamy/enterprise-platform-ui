@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { INITIAL_PRODUCTS } from '../data/mockData';
 import { Product } from '../types';
-import { Button, Icon, StatusBadge } from '../components/common';
+import { productsApi } from '../api';
+import { useApi } from '../hooks/useApi';
+import { Button, Icon, StatusBadge, LoadingState, ErrorState } from '../components/common';
 
 interface ProductDetailsPageProps {
   setActiveModule: (module: string) => void;
@@ -9,20 +10,39 @@ interface ProductDetailsPageProps {
 }
 
 export default function ProductDetailsPage({ setActiveModule, selectedProduct }: ProductDetailsPageProps) {
-  const product = selectedProduct || (INITIAL_PRODUCTS[0] as Product);
+  /* The list hands over a row, but the detail view needs gallery/videos/variants —
+     so it always re-reads the full record by id. */
+  const detail = useApi(
+    () => (selectedProduct?.id ? productsApi.get(selectedProduct.id) : Promise.resolve(null)),
+    [selectedProduct?.id]
+  );
+
+  const product = (detail.data || selectedProduct) as Product | null;
+
   const [selectedThumbIndex, setSelectedThumbIndex] = useState(0);
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
   const [selectedVariant, setSelectedVariant] = useState('');
   const [copiedSku, setCopiedSku] = useState(false);
 
   useEffect(() => {
+    if (!product) return;
     setSelectedThumbIndex(0);
     if (product.variants && product.variants.length > 0) {
       setSelectedVariant(product.variants[0].value);
     } else {
       setSelectedVariant('Standard');
     }
-  }, [product.id]);
+  }, [product?.id]);
+
+  if (detail.loading && !product) return <LoadingState label="Loading product…" />;
+  if (!product) {
+    return (
+      <ErrorState
+        message={detail.error || 'No product selected.'}
+        onRetry={() => setActiveModule('products')}
+      />
+    );
+  }
 
   const gallery = (product as any).gallery || [
     { id: 0, label: "Front", src: product.image },
@@ -215,7 +235,7 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct }:
                 <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">
                   {product.name}
                 </h1>
-                <StatusBadge status={product.stockStatus} />
+                <StatusBadge status={product.stockStatus || 'Unspecified'} />
               </div>
               {/* SKU Meta Tag */}
               <div className="flex items-center gap-space-2xs">
@@ -241,7 +261,9 @@ export default function ProductDetailsPage({ setActiveModule, selectedProduct }:
                 <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Retail Price</span>
                 <div className="flex items-baseline gap-space-xs mt-0.5">
                   <span className="font-display-lg text-display-lg text-primary font-bold tracking-tight">
-                    ₹{product.price.toLocaleString()}
+                    {typeof product.price === 'number'
+                      ? `₹${product.price.toLocaleString()}`
+                      : 'Not priced'}
                   </span>
                   {(product as any).originalPrice && (
                     <span className="font-body-sm text-body-sm text-outline line-through">

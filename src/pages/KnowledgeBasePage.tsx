@@ -1,1039 +1,850 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { INITIAL_ARTICLES, INITIAL_COLLECTIONS } from '../data/mockData';
+import React, { useEffect, useMemo, useState } from 'react';
+import { knowledgeApi, KbFile } from '../api';
+import { useApi } from '../hooks/useApi';
+import ImportFilesModal from '../components/knowledge/ImportFilesModal';
 import {
   Button,
   MetricsCard,
-  Pagination,
   Icon,
-  SearchInput
+  SearchInput,
+  StatusBadge,
+  LoadingState,
+  ErrorState,
+  ErrorBanner
 } from '../components/common';
 
-export default function KnowledgeBasePage() {
-  const [activeTab, setActiveTab] = useState<'kb' | 'collections'>('kb');
-  const [articles, setArticles] = useState([
-    {
-      id: 'art-1',
-      title: 'How to place an order',
-      category: 'Orders',
-      categoryColor: 'primary',
-      readTime: '4 min read',
-      visibility: 'Public article',
-      updated: '10 Sep 2026',
-      icon: 'shopping_bag',
-      iconBg: 'bg-primary-container/10 text-primary',
-      catBg: 'bg-surface-container text-primary',
-      views: '2,420'
-    },
-    {
-      id: 'art-2',
-      title: 'Shipping information',
-      category: 'Shipping',
-      categoryColor: 'secondary',
-      readTime: '2 min read',
-      visibility: 'Public article',
-      updated: '09 Sep 2026',
-      icon: 'local_shipping',
-      iconBg: 'bg-secondary-container/20 text-secondary',
-      catBg: 'bg-secondary-container/30 text-on-secondary-container',
-      views: '1,890'
-    },
-    {
-      id: 'art-3',
-      title: 'FAQ',
-      category: 'General',
-      categoryColor: 'tertiary',
-      readTime: '6 min read',
-      visibility: 'Pinned',
-      updated: '08 Sep 2026',
-      icon: 'quiz',
-      iconBg: 'bg-tertiary-fixed/40 text-tertiary',
-      catBg: 'bg-tertiary-fixed/30 text-tertiary',
-      views: '4,120'
-    }
-  ]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isCreateArticleOpen, setIsCreateArticleOpen] = useState(false);
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+/* `text/markdown` is the only type this page creates, but the folder may hold
+   anything that was uploaded to Perfox directly, so the label is derived rather
+   than assumed. */
+const MIME_LABELS: Record<string, string> = {
+  'text/markdown': 'Markdown',
+  'text/plain': 'Plain text',
+  'text/csv': 'CSV',
+  'application/pdf': 'PDF',
+  'application/json': 'JSON',
+  'application/msword': 'Word',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word'
+};
 
-  // Selection state
-  const [selectedArticleIds, setSelectedArticleIds] = useState<string[]>([]);
+const mimeLabel = (mimeType: string): string => {
+  if (!mimeType) return 'Unknown';
+  return MIME_LABELS[mimeType] || mimeType.split('/').pop()?.toUpperCase() || mimeType;
+};
 
-  // Table Options state
-  const [isTableOptionsOpen, setIsTableOptionsOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState({
-    category: true,
-    views: true,
-    updated: true,
-    actions: true
+const mimeIcon = (mimeType: string): string => {
+  if (mimeType === 'application/pdf') return 'picture_as_pdf';
+  if (mimeType.startsWith('text/')) return 'description';
+  if (mimeType.startsWith('image/')) return 'image';
+  return 'draft';
+};
+
+const formatSize = (bytes: number): string => {
+  if (!bytes) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatDate = (iso: string): string => {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   });
-  const [tableDensity, setTableDensity] = useState<'comfortable' | 'compact'>('comfortable');
-  const [tableSortBy, setTableSortBy] = useState('default');
+};
 
-  const tableOptionsRef = useRef<HTMLDivElement>(null);
+/* Mirrors the server's own rule so the dialog can show the name that will
+   actually be written, rather than leaving the user to guess. */
+const previewFileName = (name: string): string => {
+  const cleaned = name
+    .trim()
+    .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/, '')
+    .trim();
+  const base = cleaned || 'untitled';
+  return /\.md$/i.test(base) ? base : `${base}.md`;
+};
 
-  // Close table options dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (tableOptionsRef.current && !tableOptionsRef.current.contains(e.target as Node)) {
-        setIsTableOptionsOpen(false);
-      }
-    };
-    if (isTableOptionsOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isTableOptionsOpen]);
+export default function KnowledgeBasePage() {
+  /* Browsed one level at a time: '' is the root of the knowledge base. Perfox
+     scopes its file listing the same way, so a level is one request rather than
+     a walk of the whole tree. */
+  const [currentFolderId, setCurrentFolderId] = useState('');
 
-  // New Article Form
-  const [newTitle, setNewTitle] = useState('');
-  const [newCat, setNewCat] = useState('Orders');
+  /* Perfox pages the file listing with a forward-only cursor, so the page grows
+     by appending rather than jumping between numbered pages. */
+  const PAGE_SIZE = 50;
+
+  const filesState = useApi(
+    () => knowledgeApi.listFiles(currentFolderId, { limit: PAGE_SIZE }),
+    [currentFolderId]
+  );
+
+  /* Pages fetched after the first, kept apart from it so a refetch of page one
+     does not have to know about them. */
+  const [extraFiles, setExtraFiles] = useState<KbFile[]>([]);
+  const [cursor, setCursor] = useState('');
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const statsState = useApi(() => knowledgeApi.stats(), []);
+  const foldersState = useApi(() => knowledgeApi.listFolders(), []);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastUploaded, setLastUploaded] = useState('');
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  /* The file awaiting confirmation, so a delete is never one stray click. */
+  const [pendingDelete, setPendingDelete] = useState<KbFile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  /* Folder actions. Renaming edits in place; deleting is confirmed, and Perfox
+     refuses while the folder still holds anything. */
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [folderToDelete, setFolderToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
+  const [folderNotice, setFolderNotice] = useState('');
+
+  const [newName, setNewName] = useState('');
   const [newContent, setNewContent] = useState('');
+  /* Empty means the root of the knowledge base — there is no fixed folder. */
+  const [newFolderId, setNewFolderId] = useState('');
 
-  // Option B Form State
-  const [includeProducts, setIncludeProducts] = useState(true);
-  const [includeCategories, setIncludeCategories] = useState(true);
-  const [includePolicies, setIncludePolicies] = useState(true);
-  const [selectedTemplate, setSelectedTemplate] = useState('Structured Q&A / FAQ Markdown');
-  const [isGeneratingDocs, setIsGeneratingDocs] = useState(false);
-  const [generationSuccess, setGenerationSuccess] = useState(false);
+  /* The first page plus everything loaded after it. Deduplicated by id: a file
+     uploaded mid-browse can arrive in a later page as well as in the local
+     merge on page one. */
+  const files = useMemo(() => {
+    const merged = [...(filesState.data?.files || []), ...extraFiles];
+    const byId = new Map<string, KbFile>();
+    merged.forEach((file) => byId.set(file.id, file));
+    return [...byId.values()];
+  }, [filesState.data, extraFiles]);
 
-  // Filtered & Sorted Articles
-  const filteredArticles = articles
-    .filter((a) => {
-      const matchesSearch =
-        a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.category.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || a.category === selectedCategory;
-      return matchesSearch && matchesCategory;
-    })
-    .sort((a, b) => {
-      if (tableSortBy === 'title-asc') return a.title.localeCompare(b.title);
-      if (tableSortBy === 'views-desc') {
-        const aViews = parseInt(a.views.replace(/,/g, ''), 10) || 0;
-        const bViews = parseInt(b.views.replace(/,/g, ''), 10) || 0;
-        return bViews - aViews;
-      }
-      return 0;
-    });
+  /* Reset whenever the first page is replaced — a different folder, or a
+     refresh — otherwise an old folder's pages would linger below the new one. */
+  useEffect(() => {
+    setExtraFiles([]);
+    setCursor(filesState.data?.nextCursor ?? '');
+  }, [filesState.data]);
 
-  // Select All Handlers
-  const isAllSelected =
-    filteredArticles.length > 0 &&
-    filteredArticles.every((a) => selectedArticleIds.includes(a.id));
-  const isSomeSelected = selectedArticleIds.length > 0 && !isAllSelected;
-
-  const handleToggleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedArticleIds([]);
-    } else {
-      setSelectedArticleIds(filteredArticles.map((a) => a.id));
+  const loadMore = async () => {
+    if (!cursor || isLoadingMore) return;
+    setIsLoadingMore(true);
+    setSaveError('');
+    try {
+      const page = await knowledgeApi.listFiles(currentFolderId, {
+        limit: PAGE_SIZE,
+        cursor,
+      });
+      setExtraFiles((current) => [...current, ...(page.files ?? [])]);
+      setCursor(page.nextCursor ?? '');
+    } catch (err) {
+      setSaveError(err?.message || 'Could not load more files.');
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
-  const handleToggleSelectArticle = (id: string) => {
-    setSelectedArticleIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+  const stats = statsState.data;
+  const allFolders = foldersState.data?.folders || [];
+
+  /* Only the folders that sit at the level being viewed. */
+  const visibleFolders = useMemo(
+    () =>
+      allFolders.filter((folder) =>
+        currentFolderId ? folder.parentId === currentFolderId : !folder.parentId
+      ),
+    [allFolders, currentFolderId]
+  );
+
+  const currentFolder = allFolders.find((folder) => folder.id === currentFolderId);
+
+  /* How many subfolders each folder holds, so a card can say it has more inside
+     rather than looking empty when its files are all one level down. */
+  const childCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    allFolders.forEach((folder) => {
+      if (!folder.parentId) return;
+      counts.set(folder.parentId, (counts.get(folder.parentId) ?? 0) + 1);
+    });
+    return counts;
+  }, [allFolders]);
+
+  /* Root -> … -> here, walked up by parentId so a nested folder still shows its
+     way back. */
+  const breadcrumb = useMemo(() => {
+    const trail: { id: string; name: string }[] = [];
+    let node = currentFolder;
+    while (node) {
+      trail.unshift({ id: node.id, name: node.name });
+      node = allFolders.find((folder) => folder.id === node?.parentId);
+    }
+    return trail;
+  }, [currentFolder, allFolders]);
+
+  const openFolder = (folderId: string) => {
+    setCurrentFolderId(folderId);
+    setSearchQuery('');
   };
 
-  const handleBulkDelete = () => {
-    setArticles((prev) => prev.filter((a) => !selectedArticleIds.includes(a.id)));
-    setSelectedArticleIds([]);
+  /* Filtered in the browser: the folder holds a handful of files and the API has
+     no search parameter, so a round trip per keystroke would buy nothing. */
+  const visibleFiles = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) return files;
+    return files.filter((file: KbFile) => file.name.toLowerCase().includes(term));
+  }, [files, searchQuery]);
+
+  const refresh = () => {
+    filesState.refetch();
+    statsState.refetch();
+    foldersState.refetch();
   };
 
-  const handleCreateArticleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle) return;
+  const handleRenameFolder = async () => {
+    if (!renaming) return;
+    const name = renaming.name.trim();
+    if (!name) return;
 
-    const newArticle = {
-      id: `art-${Date.now()}`,
-      title: newTitle,
-      category: newCat,
-      categoryColor: newCat === 'Orders' ? 'primary' : newCat === 'Shipping' ? 'secondary' : 'tertiary',
-      readTime: '3 min read',
-      visibility: 'Public article',
-      updated: 'Just now',
-      icon: newCat === 'Orders' ? 'shopping_bag' : newCat === 'Shipping' ? 'local_shipping' : 'quiz',
-      iconBg: newCat === 'Orders' ? 'bg-primary-container/10 text-primary' : newCat === 'Shipping' ? 'bg-secondary-container/20 text-secondary' : 'bg-tertiary-fixed/40 text-tertiary',
-      catBg: newCat === 'Orders' ? 'bg-surface-container text-primary' : newCat === 'Shipping' ? 'bg-secondary-container/30 text-on-secondary-container' : 'bg-tertiary-fixed/30 text-tertiary',
-      views: '0'
-    };
+    setSaveError('');
+    setIsRenaming(true);
+    try {
+      await knowledgeApi.renameFolder(renaming.id, name);
+      setRenaming(null);
+      foldersState.refetch();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not rename the folder.');
+    } finally {
+      setIsRenaming(false);
+    }
+  };
 
-    setArticles([newArticle, ...articles]);
-    setNewTitle('');
+  const handleDeleteFolder = async () => {
+    if (!folderToDelete) return;
+
+    setSaveError('');
+    setIsDeletingFolder(true);
+    try {
+      const result = await knowledgeApi.deleteFolder(folderToDelete.id);
+      /* Perfox names what was drawing on it, so the consequence is stated
+         rather than left to be discovered. */
+      setFolderNotice(
+        result.affectedAgents?.length
+          ? `"${folderToDelete.name}" deleted — ${result.affectedAgents.join(', ')} no longer answer from it.`
+          : `"${folderToDelete.name}" deleted.`
+      );
+      setFolderToDelete(null);
+      /* Standing inside the folder that just went is a dead end. */
+      if (currentFolderId === folderToDelete.id) setCurrentFolderId('');
+      refresh();
+    } catch (err) {
+      /* A 409 is the folder still holding something — the message already says
+         what to clear out, so it is shown as-is. */
+      setSaveError(err?.message || 'Could not delete the folder.');
+      setFolderToDelete(null);
+    } finally {
+      setIsDeletingFolder(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setSaveError('');
+    setIsDeleting(true);
+    try {
+      await knowledgeApi.deleteFile(pendingDelete.id);
+      setPendingDelete(null);
+      refresh();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not delete the file.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const closeCreate = () => {
+    setIsCreateOpen(false);
+    setNewName('');
     setNewContent('');
-    setIsCreateArticleOpen(false);
   };
 
-  const handleDeleteArticle = (id: string) => {
-    setArticles(articles.filter((a) => a.id !== id));
-    setSelectedArticleIds((prev) => prev.filter((item) => item !== id));
-    setOpenActionMenuId(null);
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || !newContent.trim()) return;
+
+    setSaveError('');
+    setIsSaving(true);
+    try {
+      const created = await knowledgeApi.createMarkdownFile({
+        ...(newFolderId ? { folderId: newFolderId } : {}),
+        name: newName,
+        content: newContent
+      });
+      /* Perfox indexes asynchronously, so the row lands with a non-active status
+         and the note below tells the user why. */
+      setLastUploaded(created?.file?.name || previewFileName(newName));
+      closeCreate();
+      refresh();
+    } catch (err: any) {
+      setSaveError(err?.message || 'The file could not be uploaded.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleGenerateImportDocs = () => {
-    setIsGeneratingDocs(true);
-    setTimeout(() => {
-      const generated = [
-        {
-          id: `gen-1`,
-          title: 'Product Catalog: Urban Tech Minimalist Backpack Overview',
-          category: 'Orders',
-          categoryColor: 'primary',
-          readTime: '5 min read',
-          visibility: 'Public article',
-          updated: 'Just now',
-          icon: 'inventory_2',
-          iconBg: 'bg-primary-container/10 text-primary',
-          catBg: 'bg-surface-container text-primary',
-          views: '0'
-        },
-        {
-          id: `gen-2`,
-          title: 'Shipping and Return Policies for Electronics',
-          category: 'Shipping',
-          categoryColor: 'secondary',
-          readTime: '3 min read',
-          visibility: 'Public article',
-          updated: 'Just now',
-          icon: 'local_shipping',
-          iconBg: 'bg-secondary-container/20 text-secondary',
-          catBg: 'bg-secondary-container/30 text-on-secondary-container',
-          views: '0'
-        }
-      ];
-      setArticles((prev) => [...generated, ...prev]);
-      setIsGeneratingDocs(false);
-      setGenerationSuccess(true);
-      setTimeout(() => {
-        setIsImportModalOpen(false);
-        setGenerationSuccess(false);
-      }, 1200);
-    }, 1500);
-  };
+  if (filesState.loading && !filesState.data) {
+    return <LoadingState label="Loading knowledge-base files…" />;
+  }
+
+  /* 409 means no folder is selected — that is a configuration step, not a
+     failure, so it points at where to fix it instead of offering a retry. */
+  if (filesState.error && !filesState.data) {
+    return <ErrorState message={filesState.error} onRetry={filesState.refetch} />;
+  }
 
   return (
-    <div className="flex flex-col w-full pb-space-2xl">
-      {/* Module Navigation Tabs */}
-      <div className="flex items-center gap-space-lg border-b border-surface-container-low mb-space-lg">
-        <button
-          type="button"
-          onClick={() => setActiveTab('kb')}
-          className={`pb-space-sm font-title-sm text-title-sm flex items-center gap-space-xs transition-colors relative cursor-pointer ${
-            activeTab === 'kb' ? 'text-primary font-semibold' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
-        >
-          <Icon name="library_books" size="md" />
-          <span>Knowledge Base</span>
-          {activeTab === 'kb' && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('collections')}
-          className={`pb-space-sm font-title-sm text-title-sm flex items-center gap-space-xs transition-colors relative cursor-pointer ${
-            activeTab === 'collections' ? 'text-primary font-semibold' : 'text-on-surface-variant hover:text-on-surface'
-          }`}
-        >
-          <Icon name="collections_bookmark" size="md" />
-          <span>Collections</span>
-          {activeTab === 'collections' && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-          )}
-        </button>
+    <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
+      {saveError && <ErrorBanner message={saveError} />}
+      {filesState.error && <ErrorBanner message={filesState.error} onRetry={filesState.refetch} />}
+
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 font-caption text-caption text-outline flex-wrap">
+            <span>OmniFlow</span>
+            <Icon name="chevron_right" size="xs" />
+            <button
+              type="button"
+              onClick={() => openFolder('')}
+              className={
+                currentFolderId
+                  ? 'hover:text-primary transition-colors'
+                  : 'text-primary font-semibold cursor-default'
+              }
+              disabled={!currentFolderId}
+            >
+              Knowledge Base
+            </button>
+            {breadcrumb.map((crumb, index) => (
+              <React.Fragment key={crumb.id}>
+                <Icon name="chevron_right" size="xs" />
+                <button
+                  type="button"
+                  onClick={() => openFolder(crumb.id)}
+                  className={
+                    index === breadcrumb.length - 1
+                      ? 'text-primary font-semibold cursor-default'
+                      : 'hover:text-primary transition-colors'
+                  }
+                  disabled={index === breadcrumb.length - 1}
+                >
+                  {crumb.name}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
+            Knowledge Base Files
+          </h1>
+          <p className="font-body-sm text-body-sm text-on-surface-variant max-w-3xl">
+            The documents your agents answer from, stored in your Perfox workspace. Open a folder
+            to see what is inside it; new files are uploaded to wherever you are.
+          </p>
+        </div>
+
+        <div className="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
+          <Button variant="secondary" size="md" startIcon="refresh" onClick={refresh}>
+            Refresh
+          </Button>
+          <Button variant="secondary" size="md" startIcon="upload_file" onClick={() => setIsImportOpen(true)}>
+            Import
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            startIcon="note_add"
+            onClick={() => {
+              setNewFolderId(currentFolderId);
+              setIsCreateOpen(true);
+            }}
+          >
+            New File
+          </Button>
+        </div>
       </div>
 
-      {activeTab === 'kb' ? (
-        /* KNOWLEDGE BASE VIEW */
-        <div className="flex flex-col w-full space-y-space-lg">
-          {/* Top KPI Standardized Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-            <MetricsCard
-              title="Total Articles"
-              value={articles.length}
-              trend="+3 this week"
-              trendType="positive"
-              icon="description"
-              variant="primary"
-            />
-
-            <MetricsCard
-              title="Total Views"
-              value="14.2k"
-              trend="98.4% helpful rating"
-              trendType="positive"
-              trendIcon="visibility"
-              icon="insights"
-              variant="secondary"
-            />
-
-            <MetricsCard
-              title="Active Categories"
-              value="6"
-              subtitle="Across 2 workspaces"
-              icon="folder_open"
-              variant="neutral"
-            />
+      {/* A file is stored the moment it uploads but answers nothing until Perfox
+          has indexed it — said once, where it matters. */}
+      {lastUploaded && (
+        <div className="flex items-center justify-between gap-3 px-space-md py-2.5 rounded-xl bg-primary/10 border border-primary/20">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon name="cloud_upload" size="sm" color="primary" />
+            <span className="font-body-sm text-body-sm text-on-surface truncate">
+              <strong>{lastUploaded}</strong> uploaded. Perfox is indexing it — refresh in a moment
+              to see it become searchable.
+            </span>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => setLastUploaded('')}>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
-          {/* Main Table Container */}
-          <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 flex flex-col relative">
-            {/* Table Header & Action Section */}
-            <div className="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md rounded-t-xl">
-              <div className="flex flex-col">
-                <h1 className="font-headline-md text-headline-md text-on-surface font-bold tracking-tight">
-                  Knowledge Base
-                </h1>
-                <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                  Manage help articles and documents
-                </p>
-              </div>
-              <div className="flex items-center gap-space-xs self-start md:self-auto">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  startIcon="file_upload"
-                  onClick={() => setIsImportModalOpen(true)}
-                >
-                  Import
-                </Button>
+      {folderNotice && (
+        <div className="flex items-center justify-between gap-3 px-space-md py-2.5 rounded-xl bg-primary/10 border border-primary/20">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon name="folder_delete" size="sm" color="primary" />
+            <span className="font-body-sm text-body-sm text-on-surface truncate">{folderNotice}</span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setFolderNotice('')}>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
-                <Button
-                  variant="primary"
-                  size="md"
-                  startIcon="add"
-                  onClick={() => setIsCreateArticleOpen(true)}
-                >
-                  Create Article
-                </Button>
-              </div>
-            </div>
+      {/* Stat tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+        <MetricsCard
+          title="Total Files"
+          value={stats?.totalFiles ?? files.length}
+          icon="folder_open"
+          variant="primary"
+          subtitle="Across the knowledge base"
+        />
+        <MetricsCard
+          title="Searchable"
+          value={stats?.indexedFiles ?? files.filter((f: KbFile) => f.status === 'active').length}
+          icon="check_circle"
+          variant="secondary"
+          subtitle="Indexed by Perfox"
+        />
+        <MetricsCard
+          title="Not Indexed"
+          value={stats?.notIndexed ?? files.filter((f: KbFile) => f.status !== 'active').length}
+          icon="error"
+          variant={stats?.notIndexed ? 'tertiary' : 'neutral'}
+          subtitle="Stored, but answering nothing"
+        />
+        <MetricsCard
+          title="Total Size"
+          value={formatSize(stats?.totalSizeBytes ?? 0)}
+          icon="database"
+          variant="neutral"
+          subtitle={`${stats?.totalChunks ?? 0} indexed chunks`}
+        />
+      </div>
 
-            {/* Search and Filter Bar */}
-            <div className="px-space-lg pb-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
-              <SearchInput
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search articles..."
-              />
-
-              <div className="flex items-center gap-space-xs self-end sm:self-auto relative">
-                {/* Category Filter */}
-                <div className="relative">
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="h-10 bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm py-2 pl-3 pr-8 rounded-xl border border-transparent focus:border-surface-container focus:outline-none appearance-none cursor-pointer transition-colors"
-                  >
-                    <option value="All">All Categories</option>
-                    <option value="Orders">Orders</option>
-                    <option value="Shipping">Shipping</option>
-                    <option value="General">General</option>
-                  </select>
-                  <span className="material-symbols-outlined text-sm text-outline absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                    expand_more
-                  </span>
-                </div>
-
-                {/* Table Options Dropdown */}
-                <div className="relative" ref={tableOptionsRef}>
-                  <Button
-                    variant={isTableOptionsOpen ? 'soft' : 'hover'}
-                    size="md"
-                    startIcon="tune"
-                    onClick={() => setIsTableOptionsOpen(!isTableOptionsOpen)}
-                  >
-                    Table Options
-                  </Button>
-
-                  {/* Clean Table Options Popover */}
-                  {isTableOptionsOpen && (
-                    <div className="absolute right-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-2xl z-50 p-3 border border-slate-200 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-outline mb-2">
-                        Visible Columns
-                      </div>
-                      <div className="space-y-1.5 mb-3">
-                        <label className="flex items-center justify-between text-xs text-on-surface hover:bg-slate-50 p-1 rounded-lg cursor-pointer">
-                          <span>Category</span>
-                          <input
-                            type="checkbox"
-                            checked={visibleColumns.category}
-                            onChange={(e) => setVisibleColumns({ ...visibleColumns, category: e.target.checked })}
-                            className="accent-primary rounded"
-                          />
-                        </label>
-                        <label className="flex items-center justify-between text-xs text-on-surface hover:bg-slate-50 p-1 rounded-lg cursor-pointer">
-                          <span>Views</span>
-                          <input
-                            type="checkbox"
-                            checked={visibleColumns.views}
-                            onChange={(e) => setVisibleColumns({ ...visibleColumns, views: e.target.checked })}
-                            className="accent-primary rounded"
-                          />
-                        </label>
-                        <label className="flex items-center justify-between text-xs text-on-surface hover:bg-slate-50 p-1 rounded-lg cursor-pointer">
-                          <span>Updated Date</span>
-                          <input
-                            type="checkbox"
-                            checked={visibleColumns.updated}
-                            onChange={(e) => setVisibleColumns({ ...visibleColumns, updated: e.target.checked })}
-                            className="accent-primary rounded"
-                          />
-                        </label>
-                      </div>
-
-                      <div className="h-px bg-slate-100 my-2" />
-
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-outline mb-2">
-                        Row Spacing
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setTableDensity('comfortable')}
-                          className={`py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer ${
-                            tableDensity === 'comfortable' ? 'bg-primary/10 text-primary font-semibold' : 'bg-slate-50 text-on-surface-variant hover:bg-slate-100'
-                          }`}
-                        >
-                          Comfortable
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTableDensity('compact')}
-                          className={`py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer ${
-                            tableDensity === 'compact' ? 'bg-primary/10 text-primary font-semibold' : 'bg-slate-50 text-on-surface-variant hover:bg-slate-100'
-                          }`}
-                        >
-                          Compact
-                        </button>
-                      </div>
+      {/* Folders at this level. Hidden when there are none, so a leaf folder is
+          not padded with an empty section. */}
+      {visibleFolders.length > 0 && (
+        <div className="flex flex-col gap-space-sm">
+          <h2 className="font-title-md text-title-md text-on-surface font-bold">
+            Folders ({visibleFolders.length})
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-space-md">
+            {visibleFolders.map((folder) => (
+              <div
+                key={folder.id}
+                className="group relative flex items-start gap-3 p-space-md rounded-2xl border border-surface-container bg-surface-container-lowest hover:border-primary/40 transition-colors"
+              >
+                {renaming?.id === folder.id ? (
+                  /* Renamed in place — a dialog for one short field would be
+                     more ceremony than the change deserves. */
+                  <div className="flex flex-col gap-2 w-full">
+                    <input
+                      autoFocus
+                      value={renaming.name}
+                      onChange={(e) => setRenaming({ id: folder.id, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameFolder();
+                        if (e.key === 'Escape') setRenaming(null);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-primary/40 bg-surface-container-lowest font-body-sm text-body-sm text-on-surface outline-none focus:border-primary"
+                      maxLength={200}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleRenameFolder}
+                        disabled={isRenaming || !renaming.name.trim()}
+                      >
+                        {isRenaming ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setRenaming(null)}>
+                        Cancel
+                      </Button>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openFolder(folder.id)}
+                      className="flex items-start gap-3 text-left min-w-0 flex-1"
+                    >
+                      <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Icon name="folder" size="md" />
+                      </span>
+                      <span className="flex flex-col min-w-0 gap-0.5">
+                        <span className="font-label-lg text-label-lg text-on-surface font-semibold truncate">
+                          {folder.name}
+                        </span>
+                        <span className="font-caption text-caption text-on-surface-variant">
+                          {folder.fileCount === 1 ? '1 file' : `${folder.fileCount} files`}
+                          {childCount.get(folder.id)
+                            ? ` · ${childCount.get(folder.id)} ${
+                                childCount.get(folder.id) === 1 ? 'subfolder' : 'subfolders'
+                              }`
+                            : ''}
+                        </span>
+                        {folder.summary && (
+                          <span className="font-caption text-caption text-outline line-clamp-2 mt-0.5">
+                            {folder.summary}
+                          </span>
+                        )}
+                      </span>
+                    </button>
 
-            {/* Bulk Actions Banner */}
-            {selectedArticleIds.length > 0 && (
-              <div className="px-space-lg py-2 bg-primary-container/10 border-y border-primary/20 flex items-center justify-between animate-in fade-in duration-150">
-                <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                  <Icon name="check_circle" size="sm" color="primary" />
-                  <span>{selectedArticleIds.length} {selectedArticleIds.length === 1 ? 'article' : 'articles'} selected</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    startIcon="delete"
-                    onClick={handleBulkDelete}
-                  >
-                    Delete Selected
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedArticleIds([])}
-                  >
-                    Clear Selection
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Articles Table */}
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-surface-container-low text-on-surface-variant font-caption text-caption uppercase tracking-wider">
-                    <th className="py-3 px-space-lg font-semibold w-12">
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = isSomeSelected;
-                        }}
-                        onChange={handleToggleSelectAll}
-                        className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
-                        title={isAllSelected ? "Deselect all" : "Select all"}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        startIcon="edit"
+                        title="Rename folder"
+                        aria-label={`Rename ${folder.name}`}
+                        onClick={() => setRenaming({ id: folder.id, name: folder.name })}
                       />
-                    </th>
-                    <th className="py-3 px-space-md font-semibold">Title</th>
-                    {visibleColumns.category && <th className="py-3 px-space-md font-semibold">Category</th>}
-                    {visibleColumns.views && <th className="py-3 px-space-md font-semibold">Views</th>}
-                    {visibleColumns.updated && <th className="py-3 px-space-md font-semibold">Updated</th>}
-                    {visibleColumns.actions && <th className="py-3 px-space-lg font-semibold text-right">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-container-low/40">
-                  {filteredArticles.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-outline text-xs">
-                        No knowledge base articles found.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredArticles.map((art) => {
-                      const isSelected = selectedArticleIds.includes(art.id);
-                      return (
-                        <tr
-                          key={art.id}
-                          className={`hover:bg-surface-container-low/50 transition-colors group ${
-                            isSelected ? 'bg-primary/[0.04]' : ''
-                          }`}
-                        >
-                          <td className={`px-space-lg ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleSelectArticle(art.id)}
-                              className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
-                            />
-                          </td>
-                          <td className={`px-space-md ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${art.iconBg}`}>
-                                <Icon name={art.icon} size="md" />
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors truncate">
-                                  {art.title}
-                                </span>
-                                <span className="font-caption text-caption text-on-surface-variant">
-                                  {art.readTime} • {art.visibility}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          {visibleColumns.category && (
-                            <td className={`px-space-md ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${art.catBg}`}>
-                                {art.category}
-                              </span>
-                            </td>
-                          )}
-                          {visibleColumns.views && (
-                            <td className={`px-space-md font-body-sm text-body-sm text-on-surface ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
-                              {art.views}
-                            </td>
-                          )}
-                          {visibleColumns.updated && (
-                            <td className={`px-space-md font-caption text-caption text-outline ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
-                              {art.updated}
-                            </td>
-                          )}
-                          {visibleColumns.actions && (
-                            <td className={`px-space-lg text-right ${tableDensity === 'compact' ? 'py-2' : 'py-3.5'}`}>
-                              <div className="inline-flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  startIcon="edit"
-                                  title="Edit Article"
-                                  aria-label="Edit Article"
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  startIcon="delete"
-                                  onClick={() => handleDeleteArticle(art.id)}
-                                  title="Delete Article"
-                                  aria-label="Delete Article"
-                                />
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Standardized Reusable Pagination */}
-            <Pagination
-              currentPage={1}
-              totalPages={1}
-              totalItems={filteredArticles.length}
-              itemsPerPage={10}
-              itemLabel="articles"
-              onPageChange={() => {}}
-            />
-          </div>
-
-          {/* Secondary Context / Reference Banner with Themed Icon */}
-          <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md">
-            <div className="flex items-center gap-space-md">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center text-primary shrink-0 shadow-sm">
-                <Icon name="collections_bookmark" size="xl" color="primary" />
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        startIcon="delete"
+                        title="Delete folder"
+                        aria-label={`Delete ${folder.name}`}
+                        onClick={() => setFolderToDelete({ id: folder.id, name: folder.name })}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="flex flex-col">
-                <span className="font-title-sm text-title-sm text-on-surface font-semibold">
-                  Need to organize articles into categories?
-                </span>
-                <span className="font-body-sm text-body-sm text-on-surface-variant">
-                  Group topics logically and publish curated public help collections for customer self-service.
-                </span>
-              </div>
-            </div>
-            <Button
-              variant="hover"
-              size="md"
-              onClick={() => setActiveTab('collections')}
-            >
-              Browse Collections
-            </Button>
+            ))}
           </div>
         </div>
-      ) : (
-        /* COLLECTIONS VIEW (Secondary Tab Content) */
-        <div className="flex flex-col w-full space-y-space-lg">
-          <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
-            <div className="flex flex-col">
-              <h2 className="font-headline-md text-headline-md text-on-surface font-bold tracking-tight">
-                Article Collections
-              </h2>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                Group articles into browseable subject folders for your support site
-              </p>
+      )}
+
+      {/* File table */}
+      <div className="bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container overflow-hidden">
+        <div className="p-space-md border-b border-surface-container flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+          <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
+            Files in {currentFolder?.name ?? 'Root level'} ({visibleFiles.length})
+          </h2>
+          <SearchInput
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onClear={() => setSearchQuery('')}
+            placeholder="Search by file name"
+            size="md"
+            className="sm:w-72"
+          />
+        </div>
+
+        {visibleFiles.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-space-xl text-center">
+            <div className="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center">
+              <Icon name="folder_off" size="xl" color="outline" />
             </div>
-            <Button
-              variant="primary"
-              size="md"
-              startIcon="create_new_folder"
-              onClick={() => alert("Create New Collection dialog")}
-            >
-              New Collection
-            </Button>
+            <span className="font-title-sm text-title-sm text-on-surface font-semibold">
+              {searchQuery
+                ? 'No file matches that name'
+                : currentFolder
+                  ? `No files in ${currentFolder.name} yet`
+                  : 'No files at the root level — open a folder to see what is inside it'}
+            </span>
+            <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+              {searchQuery
+                ? 'Clear the search to see everything in the folder.'
+                : 'Create a markdown file and it is uploaded to Perfox, ready for your agents to answer from.'}
+            </p>
           </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-surface-container-low/60 font-caption text-caption text-on-surface-variant uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-space-md font-semibold">File name</th>
+                  <th className="py-3 px-space-md font-semibold">Folder</th>
+                  <th className="py-3 px-space-md font-semibold">Type</th>
+                  <th className="py-3 px-space-md font-semibold">Size</th>
+                  <th className="py-3 px-space-md font-semibold">Uploaded</th>
+                  <th className="py-3 px-space-md font-semibold">Status</th>
+                  <th className="py-3 px-space-md font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-container">
+                {visibleFiles.map((file: KbFile) => (
+                  <tr key={file.id} className="hover:bg-surface-container-low/40 transition-colors">
+                    <td className="py-3 px-space-md">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Icon name={mimeIcon(file.mimeType)} size="md" color="primary" />
+                        <div className="min-w-0">
+                          <span className="font-body-md text-body-md text-on-surface font-semibold block truncate">
+                            {file.name}
+                          </span>
+                          <span className="font-caption text-caption text-outline font-mono block truncate">
+                            {file.id}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-space-md">
+                      <span className="inline-flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant">
+                        <span className="material-symbols-outlined text-base">
+                          {file.folderName === 'Root level' ? 'home_storage' : 'folder'}
+                        </span>
+                        {file.folderName || '—'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-space-md">
+                      <span className="font-body-sm text-body-sm text-on-surface-variant">
+                        {mimeLabel(file.mimeType)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-space-md font-body-sm text-body-sm text-on-surface-variant">
+                      {formatSize(file.sizeBytes)}
+                    </td>
+                    <td className="py-3 px-space-md font-body-sm text-body-sm text-on-surface-variant whitespace-nowrap">
+                      {formatDate(file.uploadedAt)}
+                    </td>
+                    <td className="py-3 px-space-md">
+                      <div className="flex flex-col gap-0.5">
+                        <StatusBadge status={file.status} size="sm" />
+                        <span className="font-caption text-caption text-outline">
+                          {file.status === 'active'
+                            ? `${file.chunkCount} chunk${file.chunkCount === 1 ? '' : 's'}`
+                            : 'Not searchable yet'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-space-md text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        startIcon="delete"
+                        onClick={() => setPendingDelete(file)}
+                        title={`Delete ${file.name}`}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {/* Collections Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-            {/* Collection 1 */}
-            <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between border border-surface-container-high">
-              <div>
-                <div className="flex items-center justify-between mb-space-sm">
-                  <div className="w-10 h-10 rounded-xl bg-primary-container/10 text-primary flex items-center justify-center">
-                    <Icon name="shopping_cart" size="lg" color="primary" />
-                  </div>
-                  <span className="font-label-sm text-label-sm px-2.5 py-0.5 rounded-full bg-surface-container text-primary font-semibold">
-                    12 Articles
-                  </span>
-                </div>
-                <h3 className="font-title-md text-title-md text-on-surface font-semibold">Orders &amp; Fulfillment</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Checkouts, tracking updates, invoicing, and cancelations.</p>
-              </div>
-              <div className="mt-space-md pt-space-sm flex items-center justify-between border-t border-surface-container-low">
-                <span className="font-caption text-caption text-outline">Updated 2 days ago</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  endIcon="arrow_forward"
-                  onClick={() => { setActiveTab('kb'); }}
-                >
-                  Manage
-                </Button>
-              </div>
-            </div>
+        {/* Forward-only cursor, so this appends rather than paging. Hidden once
+            Perfox stops returning a cursor — that is the end of the folder. */}
+        {cursor && !searchQuery && (
+          <div className="flex items-center justify-center gap-3 p-space-md border-t border-surface-container">
+            <Button
+              variant="secondary"
+              size="md"
+              startIcon="expand_more"
+              onClick={loadMore}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? 'Loading…' : 'Load more files'}
+            </Button>
+            <span className="font-caption text-caption text-outline">
+              {files.length} loaded so far
+            </span>
+          </div>
+        )}
 
-            {/* Collection 2 */}
-            <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between border border-surface-container-high">
-              <div>
-                <div className="flex items-center justify-between mb-space-sm">
-                  <div className="w-10 h-10 rounded-xl bg-secondary-container/20 text-secondary flex items-center justify-center">
-                    <Icon name="flight_takeoff" size="lg" color="secondary" />
-                  </div>
-                  <span className="font-label-sm text-label-sm px-2.5 py-0.5 rounded-full bg-secondary-container/30 text-on-secondary-container font-semibold">
-                    8 Articles
-                  </span>
-                </div>
-                <h3 className="font-title-md text-title-md text-on-surface font-semibold">Shipping &amp; Logistics</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Carriers, regional delivery rates, customs clearance, and lead times.</p>
-              </div>
-              <div className="mt-space-md pt-space-sm flex items-center justify-between border-t border-surface-container-low">
-                <span className="font-caption text-caption text-outline">Updated 5 days ago</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  endIcon="arrow_forward"
-                  onClick={() => { setActiveTab('kb'); }}
-                >
-                  Manage
-                </Button>
-              </div>
-            </div>
+        {/* Search only filters what has been loaded, so say so rather than let
+            an empty result read as "no such file in this folder". */}
+        {cursor && searchQuery && (
+          <div className="px-space-md py-2.5 border-t border-surface-container">
+            <span className="font-caption text-caption text-on-surface-variant">
+              Searching the {files.length} files loaded so far — clear the search to load more.
+            </span>
+          </div>
+        )}
+      </div>
 
-            {/* Collection 3 */}
-            <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between border border-surface-container-high">
-              <div>
-                <div className="flex items-center justify-between mb-space-sm">
-                  <div className="w-10 h-10 rounded-xl bg-tertiary-fixed/40 text-tertiary flex items-center justify-center">
-                    <Icon name="live_help" size="lg" color="tertiary" />
-                  </div>
-                  <span className="font-label-sm text-label-sm px-2.5 py-0.5 rounded-full bg-tertiary-fixed/30 text-tertiary font-semibold">
-                    4 Articles
-                  </span>
-                </div>
-                <h3 className="font-title-md text-title-md text-on-surface font-semibold">Customer FAQ &amp; Policies</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">General inquiries, refund timelines, safety guidelines, and company terms.</p>
-              </div>
-              <div className="mt-space-md pt-space-sm flex items-center justify-between border-t border-surface-container-low">
-                <span className="font-caption text-caption text-outline">Updated 1 week ago</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  endIcon="arrow_forward"
-                  onClick={() => { setActiveTab('kb'); }}
-                >
-                  Manage
-                </Button>
-              </div>
+      {/* Create file modal */}
+      <ImportFilesModal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onUploaded={refresh}
+        defaultFolderId={currentFolderId}
+      />
+
+      {/* Perfox refuses while the folder holds anything, and never cascades — so
+          this confirms the folder itself, not its contents. */}
+      {folderToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container max-w-md w-full p-space-md flex flex-col gap-space-sm">
+            <h3 className="font-title text-title text-on-surface font-bold">Delete this folder?</h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">
+              <span className="font-semibold">{folderToDelete.name}</span> will be removed from the
+              Perfox knowledge base. A folder holding files or subfolders cannot be deleted — clear
+              it out first. Nothing inside it is ever removed by this.
+            </p>
+            <div className="flex items-center justify-end gap-space-xs pt-1">
+              <Button variant="ghost" size="md" onClick={() => setFolderToDelete(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                startIcon="delete"
+                onClick={handleDeleteFolder}
+                disabled={isDeletingFolder}
+              >
+                {isDeletingFolder ? 'Deleting…' : 'Delete folder'}
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Standalone Import Modal Overlay */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-space-lg backdrop-blur-md bg-on-surface/35 select-none" id="import-articles-modal">
-          <div className="relative bg-surface-container-lowest rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-[920px] overflow-hidden z-10 flex flex-col max-h-[92vh] border border-surface-container-highest/60">
-            {/* Modal Header */}
-            <div className="px-space-lg py-space-md bg-surface-container-lowest flex items-center justify-between border-b border-surface-container">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-10 h-10 rounded-xl bg-primary-container/10 text-primary flex items-center justify-center shrink-0">
-                  <Icon name="upload_file" size="xl" color="primary" />
+      {/* Deleting removes the file from Perfox, so it is confirmed first. */}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container max-w-md w-full p-space-md flex flex-col gap-space-sm">
+            <h3 className="font-title text-title text-on-surface font-bold">Delete this file?</h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">
+              <span className="font-semibold">{pendingDelete.name}</span> will be removed from the
+              Perfox knowledge base. Your agents will stop answering from it. This cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-space-xs pt-1">
+              <Button
+                variant="hover"
+                size="md"
+                disabled={isDeleting}
+                onClick={() => setPendingDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                startIcon="delete"
+                loading={isDeleting}
+                onClick={handleDelete}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <form
+            onSubmit={handleCreate}
+            className="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-2xl border border-surface-container-high flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]"
+          >
+            <div className="px-5 py-3.5 bg-surface-container-low/70 border-b border-surface-container flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
+                  <Icon name="note_add" size="md" />
                 </div>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">
-                      Import Knowledge Base Articles
-                    </h2>
-                    <span className="px-2 py-0.5 rounded-full font-label-sm text-caption bg-primary-fixed text-primary font-semibold">
-                      v2.4 Importer
-                    </span>
-                  </div>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Select your preferred source to bulk import or auto-generate markdown articles
+                <div>
+                  <h2 className="font-title-md text-title-md text-on-surface font-bold">
+                    New Knowledge Base File
+                  </h2>
+                  <p className="text-[11px] text-on-surface-variant">
+                    Saved as markdown and uploaded to Perfox
                   </p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                startIcon="close"
-                onClick={() => setIsImportModalOpen(false)}
-                aria-label="Close modal"
-              />
+              <Button variant="ghost" size="sm" startIcon="close" onClick={closeCreate} type="button" />
             </div>
 
-            {/* Modal Body */}
-            <div className="p-space-lg overflow-y-auto space-y-space-lg">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg items-stretch">
-                {/* OPTION A */}
-                <div className="bg-surface-container-lowest rounded-xl p-space-md ring-2 ring-primary shadow-sm flex flex-col justify-between relative pt-5">
-                  <div className="absolute -top-3 right-space-md">
-                    <span className="bg-primary text-on-primary font-label-sm text-caption px-3 py-0.5 rounded-full uppercase tracking-wider font-semibold shadow-sm">
-                      RECOMMENDED
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-space-xs mb-1">
-                      <Icon name="cloud_upload" size="lg" color="primary" />
-                      <h3 className="font-title-md text-title-md text-on-surface font-bold">
-                        Option A: Files &amp; Cloud Storage
-                      </h3>
-                    </div>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-sm leading-snug">
-                      Upload local documents or sync from cloud storage providers (PDF, Word, TXT, MD, CSV)
-                    </p>
-
-                    {/* Cloud Providers Buttons */}
-                    <div className="mb-space-sm">
-                      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider block mb-1.5 font-semibold">
-                        CONNECT CLOUD PROVIDERS
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          startIcon="add_to_drive"
-                          onClick={() => alert("Connecting Google Drive cloud sync...")}
-                        >
-                          Google Drive
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          startIcon="cloud_queue"
-                          onClick={() => alert("Connecting Dropbox cloud sync...")}
-                        >
-                          Dropbox
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          startIcon="cloud_sync"
-                          onClick={() => alert("Connecting OneDrive cloud sync...")}
-                        >
-                          OneDrive
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          startIcon="devices"
-                          onClick={() => alert("Selecting files from Local PC...")}
-                        >
-                          Local PC
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Drag & Drop Zone */}
-                    <div className="p-space-lg rounded-xl bg-surface-container-low/60 border-2 border-dashed border-outline-variant/80 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-surface-container/50 transition-colors mb-space-sm py-7">
-                      <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary mb-2 shadow-inner">
-                        <Icon name="upload" size="lg" color="primary" />
-                      </div>
-                      <span className="font-title-sm text-title-sm text-on-surface font-bold">
-                        Drag &amp; drop files here
-                      </span>
-                      <span className="font-caption text-caption text-on-surface-variant mt-0.5">
-                        Supports .md, .pdf, .docx, .json up to 50MB
-                      </span>
-                    </div>
-
-                    {/* Controls */}
-                    <div className="space-y-2 pt-1 border-t border-surface-container/60">
-                      <label className="flex items-center justify-between cursor-pointer py-0.5">
-                        <span className="font-body-sm text-body-sm text-on-surface font-medium">
-                          Auto-sync updates periodically
-                        </span>
-                        <input
-                          defaultChecked
-                          className="accent-primary rounded h-4 w-4 cursor-pointer"
-                          type="checkbox"
-                        />
-                      </label>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-body-sm text-body-sm text-on-surface font-medium shrink-0">
-                          Target Category
-                        </span>
-                        <div className="relative">
-                          <select className="bg-surface-container-low text-on-surface font-label-sm text-label-sm py-1.5 pl-2.5 pr-8 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer">
-                            <option>Auto-detect from document</option>
-                            <option>Orders</option>
-                            <option>Shipping</option>
-                            <option>General FAQ</option>
-                          </select>
-                          <span className="material-symbols-outlined text-sm text-outline absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                            expand_more
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* OPTION B */}
-                <div className="bg-surface-container-lowest rounded-xl p-space-md ring-1 ring-surface-container-highest shadow-sm flex flex-col justify-between relative pt-5">
-                  <div className="absolute -top-3 right-space-md">
-                    <span className="bg-secondary text-on-secondary font-label-sm text-caption px-3 py-0.5 rounded-full uppercase tracking-wider font-semibold shadow-sm">
-                      SMART CATALOG SYNC
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-space-xs mb-1">
-                      <Icon name="auto_stories" size="lg" color="secondary" />
-                      <h3 className="font-title-md text-title-md text-on-surface font-bold">
-                        Option B: Generate .md from Catalog
-                      </h3>
-                    </div>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-sm leading-snug">
-                      Automatically compile dynamic Markdown knowledge articles directly from your existing Products and Categories inventory
-                    </p>
-
-                    {/* Source Selector Checkboxes */}
-                    <div className="mb-space-sm">
-                      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider block mb-1.5 font-semibold">
-                        SOURCE SELECTOR
-                      </span>
-                      <div className="space-y-1">
-                        <label className="flex items-center gap-space-xs cursor-pointer p-1 rounded-lg hover:bg-surface-container-low transition-colors">
-                          <input
-                            checked={includeProducts}
-                            onChange={(e) => setIncludeProducts(e.target.checked)}
-                            className="accent-primary rounded h-4 w-4 cursor-pointer"
-                            type="checkbox"
-                          />
-                          <span className="font-body-sm text-body-sm text-on-surface font-medium">
-                            Include All Products (SKU, Specs, FAQs)
-                          </span>
-                        </label>
-                        <label className="flex items-center gap-space-xs cursor-pointer p-1 rounded-lg hover:bg-surface-container-low transition-colors">
-                          <input
-                            checked={includeCategories}
-                            onChange={(e) => setIncludeCategories(e.target.checked)}
-                            className="accent-primary rounded h-4 w-4 cursor-pointer"
-                            type="checkbox"
-                          />
-                          <span className="font-body-sm text-body-sm text-on-surface font-medium">
-                            Include Categories &amp; Taxonomies
-                          </span>
-                        </label>
-                        <label className="flex items-center gap-space-xs cursor-pointer p-1 rounded-lg hover:bg-surface-container-low transition-colors">
-                          <input
-                            checked={includePolicies}
-                            onChange={(e) => setIncludePolicies(e.target.checked)}
-                            className="accent-primary rounded h-4 w-4 cursor-pointer"
-                            type="checkbox"
-                          />
-                          <span className="font-body-sm text-body-sm text-on-surface font-medium">
-                            Include Shipping &amp; Return policies
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Template & Collection Settings */}
-                    <div className="space-y-2 pt-2 border-t border-surface-container/80 mb-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-body-sm text-body-sm text-on-surface font-medium shrink-0">
-                          Template
-                        </span>
-                        <div className="relative">
-                          <select
-                            value={selectedTemplate}
-                            onChange={(e) => setSelectedTemplate(e.target.value)}
-                            className="bg-surface-container-low text-on-surface font-label-sm text-label-sm py-1.5 pl-2.5 pr-8 rounded-lg border-0 focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
-                          >
-                            <option value="Structured Q&amp;A / FAQ Markdown">Structured Q&amp;A / FAQ Markdown</option>
-                            <option value="Comprehensive Wiki Catalog">Comprehensive Wiki Catalog</option>
-                            <option value="Feature Summary Tables">Feature Summary Tables</option>
-                          </select>
-                          <span className="material-symbols-outlined text-sm text-outline absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                            expand_more
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-body-sm text-body-sm text-on-surface font-medium">Collection</span>
-                        <span className="font-label-sm text-label-sm text-outline font-medium">'Product Catalog Docs'</span>
-                      </div>
-                    </div>
-
-                    {/* Preview Alert Box */}
-                    <div className="p-2.5 rounded-xl bg-secondary-container/20 border border-secondary/20 flex items-center gap-2 mt-auto">
-                      <Icon name="check_circle" size="sm" color="secondary" />
-                      <span className="font-caption text-caption text-on-secondary-container font-semibold leading-tight">
-                        Generates 12 Product MDs + 4 Category Guides ready to publish into Knowledge Base
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer Actions */}
-            <div className="px-space-lg py-space-md bg-surface-container-low/80 flex items-center justify-between border-t border-surface-container">
-              <span className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
-                <Icon name="info" size="sm" color="primary" />
-                Articles are created as drafts for your review before publishing
-              </span>
-              <div className="flex items-center gap-space-xs">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setIsImportModalOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  startIcon="auto_awesome"
-                  loading={isGeneratingDocs}
-                  onClick={handleGenerateImportDocs}
-                >
-                  {generationSuccess ? 'Docs Imported Successfully!' : 'Generate & Import Markdown Docs'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Article Modal */}
-      {isCreateArticleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-surface-container-high flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
-              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Create Article</h2>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                startIcon="close"
-                onClick={() => setIsCreateArticleOpen(false)}
-                aria-label="Close modal"
-              />
-            </div>
-
-            <form onSubmit={handleCreateArticleSubmit} className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface">Article Title *</label>
+            <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="kb-file-name" className="text-xs font-semibold text-on-surface">
+                  File name
+                </label>
                 <input
+                  id="kb-file-name"
                   type="text"
                   required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g. Return and Replacement Guidelines"
-                  className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-sm"
+                  maxLength={200}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Refund policy"
+                  className="h-10 px-3 rounded-xl bg-surface-container-low text-body-sm font-body-sm text-on-surface border border-surface-container focus:outline-none focus:border-primary"
                 />
+                <span className="font-caption text-caption text-outline">
+                  Uploaded as{' '}
+                  <span className="font-mono text-on-surface-variant">
+                    {previewFileName(newName)}
+                  </span>
+                </span>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface">Category</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="kb-file-folder" className="text-xs font-semibold text-on-surface">
+                  Destination
+                </label>
                 <select
-                  value={newCat}
-                  onChange={(e) => setNewCat(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-sm"
+                  id="kb-file-folder"
+                  value={newFolderId}
+                  onChange={(e) => setNewFolderId(e.target.value)}
+                  className="h-10 px-3 rounded-xl bg-surface-container-low text-body-sm font-body-sm text-on-surface border border-surface-container cursor-pointer focus:outline-none focus:border-primary"
                 >
-                  <option value="Orders">Orders &amp; Checkout</option>
-                  <option value="Shipping">Shipping &amp; Delivery</option>
-                  <option value="General">General FAQ</option>
+                  <option value="">Root level</option>
+                  {/* Same indentation rule as the import dialog. */}
+                  {allFolders.map((folder) => (
+                    <option key={folder.id} value={folder.id} title={folder.displayPath}>
+                      {`${'  '.repeat(folder.depth)}${folder.depth ? '└ ' : ''}${folder.name}`}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface">Content (Markdown)</label>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label htmlFor="kb-file-content" className="text-xs font-semibold text-on-surface">
+                  Content (Markdown)
+                </label>
                 <textarea
-                  rows={4}
+                  id="kb-file-content"
+                  required
+                  rows={14}
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  placeholder="Write article instructions or guidelines..."
-                  className="w-full p-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-sm resize-none"
+                  placeholder={'# Refund policy\n\nRefunds are issued within 7 working days of…'}
+                  className="px-3 py-2.5 rounded-xl bg-surface-container-low font-mono text-xs text-on-surface border border-surface-container focus:outline-none focus:border-primary resize-y"
                 />
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-surface-container-low">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setIsCreateArticleOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="submit"
-                >
-                  Publish Article
-                </Button>
-              </div>
-            </form>
-          </div>
+            <div className="px-5 py-3.5 bg-surface-container-low/70 border-t border-surface-container flex items-center justify-end gap-2">
+              <Button variant="hover" size="md" type="button" onClick={closeCreate} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                startIcon="cloud_upload"
+                loading={isSaving}
+                disabled={isSaving || !newName.trim() || !newContent.trim()}
+              >
+                {isSaving ? 'Uploading…' : 'Create & Upload'}
+              </Button>
+            </div>
+          </form>
         </div>
       )}
     </div>

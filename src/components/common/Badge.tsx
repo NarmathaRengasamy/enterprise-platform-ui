@@ -95,7 +95,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     variant = 'tertiary';
   } else if (normalized.includes('out of stock') || normalized.includes('error') || normalized.includes('failed') || normalized.includes('rejected') || normalized.includes('inactive')) {
     variant = 'error';
-  } else if (normalized.includes('draft') || normalized.includes('archived')) {
+  } else if (
+    normalized.includes('unspecified') ||
+    normalized.includes('draft') ||
+    normalized.includes('archived')
+  ) {
+    /* Unspecified is deliberately quiet: it is an absence of information, not a
+       problem to alarm anyone about. */
     variant = 'outline';
   }
 

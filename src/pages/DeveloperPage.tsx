@@ -1,32 +1,51 @@
 import React, { useState } from 'react';
-import { INITIAL_DEVELOPER_AGENTS, INITIAL_DEVELOPER_ENDPOINTS } from '../data/mockData';
-import { Button } from '../components/common';
+import { developerApi } from '../api';
+import { useApi } from '../hooks/useApi';
+import { Button, LoadingState, ErrorState, ErrorBanner } from '../components/common';
+import PlatformConnectionCard from '../components/developer/PlatformConnectionCard';
+import OperatorSiteCard from '../components/developer/OperatorSiteCard';
 
 export default function DeveloperPage() {
-  const [agents, setAgents] = useState(INITIAL_DEVELOPER_AGENTS);
-  const [endpoints, setEndpoints] = useState(INITIAL_DEVELOPER_ENDPOINTS);
-  const [selectedAgentId, setSelectedAgentId] = useState(INITIAL_DEVELOPER_AGENTS[0].id);
+  /* The Perfox connection is the gate for this whole page. Agents and webhook
+     endpoints are bound to a workspace, so neither is fetched — the server
+     refuses them with a 409 anyway — until the connection exists. */
+  const platformState = useApi(() => developerApi.getPlatform(), []);
+  const isPlatformConnected = Boolean(platformState.data?.configured);
+
+  /* Agents are cached in our own collection. The server calls Perfox only when
+     the cache is empty or when a refresh is asked for, so opening this tab does
+     not hit the platform. */
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const agentsState = useApi(
+    () => developerApi.listAgents(refreshNonce > 0),
+    [refreshNonce],
+    { enabled: isPlatformConnected }
+  );
+  const endpointsState = useApi(() => developerApi.listEndpoints(), [], {
+    enabled: isPlatformConnected,
+  });
+
+  /* Re-reads the connection; the two hooks above follow it automatically. */
+  const handlePlatformChanged = () => platformState.refetch();
+
+  const agents = agentsState.data?.agents || [];
+  const endpoints = endpointsState.data?.data || [];
+
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  /* The agent whose status is mid-flight, so only its own toggle shows busy. */
+  const [pendingStatusId, setPendingStatusId] = useState<string | null>(null);
 
   // Visibility & Copy states for active agent keys
-  const [showSiteKey, setShowSiteKey] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
   const [copiedKeyType, setCopiedKeyType] = useState(null); // 'siteKey' | 'secretKey' | 'endpointUrl' | 'secretToken'
 
   // Testing ping per endpoint state: { [endpointId]: 'idle' | 'pinging' | 'success' | 'error' }
   const [pingStatuses, setPingStatuses] = useState({});
 
   // Modals
-  const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
   const [isAddEndpointModalOpen, setIsAddEndpointModalOpen] = useState(false);
 
   // New Agent Form State
-  const [newAgentName, setNewAgentName] = useState('');
-  const [newAgentWorkflowId, setNewAgentWorkflowId] = useState('');
-  const [newAgentChannel, setNewAgentChannel] = useState('Web Storefront Widget');
-  const [newAgentModel, setNewAgentModel] = useState('Perfox-Omni 2.5');
-  const [newAgentAccentColor, setNewAgentAccentColor] = useState('#2563eb');
-  const [newAgentPosition, setNewAgentPosition] = useState('bottom-right');
-  const [newAgentDescription, setNewAgentDescription] = useState('');
 
   // New Endpoint Form State
   const [newEndpointName, setNewEndpointName] = useState('');
@@ -50,74 +69,29 @@ export default function DeveloperPage() {
   const [bodyFormat, setBodyFormat] = useState('application/json');
   const [bodyContent, setBodyContent] = useState('{\n  "event": "webhook.trigger",\n  "timestamp": "2026-09-18T14:35:00Z"\n}');
 
-  // Currently selected active agent
-  const activeAgent = agents.find((a) => a.id === selectedAgentId) || agents[0];
+  // Currently selected active agent (defaults to the first one the API returns)
 
-  const copyToClipboard = (text, type) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKeyType(type);
-    setTimeout(() => setCopiedKeyType(null), 2000);
-  };
 
-  const handleTestPingEndpoint = (endpointId) => {
-    setPingStatuses((prev) => ({ ...prev, [endpointId]: 'pinging' }));
-    setTimeout(() => {
-      setPingStatuses((prev) => ({ ...prev, [endpointId]: 'success' }));
-      setTimeout(() => {
-        setPingStatuses((prev) => ({ ...prev, [endpointId]: null }));
-      }, 3500);
-    }, 900);
-  };
 
-  const handleToggleAgentStatus = (agentId) => {
-    setAgents((prev) =>
-      prev.map((a) => {
-        if (a.id === agentId) {
-          const newStatus = a.status === 'Active' ? 'Paused' : 'Active';
-          return {
-            ...a,
-            status: newStatus,
-            statusColor: newStatus === 'Active' ? 'emerald' : 'amber'
-          };
-        }
-        return a;
-      })
-    );
-  };
+  const publishedAgentCount = agents.filter((a: any) => a.status === 'published').length;
+  const healthyEndpointCount = endpoints.filter((e: any) => e.status === 'Healthy').length;
 
-  const handleUpdateActiveAgentColor = (color) => {
-    setAgents((prev) =>
-      prev.map((a) => (a.id === activeAgent.id ? { ...a, accentColor: color } : a))
-    );
-  };
+  /* Averaged from the latency each endpoint actually reported on its last ping.
+     Endpoints that have never been pinged carry no measurement and are left out
+     rather than counted as zero. */
+  const measuredLatencies = endpoints
+    .map((e: any) => Number.parseFloat(String(e.latency ?? '')))
+    .filter((ms: number) => Number.isFinite(ms) && ms > 0);
+  const measuredLatencyCount = measuredLatencies.length;
+  const averageLatency = measuredLatencyCount
+    ? Math.round(measuredLatencies.reduce((sum: number, ms: number) => sum + ms, 0) / measuredLatencyCount)
+    : null;
 
-  const handleUpdateActiveAgentPosition = (pos) => {
-    setAgents((prev) =>
-      prev.map((a) => (a.id === activeAgent.id ? { ...a, position: pos } : a))
-    );
-  };
 
-  const handleToggleAgentEndpointAssignment = (endpointId) => {
-    setAgents((prev) =>
-      prev.map((a) => {
-        if (a.id === activeAgent.id) {
-          const exists = a.assignedEndpoints.includes(endpointId);
-          const updated = exists
-            ? a.assignedEndpoints.filter((id) => id !== endpointId)
-            : [...a.assignedEndpoints, endpointId];
-          return { ...a, assignedEndpoints: updated };
-        }
-        return a;
-      })
-    );
-  };
-
-  const handleRotateKey = () => {
-    const newSecret = `sk_mock_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
-    setAgents((prev) =>
-      prev.map((a) => (a.id === activeAgent.id ? { ...a, secretKey: newSecret } : a))
-    );
-    alert(`Rotated secret API key for "${activeAgent.name}". Ensure your backend environments are updated.`);
+  const formatDate = (iso?: string): string => {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString();
   };
 
   // Query Params Handlers
@@ -150,52 +124,76 @@ export default function DeveloperPage() {
     );
   };
 
-  // Submit New Agent
-  const handleAddAgentSubmit = (e) => {
-    e.preventDefault();
-    if (!newAgentName) return;
-
-    const id = `agt-00${agents.length + 1}`;
-    const wfId =
-      newAgentWorkflowId ||
-      `wf_flow_${newAgentName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Math.random().toString(36).substring(2, 7)}`;
-    const randomHex1 = Math.random().toString(36).substring(2, 14);
-    const randomHex2 = Math.random().toString(36).substring(2, 14);
-
-    const newAgt = {
-      id,
-      name: newAgentName,
-      workflowId: wfId,
-      channel: newAgentChannel,
-      model: newAgentModel,
-      siteKey: `pk_mock_${randomHex1}${randomHex2}`,
-      secretKey: `sk_mock_${randomHex2}${randomHex1}`,
-      accentColor: newAgentAccentColor,
-      position: newAgentPosition,
-      status: 'Active',
-      statusColor: 'emerald',
-      totalCalls: '0',
-      avgLatency: '18 ms',
-      assignedEndpoints: ['ep-1'],
-      description: newAgentDescription || 'Multi-agent connection configured for autonomous workflow execution.'
-    };
-
-    setAgents((prev) => [...prev, newAgt]);
-    setSelectedAgentId(id);
-    setIsAddAgentModalOpen(false);
-
-    // Reset form
-    setNewAgentName('');
-    setNewAgentWorkflowId('');
-    setNewAgentDescription('');
+  const copyToClipboard = (text, type) => {
+    if (!text) return;
+    /* navigator.clipboard is undefined outside a secure context */
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopiedKeyType(type);
+    setTimeout(() => setCopiedKeyType(null), 2000);
   };
 
-  // Submit New Endpoint with Method, URL, Auth, Toggles
-  const handleAddEndpointSubmit = (e) => {
+  /* Forces the server to call Perfox and re-sync the cache. */
+  const handleRefreshAgents = () => setRefreshNonce((n) => n + 1);
+
+  /**
+   * Publishes or pauses an agent. The server decides which Perfox call that
+   * means — publishing and pausing are different endpoints upstream.
+   *
+   * The row is patched in place from the response rather than refetching the
+   * whole list, so flipping one toggle does not reload every card.
+   */
+  const handleToggleAgentStatus = async (agent) => {
+    const next = agent.status === 'published' ? 'paused' : 'published';
+    setSaveError('');
+    setPendingStatusId(agent.id);
+    try {
+      const updated = await developerApi.setAgentStatus(agent.id, next);
+      agentsState.setData((prev) =>
+        prev
+          ? { ...prev, agents: prev.agents.map((a) => (a.id === updated.id ? updated : a)) }
+          : prev
+      );
+    } catch (err) {
+      setSaveError(err?.message || `Could not ${next === 'published' ? 'publish' : 'pause'} the agent.`);
+    } finally {
+      setPendingStatusId(null);
+    }
+  };
+
+  /* Keeps the real result of the last ping — the true status line and the
+     measured latency — so the badge reports what happened rather than a fixed
+     "200 OK". */
+  const handleTestPingEndpoint = async (endpointId) => {
+    setPingStatuses((prev) => ({ ...prev, [endpointId]: { state: 'pinging' } }));
+    try {
+      const result = await developerApi.pingEndpoint(endpointId);
+      setPingStatuses((prev) => ({
+        ...prev,
+        [endpointId]: {
+          state: result.healthy ? 'success' : 'error',
+          status: result.status,
+          latency: result.latency,
+        },
+      }));
+      endpointsState.refetch();
+    } catch (err) {
+      setPingStatuses((prev) => ({
+        ...prev,
+        [endpointId]: { state: 'error', status: err?.message || 'Ping failed' },
+      }));
+      setSaveError(err?.message || 'Ping failed.');
+    }
+    setTimeout(() => {
+      setPingStatuses((prev) => ({ ...prev, [endpointId]: null }));
+    }, 6000);
+  };
+
+  /* Creates this platform's record for an agent that already exists in Perfox.
+     `workflowId` carries the Perfox agent id — that is the link between the two,
+     and the server generates the site key and secret. */
+  const handleAddEndpointSubmit = async (e) => {
     e.preventDefault();
     if (!newEndpointName || !newEndpointUrl) return;
-
-    const id = `ep-${endpoints.length + 1}`;
 
     // Construct authConfig based on chosen authType
     const authConfig: Record<string, any> = {};
@@ -208,53 +206,43 @@ export default function DeveloperPage() {
       authConfig.basicAuth = newEndpointBasicAuth;
     }
 
-    const newEp = {
-      id,
-      name: newEndpointName,
-      url: newEndpointUrl,
-      method: newEndpointMethod,
-      transport: newEndpointTransport,
-      authType: newEndpointAuthType,
-      authConfig,
-      sendQueryParams,
-      queryParams: sendQueryParams ? queryParams.filter((p) => p.key) : [],
-      sendHeaders,
-      headers: sendHeaders ? headersList.filter((h) => h.key) : [],
-      sendBody,
-      bodyFormat: sendBody ? bodyFormat : null,
-      bodyContent: sendBody ? bodyContent : '',
-      status: 'Healthy',
-      statusColor: 'emerald',
-      latency: '18 ms',
-      connectedAgentsCount: 1,
-      lastPingStatus: '200 OK',
-      lastPingTime: 'Just now'
-    };
+    setSaveError('');
+    setIsSaving(true);
+    try {
+      const created = await developerApi.createEndpoint({
+        name: newEndpointName,
+        url: newEndpointUrl,
+        method: newEndpointMethod,
+        transport: newEndpointTransport,
+        authType: newEndpointAuthType,
+        authConfig,
+        queryParams: sendQueryParams ? queryParams.filter((p) => p.key) : [],
+        headers: sendHeaders ? headersList.filter((h) => h.key) : [],
+        bodyFormat: sendBody ? bodyFormat : undefined,
+        bodyContent: sendBody ? bodyContent : ''
+      });
 
-    setEndpoints((prev) => [...prev, newEp]);
-    // Assign to active agent by default
-    setAgents((prev) =>
-      prev.map((a) =>
-        a.id === activeAgent.id
-          ? { ...a, assignedEndpoints: [...a.assignedEndpoints, id] }
-          : a
-      )
-    );
-    setIsAddEndpointModalOpen(false);
+      setIsAddEndpointModalOpen(false);
+      setNewEndpointName('');
+      setNewEndpointUrl('');
+      setNewEndpointMethod('GET');
+      setNewEndpointTransport('HTTP');
+      setNewEndpointAuthType('none');
+      setNewEndpointBearerToken('');
+      setNewEndpointApiKeyHeader('X-API-Key');
+      setNewEndpointApiKeyValue('');
+      setNewEndpointBasicAuth('');
+      setSendQueryParams(false);
+      setSendHeaders(false);
+      setSendBody(false);
 
-    // Reset form
-    setNewEndpointName('');
-    setNewEndpointUrl('');
-    setNewEndpointMethod('GET');
-    setNewEndpointTransport('HTTP');
-    setNewEndpointAuthType('none');
-    setNewEndpointBearerToken('');
-    setNewEndpointApiKeyHeader('X-API-Key');
-    setNewEndpointApiKeyValue('');
-    setNewEndpointBasicAuth('');
-    setSendQueryParams(false);
-    setSendHeaders(false);
-    setSendBody(false);
+      endpointsState.refetch();
+      agentsState.refetch();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not register the endpoint.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getAuthBadge = (ep) => {
@@ -290,8 +278,10 @@ export default function DeveloperPage() {
     );
   };
 
-  return (
-    <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
+  /* Rendered on every branch, so the title and the connection card stay put
+     while agents load, fail, or turn out not to exist yet. */
+  const pageChrome = (
+    <>
       {/* Breadcrumb & Top Command Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
         <div className="flex flex-col gap-1">
@@ -308,29 +298,86 @@ export default function DeveloperPage() {
           </p>
         </div>
 
-        {/* Action CTAs */}
-        <div className="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
-          <Button
-            variant="secondary"
-            size="md"
-            startIcon="add_link"
-            onClick={() => setIsAddEndpointModalOpen(true)}
-          >
-            Add Endpoint
-          </Button>
+        {/* Action CTAs — nothing here can be created without a workspace. */}
+        {isPlatformConnected && (
+          <div className="flex items-center flex-wrap gap-space-xs self-start md:self-auto">
+            <Button
+              variant="secondary"
+              size="md"
+              startIcon="add_link"
+              onClick={() => setIsAddEndpointModalOpen(true)}
+            >
+              Add Endpoint
+            </Button>
 
-          <Button
-            variant="primary"
-            size="md"
-            startIcon="smart_toy"
-            onClick={() => setIsAddAgentModalOpen(true)}
-          >
-            Connect New Agent
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Global Telemetry Metrics */}
+      <PlatformConnectionCard
+        connection={platformState.data}
+        onChanged={handlePlatformChanged}
+      />
+
+      {/* Below the workspace connection: it belongs to the same tenant and is
+          only meaningful once that one exists. */}
+      <OperatorSiteCard
+        connection={platformState.data}
+        onChanged={handlePlatformChanged}
+      />
+    </>
+  );
+
+  const shell = (children: React.ReactNode) => (
+    <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
+      {pageChrome}
+      {children}
+    </div>
+  );
+
+  /* Step 1 — is the platform connected at all? */
+  if (platformState.loading) {
+    return <LoadingState label="Checking the Perfox platform connection…" />;
+  }
+
+  if (platformState.error) {
+    return <ErrorState message={platformState.error} onRetry={platformState.refetch} />;
+  }
+
+  /* The connection card is the whole page until credentials exist. */
+  if (!isPlatformConnected) {
+    return shell(null);
+  }
+
+  /* Step 2 — the workspace is connected, so its agents and our endpoints load. */
+  if ((agentsState.loading || endpointsState.loading) && agents.length === 0) {
+    return shell(<LoadingState label="Loading agents…" />);
+  }
+
+  /* A failure here is usually upstream — Perfox refused or could not be reached
+     — so the server's own message is shown rather than a generic one. */
+  if (agentsState.error && agents.length === 0) {
+    return shell(<ErrorState message={agentsState.error} onRetry={handleRefreshAgents} />);
+  }
+
+  if (agents.length === 0) {
+    return shell(
+      <ErrorState
+        message={`No agents exist in the ${platformState.data?.workspace || 'connected'} Perfox workspace yet. Create one in Perfox, then refresh.`}
+        onRetry={handleRefreshAgents}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
+      {saveError && <ErrorBanner message={saveError} />}
+      {endpointsState.error && <ErrorBanner message={endpointsState.error} />}
+
+      {pageChrome}
+
+      {/* Global Telemetry — every figure here is counted or averaged from the
+          API response; nothing is a fixed literal. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-sm">
         <div className="bg-surface-container-lowest p-space-md rounded-2xl shadow-sm border border-surface-container flex items-center gap-space-sm">
           <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center">
@@ -341,11 +388,10 @@ export default function DeveloperPage() {
               Connected Agents
             </span>
             <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              {agents.length} Active
+              {publishedAgentCount} Published
             </span>
-            <span className="font-caption text-caption text-purple-700 font-semibold flex items-center gap-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
-              All instances routed
+            <span className="font-caption text-caption text-on-surface-variant font-semibold">
+              {agents.length} registered
             </span>
           </div>
         </div>
@@ -356,13 +402,13 @@ export default function DeveloperPage() {
           </div>
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Live Endpoints
+              Registered Endpoints
             </span>
             <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              {endpoints.length} Registered
+              {endpoints.length}
             </span>
-            <span className="font-caption text-caption text-blue-600 font-semibold">
-              Event stream active
+            <span className="font-caption text-caption text-on-surface-variant font-semibold">
+              {healthyEndpointCount} healthy · {endpoints.length - healthyEndpointCount} not
             </span>
           </div>
         </div>
@@ -373,13 +419,15 @@ export default function DeveloperPage() {
           </div>
           <div className="flex flex-col">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Avg Gateway Latency
+              Avg Ping Latency
             </span>
             <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              18 ms
+              {averageLatency === null ? '—' : `${averageLatency} ms`}
             </span>
-            <span className="font-caption text-caption text-emerald-600 font-semibold flex items-center gap-0.5">
-              <span className="material-symbols-outlined text-xs">trending_down</span> Nominal SLA
+            <span className="font-caption text-caption text-on-surface-variant font-semibold">
+              {averageLatency === null
+                ? 'No endpoint pinged yet'
+                : `Across ${measuredLatencyCount} pinged endpoint${measuredLatencyCount === 1 ? '' : 's'}`}
             </span>
           </div>
         </div>
@@ -388,15 +436,15 @@ export default function DeveloperPage() {
           <div className="w-11 h-11 rounded-xl bg-secondary-container/20 text-secondary flex items-center justify-center">
             <span className="material-symbols-outlined text-2xl">verified_user</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-medium">
-              Uptime &amp; Security
+              Platform Connection
             </span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              99.98%
+            <span className="font-headline-sm text-headline-sm text-on-surface font-bold truncate">
+              {platformState.data?.status === 'Connected' ? 'Verified' : platformState.data?.status}
             </span>
-            <span className="font-caption text-caption text-outline">
-              Keys encrypted (AES-256)
+            <span className="font-caption text-caption text-on-surface-variant font-semibold truncate">
+              {platformState.data?.workspace || 'Perfox workspace'}
             </span>
           </div>
         </div>
@@ -414,10 +462,13 @@ export default function DeveloperPage() {
             </div>
             <div>
               <h2 className="font-title-lg text-title-lg text-on-surface font-bold">
-                Connected AI Agents ({agents.length})
+                Workspace Agents ({agents.length})
               </h2>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Select an agent below to configure its unique keys, widget appearance, and endpoint bindings.
+                Live from the{' '}
+                <span className="font-semibold">{platformState.data?.workspace || 'connected'}</span>{' '}
+                Perfox workspace. Select one to configure its keys, widget appearance and endpoint
+                bindings here.
               </p>
             </div>
           </div>
@@ -425,34 +476,35 @@ export default function DeveloperPage() {
           <Button
             variant="soft"
             size="md"
-            startIcon="add"
-            onClick={() => setIsAddAgentModalOpen(true)}
+            startIcon="refresh"
+            loading={agentsState.loading}
+            onClick={handleRefreshAgents}
           >
-            Connect Another Agent
+            Refresh from Perfox
           </Button>
         </div>
 
-        {/* Multi-Agent Cards Grid */}
-        <div className="p-5 border-b border-surface-container bg-surface-container-low/20">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Agent cards. Every field is what Perfox reported at the last sync,
+            including its own status vocabulary (published / paused / draft).
+            The list is read-only here — agents are managed in Perfox. */}
+        <div className="p-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {agents.map((agt) => {
-              const isSelected = agt.id === activeAgent.id;
+              const isStatusPending = pendingStatusId === agt.id;
+              const statusChip =
+                agt.status === 'published'
+                  ? 'bg-emerald-500/15 text-emerald-700'
+                  : agt.status === 'paused'
+                    ? 'bg-amber-500/15 text-amber-700'
+                    : 'bg-surface-container text-on-surface-variant';
               return (
                 <div
                   key={agt.id}
-                  onClick={() => setSelectedAgentId(agt.id)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 relative ${
-                    isSelected
-                      ? 'bg-surface-container-lowest border-primary shadow-md ring-2 ring-primary/20'
-                      : 'bg-surface-container-low/70 border-surface-container hover:bg-surface-container hover:border-surface-container-high'
-                  }`}
+                  className="p-3.5 rounded-2xl border border-surface-container bg-surface-container-low/70 flex flex-col gap-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        style={{ backgroundColor: agt.accentColor }}
-                        className="w-7 h-7 rounded-lg text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
-                      >
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined text-base">smart_toy</span>
                       </div>
                       <div className="min-w-0">
@@ -465,263 +517,78 @@ export default function DeveloperPage() {
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        agt.status === 'Active'
-                          ? 'bg-emerald-500/15 text-emerald-700'
-                          : 'bg-amber-500/15 text-amber-700'
-                      }`}
-                    >
-                      {agt.status}
-                    </span>
+                    {/* A draft agent has no live/paused distinction, so it is
+                        labelled rather than toggled. */}
+                    {agt.status === 'draft' ? (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${statusChip}`}>
+                        draft
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusChip}`}>
+                          {agt.status}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={agt.status === 'published'}
+                          aria-label={
+                            agt.status === 'published'
+                              ? `Pause ${agt.name}`
+                              : `Publish ${agt.name}`
+                          }
+                          disabled={isStatusPending}
+                          onClick={() => handleToggleAgentStatus(agt)}
+                          title={agt.status === 'published' ? 'Pause this agent' : 'Publish this agent'}
+                          className={`w-9 h-5 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-wait ${
+                            isStatusPending
+                              ? 'bg-surface-container-high'
+                              : agt.status === 'published'
+                                ? 'bg-emerald-600 cursor-pointer'
+                                : 'bg-surface-container-high cursor-pointer'
+                          }`}
+                        >
+                          <span
+                            className={`w-3.5 h-3.5 rounded-full bg-white shadow-xs transition-transform absolute top-[3px] ${
+                              agt.status === 'published' ? 'left-[21px]' : 'left-[3px]'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {agt.description && (
+                    <p className="text-[11px] text-on-surface-variant line-clamp-2">
+                      {agt.description}
+                    </p>
+                  )}
 
                   <div className="space-y-1 text-[11px] text-on-surface-variant pt-1 border-t border-surface-container-low">
                     <div className="flex items-center justify-between">
-                      <span className="text-outline">Model:</span>
-                      <span className="font-semibold text-on-surface">{agt.model}</span>
+                      <span className="text-outline">Channels</span>
+                      <span className="font-medium text-on-surface truncate max-w-[140px]">
+                        {agt.channels?.length ? agt.channels.join(', ') : '—'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-outline">Channel:</span>
-                      <span className="font-medium text-on-surface truncate max-w-[130px]">{agt.channel}</span>
+                      <span className="text-outline">Active version</span>
+                      <span className="font-semibold text-on-surface">v{agt.activeVersion}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-outline">Assigned Endpoints:</span>
-                      <span className="font-bold text-primary">{agt.assignedEndpoints.length} Active</span>
+                      <span className="text-outline">Nodes</span>
+                      <span className="font-semibold text-on-surface">{agt.nodeCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-outline">Updated in Perfox</span>
+                      <span className="font-medium text-on-surface">
+                        {formatDate(agt.perfoxUpdatedAt)}
+                      </span>
                     </div>
                   </div>
-
-                  {isSelected && (
-                    <div className="w-full text-center py-1 bg-primary/10 text-primary font-bold text-[11px] rounded-lg">
-                      Currently Selected
-                    </div>
-                  )}
                 </div>
               );
             })}
-          </div>
-        </div>
-
-        {/* Selected Agent Detailed Configuration Panel */}
-        <div className="p-5 lg:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column: Credentials & Model Info */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-wider font-bold text-outline">
-                  Agent Credentials:
-                </span>
-                <span className="font-title-md text-title-md font-bold text-primary">
-                  {activeAgent.name}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-semibold ${
-                  activeAgent.status === 'Active' ? 'text-emerald-700' : 'text-on-surface-variant'
-                }`}>
-                  {activeAgent.status === 'Active' ? 'Active' : 'Paused'}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={activeAgent.status === 'Active'}
-                  onClick={() => handleToggleAgentStatus(activeAgent.id)}
-                  className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer focus:outline-none ${
-                    activeAgent.status === 'Active' ? 'bg-emerald-600' : 'bg-surface-container-high'
-                  }`}
-                  title={activeAgent.status === 'Active' ? 'Click to Pause Agent' : 'Click to Activate Agent'}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform absolute top-0.5 ${
-                      activeAgent.status === 'Active' ? 'left-[22px]' : 'left-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Workflow ID & Channel Info */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant">Workflow Identifier</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={activeAgent.workflowId}
-                  className="h-9 px-3 rounded-xl bg-surface-container-low font-mono text-xs text-on-surface border border-surface-container focus:outline-none"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant">Model Engine</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={activeAgent.model}
-                  className="h-9 px-3 rounded-xl bg-surface-container-low font-semibold text-xs text-on-surface border border-surface-container focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Public Site Key */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                  <span>Public Site Key</span>
-                  <span className="text-[10px] text-outline font-normal">(Safe for frontend inclusion)</span>
-                </label>
-                <span className="text-[11px] text-emerald-700 font-medium">Valid</span>
-              </div>
-              <div className="flex items-center bg-surface-container-low px-3 py-1.5 rounded-xl border border-surface-container shadow-inner">
-                <span className="font-mono text-xs text-on-surface flex-1 truncate">
-                  {showSiteKey ? activeAgent.siteKey : `${activeAgent.siteKey.slice(0, 10)}••••••••••••••••••••${activeAgent.siteKey.slice(-4)}`}
-                </span>
-                <div className="flex items-center gap-1 ml-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSiteKey(!showSiteKey)}
-                    className="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container cursor-pointer"
-                    title="Toggle site key visibility"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {showSiteKey ? 'visibility_off' : 'visibility'}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(activeAgent.siteKey, 'siteKey')}
-                    className="flex items-center gap-1 text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-all cursor-pointer font-semibold text-xs"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {copiedKeyType === 'siteKey' ? 'check' : 'content_copy'}
-                    </span>
-                    <span>{copiedKeyType === 'siteKey' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Secret Backend API Key */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                  <span>Secret Backend API Key</span>
-                  <span className="text-[10px] text-error font-semibold">(Keep private)</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleRotateKey}
-                  className="text-[11px] text-primary hover:underline font-semibold cursor-pointer flex items-center gap-0.5"
-                >
-                  <span className="material-symbols-outlined text-xs">restart_alt</span>
-                  <span>Rotate Key</span>
-                </button>
-              </div>
-              <div className="flex items-center bg-surface-container-low px-3 py-1.5 rounded-xl border border-surface-container shadow-inner">
-                <span className="font-mono text-xs text-on-surface flex-1 truncate">
-                  {showSecretKey ? activeAgent.secretKey : `${activeAgent.secretKey.slice(0, 10)}••••••••••••••••••••${activeAgent.secretKey.slice(-4)}`}
-                </span>
-                <div className="flex items-center gap-1 ml-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSecretKey(!showSecretKey)}
-                    className="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container cursor-pointer"
-                    title="Toggle secret key visibility"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {showSecretKey ? 'visibility_off' : 'visibility'}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(activeAgent.secretKey, 'secretKey')}
-                    className="flex items-center gap-1 text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-all cursor-pointer font-semibold text-xs"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {copiedKeyType === 'secretKey' ? 'check' : 'content_copy'}
-                    </span>
-                    <span>{copiedKeyType === 'secretKey' ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Widget Styling & Endpoint Bindings */}
-          <div className="flex flex-col gap-4">
-            {/* Widget Styling Customization */}
-            <div className="p-4 rounded-2xl bg-surface-container-low/60 border border-surface-container space-y-3">
-              <span className="text-xs font-bold text-on-surface block uppercase tracking-wider">
-                Storefront Widget Appearance
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-on-surface-variant block mb-1">Theme Accent Color</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={activeAgent.accentColor}
-                      onChange={(e) => handleUpdateActiveAgentColor(e.target.value)}
-                      className="w-9 h-9 rounded-lg border border-surface-container-high cursor-pointer"
-                    />
-                    <span className="font-mono text-xs font-bold text-on-surface">{activeAgent.accentColor}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs text-on-surface-variant block mb-1">Display Position</label>
-                  <select
-                    value={activeAgent.position}
-                    onChange={(e) => handleUpdateActiveAgentPosition(e.target.value)}
-                    className="h-9 w-full px-2.5 rounded-lg bg-surface-container-lowest text-xs border border-surface-container text-on-surface cursor-pointer"
-                  >
-                    <option value="bottom-right">Bottom Right Floating</option>
-                    <option value="bottom-left">Bottom Left Floating</option>
-                    <option value="embed-inline">Inline Embed Frame</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Assigned Endpoints for this Agent */}
-            <div className="p-4 rounded-2xl bg-surface-container-low/60 border border-surface-container space-y-2 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-on-surface uppercase tracking-wider">
-                  Connected Webhook Endpoints
-                </span>
-                <span className="text-[11px] text-outline">
-                  {activeAgent.assignedEndpoints.length} of {endpoints.length} connected
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {endpoints.map((ep) => {
-                  const isChecked = activeAgent.assignedEndpoints.includes(ep.id);
-                  return (
-                    <label
-                      key={ep.id}
-                      onClick={() => handleToggleAgentEndpointAssignment(ep.id)}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
-                        isChecked
-                          ? 'bg-primary/10 border-primary/40 text-on-surface font-semibold'
-                          : 'bg-surface-container-lowest border-surface-container text-on-surface-variant hover:bg-surface-container'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {}}
-                        className="rounded text-primary focus:ring-0 cursor-pointer"
-                      />
-                      <div className="min-w-0">
-                        <span className="block truncate font-medium">{ep.name}</span>
-                        <span className="text-[10px] text-outline font-mono block truncate">{ep.url}</span>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -759,8 +626,9 @@ export default function DeveloperPage() {
         {/* Endpoints List */}
         <div className="p-5 space-y-3">
           {endpoints.map((ep) => {
-            const isPinging = pingStatuses[ep.id] === 'pinging';
-            const isSuccess = pingStatuses[ep.id] === 'success';
+            const ping = pingStatuses[ep.id];
+            const isPinging = ping?.state === 'pinging';
+            const hasPingResult = ping?.state === 'success' || ping?.state === 'error';
 
             return (
               <div
@@ -793,9 +661,28 @@ export default function DeveloperPage() {
                       {ep.name}
                     </h3>
 
-                    <span className="text-[11px] text-emerald-700 bg-emerald-500/15 px-2 py-0.2 rounded-full font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                      {ep.status} ({ep.latency})
+                    {/* Coloured from the status the API reports — this chip used to
+                        be green even for an Offline endpoint. */}
+                    <span
+                      className={`text-[11px] px-2 py-0.2 rounded-full font-semibold flex items-center gap-1 ${
+                        ep.status === 'Healthy'
+                          ? 'text-emerald-700 bg-emerald-500/15'
+                          : ep.status === 'Degraded'
+                            ? 'text-amber-700 bg-amber-500/15'
+                            : 'text-error bg-error/10'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          ep.status === 'Healthy'
+                            ? 'bg-emerald-600'
+                            : ep.status === 'Degraded'
+                              ? 'bg-amber-600'
+                              : 'bg-error'
+                        }`}
+                      ></span>
+                      {ep.status}
+                      {ep.latency ? ` (${ep.latency})` : ''}
                     </span>
                   </div>
 
@@ -816,10 +703,22 @@ export default function DeveloperPage() {
 
                 {/* Actions & Test Ping */}
                 <div className="flex items-center gap-2.5 shrink-0 self-end lg:self-center">
-                  {isSuccess && (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-500/15 px-3 py-1.5 rounded-xl flex items-center gap-1 animate-in fade-in">
-                      <span className="material-symbols-outlined text-base">verified</span>
-                      <span>200 OK (16ms)</span>
+                  {/* The real status line and measured latency the server reported. */}
+                  {hasPingResult && (
+                    <span
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 animate-in fade-in ${
+                        ping.state === 'success'
+                          ? 'text-emerald-700 bg-emerald-500/15'
+                          : 'text-error bg-error/10'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">
+                        {ping.state === 'success' ? 'verified' : 'error'}
+                      </span>
+                      <span>
+                        {ping.status}
+                        {ping.latency ? ` (${ping.latency})` : ''}
+                      </span>
                     </span>
                   )}
 
@@ -839,150 +738,6 @@ export default function DeveloperPage() {
           })}
         </div>
       </div>
-
-      {/* ========================================================================= */}
-      {/* MODAL 1: CONNECT NEW AGENT */}
-      {/* ========================================================================= */}
-      {isAddAgentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg border border-surface-container-high flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]">
-            <div className="px-5 py-3.5 bg-surface-container-low/70 border-b border-surface-container flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-xs">
-                  <span className="material-symbols-outlined text-lg">smart_toy</span>
-                </div>
-                <div>
-                  <h2 className="font-title-md text-title-md text-on-surface font-bold">
-                    Connect New AI Agent
-                  </h2>
-                  <p className="text-[11px] text-on-surface-variant">Register a new multi-agent worker and generate API credentials</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                startIcon="close"
-                onClick={() => setIsAddAgentModalOpen(false)}
-                aria-label="Close modal"
-              />
-            </div>
-
-            <form onSubmit={handleAddAgentSubmit} className="p-5 flex flex-col gap-4 overflow-y-auto">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                  Agent Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={newAgentName}
-                  onChange={(e) => setNewAgentName(e.target.value)}
-                  placeholder="e.g. Luxury Villa Concierge Bot"
-                  className="w-full h-10 px-3 font-title-sm text-title-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Deployment Channel
-                  </label>
-                  <select
-                    value={newAgentChannel}
-                    onChange={(e) => setNewAgentChannel(e.target.value)}
-                    className="h-10 px-3 text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high cursor-pointer"
-                  >
-                    <option value="Web Storefront Widget">Web Storefront Widget</option>
-                    <option value="Booking Portal & WhatsApp">Booking Portal &amp; WhatsApp</option>
-                    <option value="Customer Help Desk & Email">Customer Help Desk &amp; Email</option>
-                    <option value="Telephony Voice SIP Trunk">Telephony Voice SIP Trunk</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Model Engine
-                  </label>
-                  <select
-                    value={newAgentModel}
-                    onChange={(e) => setNewAgentModel(e.target.value)}
-                    className="h-10 px-3 text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high cursor-pointer"
-                  >
-                    <option value="Perfox-Omni 2.5">Perfox-Omni 2.5 (Fast)</option>
-                    <option value="Perfox-Omni 2.5 Pro">Perfox-Omni 2.5 Pro (Advanced)</option>
-                    <option value="Claude 3.7 Sonnet (Hybrid)">Claude 3.7 Sonnet (Hybrid)</option>
-                    <option value="Perfox Realtime Voice v2">Perfox Realtime Voice v2</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Accent Color
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={newAgentAccentColor}
-                      onChange={(e) => setNewAgentAccentColor(e.target.value)}
-                      className="w-10 h-10 rounded-xl border border-surface-container-high cursor-pointer"
-                    />
-                    <span className="font-mono text-xs font-bold text-on-surface">{newAgentAccentColor}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                    Widget Position
-                  </label>
-                  <select
-                    value={newAgentPosition}
-                    onChange={(e) => setNewAgentPosition(e.target.value)}
-                    className="h-10 px-2 text-xs rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high cursor-pointer"
-                  >
-                    <option value="bottom-right">Bottom Right</option>
-                    <option value="bottom-left">Bottom Left</option>
-                    <option value="embed-inline">Inline Frame</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
-                  Description / Purpose
-                </label>
-                <textarea
-                  rows={2}
-                  value={newAgentDescription}
-                  onChange={(e) => setNewAgentDescription(e.target.value)}
-                  placeholder="Describe what this AI agent handles..."
-                  className="w-full p-2.5 font-body-sm text-body-sm rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-primary shadow-inner resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-surface-container mt-1">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setIsAddAgentModalOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="submit"
-                  startIcon="add_circle"
-                >
-                  Create &amp; Connect Agent
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL 2: REGISTER NEW ENDPOINT WITH METHOD, URL, AUTH & THREE TOGGLES */}
@@ -1167,7 +922,7 @@ export default function DeveloperPage() {
                             required
                             value={newEndpointApiKeyValue}
                             onChange={(e) => setNewEndpointApiKeyValue(e.target.value)}
-                            placeholder="e.g. key_mock_99a80b1c..."
+                            placeholder="e.g. key_99a80b1c..."
                             className="w-full h-9 px-3 font-mono text-xs rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
                           />
                         </div>

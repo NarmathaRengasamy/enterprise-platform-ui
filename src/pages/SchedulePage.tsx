@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { INITIAL_SCHEDULE_EVENTS } from '../data/mockData';
-import { Button } from '../components/common';
+import { scheduleApi } from '../api';
+import { useApi } from '../hooks/useApi';
+import { Button, ErrorBanner } from '../components/common';
 
 // Format Date object to "YYYY-MM-DD"
 const formatDateKey = (d) => {
@@ -141,10 +142,17 @@ export default function SchedulePage({
   selectedEvent: propSelectedEvent,
   setSelectedEvent: propSetSelectedEvent
 }: SchedulePageProps = {}) {
-  const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
+  /* The API has no date-range filter yet (only an exact dateKey), so the whole
+     event set is fetched once and the Day/Week/Month grids slice it locally. */
+  const eventsState = useApi(() => scheduleApi.list(), []);
+  const events = eventsState.data?.data || [];
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
   const [activeView, setActiveView] = useState('Week'); // 'Day' | 'Week' | 'Month'
 
-  // Dynamic Calendar Navigation Date States (default: Sep 17, 2026)
+  /* Seeded appointments sit in Sep 2026, so the calendar opens there rather than
+     on the real today — otherwise it lands on an empty month. */
   const [todayDate] = useState(() => new Date(2026, 8, 17));
   const [selectedDate, setSelectedDate] = useState(() => new Date(2026, 8, 17));
   const [sidebarDate, setSidebarDate] = useState(() => new Date(2026, 8, 1));
@@ -500,9 +508,11 @@ export default function SchedulePage({
     return endMins - startMins;
   };
 
-  const handleAddEventSubmit = (e) => {
+  const handleAddEventSubmit = async (e) => {
     e.preventDefault();
     if (!newEventTitle) return;
+    setSaveError('');
+    setIsSaving(true);
 
     const startMins = toMinutesFrom12h(startHour, startMinute, startPeriod);
     let endMins = toMinutesFrom12h(endHour, endMinute, endPeriod);
@@ -516,7 +526,6 @@ export default function SchedulePage({
     const formattedTimeRange = `${format12hString(startHour, startMinute, startPeriod)} - ${format12hString(endHour, endMinute, endPeriod)}`;
 
     const newEv = {
-      id: `ev-${Date.now()}`,
       title: newEventTitle,
       time: formattedTimeRange,
       startTime: format12hString(startHour, startMinute, startPeriod),
@@ -538,13 +547,26 @@ export default function SchedulePage({
       statusColor: newEventParticipantType === 'agent' ? 'purple' : newEventParticipantType === 'customer' ? 'emerald' : 'blue'
     };
 
-    setEvents((prev) => [...prev, newEv]);
-    setIsAddEventOpen(false);
+    try {
+      await scheduleApi.create(newEv);
+      setIsAddEventOpen(false);
+      eventsState.refetch();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not create the appointment.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteEvent = (id) => {
-    setEvents((prev) => prev.filter((ev) => ev.id !== id));
-    setSelectedEvent(null);
+  const handleDeleteEvent = async (id) => {
+    setSaveError('');
+    try {
+      await scheduleApi.remove(id);
+      setSelectedEvent(null);
+      eventsState.refetch();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not delete the appointment.');
+    }
   };
 
   // Header Title Formatting with Dynamic Single Unified Date Range
@@ -633,7 +655,16 @@ export default function SchedulePage({
   };
 
   return (
-    <div className="flex w-full h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container select-none">
+    <div className="flex w-full h-[calc(100vh-6.75rem)] overflow-hidden rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container select-none relative">
+      {(eventsState.error || saveError) && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 w-[min(560px,90%)]">
+          <ErrorBanner
+            message={eventsState.error || saveError}
+            onRetry={eventsState.error ? eventsState.refetch : undefined}
+          />
+        </div>
+      )}
+
       {/* Mini Schedule Navigation Sidebar */}
       <aside className="w-[260px] flex-shrink-0 bg-surface-container-lowest border-r border-surface-container flex flex-col h-full z-20 overflow-hidden">
         <div className="h-14 flex items-center px-4 border-b border-surface-container shrink-0">

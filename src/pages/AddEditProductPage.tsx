@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { INITIAL_PRODUCTS } from '../data/mockData';
 import { DESCRIPTION_ACCEPT, extractTextFromFile } from '../utils/documentText';
+import { productsApi, categoriesApi } from '../api';
+import { useApi } from '../hooks/useApi';
 import { Button } from '../components/common';
 
 // Industry-agnostic presets to accelerate setup for any business vertical
@@ -56,7 +57,8 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
   const isEditing = isEditingProp !== undefined ? isEditingProp : Boolean(selectedProduct && selectedProduct.id);
   const [productName, setProductName] = useState(isEditing ? (selectedProduct?.name || '') : '');
   const [sku, setSku] = useState(isEditing ? (selectedProduct?.sku || '') : '');
-  const [category, setCategory] = useState(isEditing ? (selectedProduct?.categoryCode || '') : '');
+  /* The category's id — the foreign key the API stores on the product. */
+  const [categoryId, setCategoryId] = useState(isEditing ? (selectedProduct?.categoryId || '') : '');
   const [description, setDescription] = useState(isEditing ? (selectedProduct?.description || '') : '');
 
   const [mediaList, setMediaList] = useState(
@@ -81,10 +83,24 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
           title: v.value ? `${v.option || 'Option'}: ${v.value}` : 'Standard Package',
           attributes: [{ name: v.option || 'Option', value: v.value || 'Standard' }],
           sku: `${selectedProduct?.sku || ''}-${(v.value || 'STD').substring(0, 3).toUpperCase()}`,
-          price: Number(v.price) || 0,
-          capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock) || 0,
+          /* Blank stays blank. Coercing an absent price to 0 made the row
+             look priced-at-zero, and the form then sent that back as a real
+             figure on the next save. */
+          price: v.price === undefined || v.price === null ? '' : Number(v.price),
+          capacity:
+            v.stock === undefined || v.stock === null || v.stock === ''
+              ? ''
+              : typeof v.stock === 'string'
+                ? (v.stock.replace(/[^0-9]/g, '') === '' ? '' : Number(v.stock.replace(/[^0-9]/g, '')))
+                : Number(v.stock),
           capacityUnit: 'units',
-          status: String(v.stock || '').toLowerCase().includes('low') ? 'Limited' : 'Available'
+          /* Only claim a status when there is a stock figure behind it. */
+          status:
+            v.stock === undefined || v.stock === null || v.stock === ''
+              ? ''
+              : String(v.stock).toLowerCase().includes('low')
+                ? 'Limited'
+                : 'Available'
         }))
       : []
   );
@@ -115,6 +131,22 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
   const [matrixCapacityUnit, setMatrixCapacityUnit] = useState('units');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  /* The category select is populated from the API rather than a hardcoded list. */
+  const categoriesState = useApi(() => categoriesApi.list(), []);
+  const categoryOptions = categoriesState.data?.data || [];
+
+  /* Products created before the categoryId foreign key existed only carry a
+     category name, so the selection falls back to matching on that. */
+  React.useEffect(() => {
+    if (!isEditing || categoryOptions.length === 0) return;
+    if (categoryOptions.some((c) => c.id === categoryId)) return;
+    const byName = categoryOptions.find(
+      (c) => c.name?.toLowerCase() === String(selectedProduct?.category || '').toLowerCase()
+    );
+    if (byName) setCategoryId(byName.id);
+  }, [isEditing, categoryOptions.length]);
 
   // Turning variants off discards the whole matrix, so it asks first
   const [isDiscardVariantsOpen, setIsDiscardVariantsOpen] = useState(false);
@@ -240,10 +272,11 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         ? variants[editingVariantIndex].attributes
         : [{ name: 'Configuration', value: singleTitle }],
       sku: singleSku || `${sku}-${variants.length + 1}`,
-      price: Number(singlePrice) || 0,
-      capacity: Number(singleCapacity) || 0,
+      price: singlePrice === '' || singlePrice === null ? '' : Number(singlePrice),
+      capacity: singleCapacity === '' || singleCapacity === null ? '' : Number(singleCapacity),
       capacityUnit: singleCapacityUnit || 'units',
-      status: singleStatus
+      /* A status means nothing without a capacity behind it. */
+      status: singleCapacity === '' || singleCapacity === null ? '' : singleStatus
     };
 
     if (editingVariantIndex !== null) {
@@ -352,10 +385,13 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
         sku: `${sku}-${skuSuffix}`,
         images: [],
         videos: [],
-        price: 0,
-        capacity: 0,
+        /* Born empty, not zero: nobody has entered a price or a stock for a
+           freshly generated combination, and 0 would be a figure we invented
+           on their behalf. */
+        price: '',
+        capacity: '',
         capacityUnit: matrixCapacityUnit,
-        status: 'Available'
+        status: ''
       };
     });
 
@@ -436,23 +472,115 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (hasVariants && variants.length === 0) {
       setSaveError('Add at least one combination, or turn off "This offering has variants" to use a single price.');
       return;
     }
-    if (hasVariants && incompleteCount > 0) {
-      setSaveError(
-        `${incompleteCount} combination${incompleteCount === 1 ? '' : 's'} still ${incompleteCount === 1 ? 'needs' : 'need'} a price.`
-      );
+    /* Unpriced combinations no longer block the save. An offering can be set up
+       before anyone has decided what it costs; the matrix already marks those
+       rows "Needs pricing", which is the honest state rather than a refusal. */
+    if (!productName || !sku) {
+      setSaveError('Name and identifier are both required.');
       return;
     }
+    if (!categoryId) {
+      setSaveError('Pick a category. Create one on the Categories tab if the list is empty.');
+      return;
+    }
+
+    /* A variant-priced offering lists at its cheapest priced combination. With
+       nothing priced yet there is no figure to send, and `undefined` is left
+       out of the payload rather than sent as 0 — which would read as free. */
+    const variantPrices = variants.map((v) => Number(v.price) || 0).filter((n) => n > 0);
+    const resolvedPrice = hasVariants
+      ? (variantPrices.length ? Math.min(...variantPrices) : undefined)
+      : (basePrice === '' || basePrice === null ? undefined : Number(basePrice));
+
+    /* Stock is only summed when a combination actually carries one. All blank
+       means unknown, which is not the same as zero on the shelf. */
+    const enteredCapacities = variants
+      .map((v) =>
+        v.capacity === '' || v.capacity === null || v.capacity === undefined
+          ? null
+          : Number(v.capacity)
+      )
+      .filter((n): n is number => n !== null && !Number.isNaN(n));
+    const totalStock = hasVariants
+      ? (enteredCapacities.length ? enteredCapacities.reduce((sum, n) => sum + n, 0) : undefined)
+      : (selectedProduct?.stock ?? undefined);
+
+    const payload = {
+      name: productName,
+      sku,
+      /* The only classification the client sends. The server resolves it and
+         derives the display name, so the two can never disagree. */
+      categoryId,
+      description: description || `${productName} — no description provided yet.`,
+      /* Omitted entirely when unset — the server treats an absent price or stock
+         as unknown, and a sent 0 would be a figure nobody entered. */
+      ...(resolvedPrice === undefined ? {} : { price: resolvedPrice }),
+      ...(totalStock === undefined ? {} : { stock: totalStock }),
+      /* Media is still held as blob: URLs by the browser — there is no upload
+         endpoint, so only previously persisted http(s) images are sent. */
+      gallery: mediaList
+        .filter((m) => m.src && !String(m.src).startsWith('blob:'))
+        .map((m, idx) => ({ id: idx, label: m.label || `Image ${idx + 1}`, src: m.src })),
+      image: mediaList.find((m) => m.src && !String(m.src).startsWith('blob:'))?.src,
+      variants: hasVariants
+        ? variants.map((v) => {
+            /* Blank stays blank. `Number('') || 0` would have turned every
+               unpriced combination into a free one and every unset stock into
+               zero on the shelf. */
+            const blank = (x: unknown) => x === '' || x === null || x === undefined;
+            const price = blank(v.price) ? undefined : Number(v.price);
+            const capacity = blank(v.capacity) ? undefined : Number(v.capacity);
+            return {
+              option: v.attributes?.[0]?.name || 'Option',
+              value: v.title,
+              ...(price === undefined || Number.isNaN(price) ? {} : { price }),
+              ...(capacity === undefined || Number.isNaN(capacity)
+                ? {}
+                : { stock: `${capacity} ${v.capacityUnit || 'units'}` }),
+              /* Only stated when the capacity is known — otherwise the row would
+                 claim "In Stock" on a figure nobody entered. */
+              ...(capacity === undefined || Number.isNaN(capacity)
+                ? {}
+                : {
+                    status:
+                      v.status === 'Sold Out'
+                        ? 'Out of Stock'
+                        : v.status === 'Limited'
+                          ? 'Low Stock'
+                          : 'In Stock',
+                  }),
+            };
+          })
+        : []
+    };
+
     setSaveError('');
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
-      setActiveModule('products');
-    }, 1200);
+    setIsSaving(true);
+    try {
+      if (isEditing && selectedProduct?.id) {
+        await productsApi.update(selectedProduct.id, payload);
+      } else {
+        await productsApi.create(payload);
+      }
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setSavedSuccess(false);
+        setActiveModule('products');
+      }, 900);
+    } catch (err) {
+      /* Surface the server's field errors rather than a generic failure. */
+      const fieldMsg = err?.fieldErrors?.length
+        ? err.fieldErrors.map((f) => `${f.path.replace('body.', '')}: ${f.message}`).join(' · ')
+        : '';
+      setSaveError(fieldMsg || err?.message || 'Could not save the offering.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -499,8 +627,9 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
             size="md"
             startIcon="save"
             onClick={handleSave}
+            disabled={isSaving}
           >
-            {savedSuccess ? 'Saved!' : 'Save Offering'}
+            {savedSuccess ? 'Saved!' : isSaving ? 'Saving…' : 'Save Offering'}
           </Button>
         </div>
       </div>
@@ -574,21 +703,39 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                   <div className="relative flex items-center">
                     <select
                       id="offering-category"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
+                      value={categoryId}
+                      onChange={(e) => setCategoryId(e.target.value)}
                       className="w-full h-[42px] pl-space-sm pr-10 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer transition-all"
                       required
                     >
-                      <option value="" disabled>Select category</option>
-                      <option value="saas">Software &amp; Digital Plans</option>
-                      <option value="hospitality">Hospitality &amp; Rooms</option>
-                      <option value="services">Professional Services &amp; Consulting</option>
-                      <option value="healthcare">Healthcare &amp; Appointments</option>
-                      <option value="accessories">Products &amp; Equipment</option>
-                      <option value="education">Courses &amp; Training</option>
+                      <option value="" disabled>
+                        {categoriesState.loading
+                          ? 'Loading categories…'
+                          : categoryOptions.length === 0
+                            ? 'No categories yet'
+                            : 'Select category'}
+                      </option>
+                      {categoryOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
                     </select>
                     <span className="material-symbols-outlined absolute right-3 text-outline text-lg pointer-events-none">unfold_more</span>
                   </div>
+
+                  {/* The category list is the only source of classifications, so an
+                      empty list is a dead end unless we point the way out of it. */}
+                  {!categoriesState.loading && categoryOptions.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveModule('categories')}
+                      className="self-start inline-flex items-center gap-1 font-caption text-caption text-primary hover:underline cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      Create one on the Categories tab first
+                    </button>
+                  )}
                 </div>
 
                 {/* Description — type it in, or import a document */}
@@ -850,7 +997,6 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                     onChange={(e) => setBasePrice(e.target.value)}
                     placeholder="e.g. 3499"
                     className="w-40 h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                    required
                   />
                 </div>
               </>
@@ -1111,7 +1257,9 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
                       {/* Stock */}
                       <td className="py-3.5 px-space-sm">
                         <span className="font-semibold text-on-surface">
-                          {Number(v.capacity) || 0}{' '}
+                          {v.capacity === '' || v.capacity === null || v.capacity === undefined
+                            ? 'Not set'
+                            : Number(v.capacity)}{' '}
                           <span className="font-normal text-on-surface-variant text-xs">
                             {v.capacityUnit || 'units'}
                           </span>
@@ -1583,11 +1731,10 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
 
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Commercial Rate / Price (₹) <span className="text-error">*</span>
+                    Commercial Rate / Price (₹)
                   </label>
                   <input
                     type="number"
-                    required
                     placeholder="e.g. 4999"
                     value={singlePrice}
                     onChange={(e) => setSinglePrice(e.target.value)}
@@ -1599,11 +1746,10 @@ export default function AddEditProductPage({ setActiveModule, selectedProduct, i
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Stock <span className="text-error">*</span>
+                    Stock
                   </label>
                   <input
                     type="number"
-                    required
                     placeholder="e.g. 25"
                     value={singleCapacity}
                     onChange={(e) => setSingleCapacity(e.target.value)}

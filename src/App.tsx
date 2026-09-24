@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import AppLayout from './components/layout/AppLayout';
+import CallProvider from './components/calls/CallProvider';
+import CallOverlay from './components/calls/CallOverlay';
 import DashboardPage from './pages/DashboardPage';
 import ConversationsPage from './pages/ConversationsPage';
 import ProductsPage from './pages/ProductsPage';
@@ -11,15 +13,25 @@ import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import LoginPage from './pages/LoginPage';
-import { INITIAL_PRODUCTS } from './data/mockData';
+import { authApi } from './api';
 import { Product, ScheduleEvent } from './types';
 
 export default function App(): JSX.Element {
   const [activeModule, setActiveModule] = useState<string>('dashboard');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(INITIAL_PRODUCTS[0] as Product);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedScheduleEvent, setSelectedScheduleEvent] = useState<ScheduleEvent | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  /* Set when the user jumps from a category to "View Products", so the product
+     list opens already filtered to that category. */
+  const [productCategoryId, setProductCategoryId] = useState<string | null>(null);
+  /* A stored JWT survives a reload, so the session resumes without a re-login. */
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => authApi.isAuthenticated());
+
+  const handleLogout = () => {
+    authApi.logout();
+    setIsAuthenticated(false);
+    setActiveModule('dashboard');
+  };
 
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={() => setIsAuthenticated(true)} />;
@@ -48,6 +60,8 @@ export default function App(): JSX.Element {
           <ProductsPage
             setActiveModule={setActiveModule}
             setSelectedProduct={setSelectedProduct}
+            initialCategoryId={productCategoryId}
+            onCategoryFilterApplied={() => setProductCategoryId(null)}
           />
         );
       case 'add-product':
@@ -74,7 +88,15 @@ export default function App(): JSX.Element {
           />
         );
       case 'categories':
-        return <CategoriesPage setActiveModule={setActiveModule} />;
+        return (
+          <CategoriesPage
+            setActiveModule={setActiveModule}
+            onViewCategoryProducts={(categoryId: string) => {
+              setProductCategoryId(categoryId);
+              setActiveModule('products');
+            }}
+          />
+        );
       case 'schedule':
       case 'calendar':
       case 'appointments':
@@ -104,12 +126,18 @@ export default function App(): JSX.Element {
   };
 
   return (
-    <AppLayout
-      activeModule={activeModule}
-      setActiveModule={setActiveModule}
-      onLogout={() => setIsAuthenticated(false)}
-    >
-      {renderActiveModule()}
-    </AppLayout>
+    /* Around the whole app, not one page: an incoming call has to ring wherever
+       the user is, and a live call must survive moving between pages — the
+       WebRTC session dies with its provider. Mounted only once signed in. */
+    <CallProvider>
+      <AppLayout
+        activeModule={activeModule}
+        setActiveModule={setActiveModule}
+        onLogout={handleLogout}
+      >
+        {renderActiveModule()}
+      </AppLayout>
+      <CallOverlay />
+    </CallProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BRAND_LOGO_URL } from '../data/mockData';
+import { authApi } from '../api';
 import { Button, Icon } from '../components/common';
 
 interface LoginPageProps {
@@ -11,10 +12,22 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLoginSuccess?.();
+    setError('');
+    setIsSubmitting(true);
+    try {
+      /* authApi.login stores the JWT; every later request sends it. */
+      await authApi.login(email, password, rememberMe);
+      onLoginSuccess?.();
+    } catch (err: any) {
+      setError(err?.message || 'Could not sign in.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -118,15 +131,26 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               </a>
             </div>
 
+            {error && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-error-container/40 border border-error/20"
+              >
+                <Icon name="error" size="sm" color="error" />
+                <span className="font-body-sm text-body-sm text-on-error-container">{error}</span>
+              </div>
+            )}
+
             <Button
               type="submit"
               variant="primary"
               size="lg"
               fullWidth
               endIcon="arrow_forward"
+              disabled={isSubmitting}
               className="mt-space-xs"
             >
-              Login to Dashboard
+              {isSubmitting ? 'Signing in…' : 'Login to Dashboard'}
             </Button>
           </form>
 
@@ -143,7 +167,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             <Button
               variant="outline"
               size="md"
-              onClick={onLoginSuccess}
+              onClick={() => setError('Google SSO is not configured on the backend yet.')}
               className="w-full gap-2"
             >
               <svg aria-hidden="true" className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -158,7 +182,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
             <Button
               variant="outline"
               size="md"
-              onClick={onLoginSuccess}
+              onClick={() => setError('Microsoft SSO is not configured on the backend yet.')}
               className="w-full gap-2"
             >
               <svg aria-hidden="true" className="w-4 h-4 shrink-0" viewBox="0 0 23 23">

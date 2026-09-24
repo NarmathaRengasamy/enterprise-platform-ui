@@ -1,12 +1,14 @@
 import React from 'react';
+import { dashboardApi, categoriesApi, teamApi } from '../api';
+import { useApi } from '../hooks/useApi';
 import {
-  INITIAL_PRODUCTS,
-  INITIAL_CATEGORIES,
-  INITIAL_CONVERSATIONS,
-  INITIAL_SCHEDULE_EVENTS,
-  INITIAL_TEAM
-} from '../data/mockData';
-import { Button, MetricsCard, Icon, StatusBadge } from '../components/common';
+  Button,
+  MetricsCard,
+  Icon,
+  StatusBadge,
+  LoadingState,
+  ErrorState
+} from '../components/common';
 
 interface DashboardPageProps {
   setActiveModule?: (module: string) => void;
@@ -21,20 +23,44 @@ export default function DashboardPage({
   setSelectedScheduleEvent,
   setSelectedConversationId
 }: DashboardPageProps) {
-  const recentProducts = INITIAL_PRODUCTS.slice(0, 4);
-  const recentAppointments = INITIAL_SCHEDULE_EVENTS.slice(0, 3);
-  const recentConversations = INITIAL_CONVERSATIONS.slice(0, 3);
+  /* One call backs the whole page: metrics + the three "recent" lists. */
+  const overview = useApi(() => dashboardApi.overview(), []);
+  /* The catalog grid wants every category, not the dashboard's slice, and the
+     team counts aren't in /dashboard/metrics yet — both load alongside. */
+  const categories = useApi(() => categoriesApi.list(), []);
+  const team = useApi(() => teamApi.list(), []);
 
-  const totalProducts = INITIAL_PRODUCTS.length;
-  const inStockProducts = INITIAL_PRODUCTS.filter((p) => p.stockStatus === 'In Stock').length;
+  if (overview.loading) return <LoadingState label="Loading dashboard…" />;
+  if (overview.error || !overview.data) {
+    return <ErrorState message={overview.error || 'No dashboard data returned.'} onRetry={overview.refetch} />;
+  }
 
-  const totalCategories = INITIAL_CATEGORIES.length;
+  const metrics = overview.data.metrics || ({} as any);
+  const recentProducts = overview.data.recentProducts || [];
+  const recentAppointments = overview.data.recentAppointments || [];
+  const recentConversations = overview.data.recentConversations || [];
 
-  const totalAppointments = INITIAL_SCHEDULE_EVENTS.length;
-  const confirmedAppointments = INITIAL_SCHEDULE_EVENTS.filter((e) => e.status === 'Confirmed').length;
+  const categoryList = categories.data?.data || [];
+  const teamList = team.data?.data || [];
 
-  const totalTeamMembers = INITIAL_TEAM.length;
-  const activeTeamMembers = INITIAL_TEAM.filter((m) => m.status === 'Active').length;
+  const totalProducts = metrics.totalProducts ?? 0;
+  const inStockProducts = metrics.productsInStock ?? 0;
+
+  /* /dashboard/metrics doesn't return category or team counts yet, so they come
+     from the list endpoints' totals until the backend adds them. */
+  const totalCategories = categories.data?.total ?? categoryList.length;
+
+  const totalAppointments = metrics.totalAppointments ?? 0;
+  const confirmedAppointments = metrics.upcomingAppointments ?? 0;
+
+  const totalTeamMembers = team.data?.total ?? teamList.length;
+  const activeTeamMembers = teamList.filter((m: any) => m.status === 'Active').length;
+
+  const todayLabel = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
 
   return (
     <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
@@ -59,7 +85,7 @@ export default function DashboardPage({
         <div className="flex items-center flex-wrap gap-2.5 self-start md:self-auto">
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
             <Icon name="calendar_today" size="sm" color="primary" />
-            <span className="font-label-md text-label-md text-on-surface font-semibold">Today: 12 Sep 2026</span>
+            <span className="font-label-md text-label-md text-on-surface font-semibold">Today: {todayLabel}</span>
           </div>
 
           <Button
@@ -160,7 +186,7 @@ export default function DashboardPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm">
-                  {recentProducts.map((p) => (
+                  {recentProducts.map((p: any) => (
                     <tr
                       key={p.id}
                       onClick={() => {
@@ -186,10 +212,10 @@ export default function DashboardPage({
                         {p.category}
                       </td>
                       <td className="py-3 px-space-md font-title-sm text-title-sm font-semibold">
-                        ₹{p.price.toLocaleString()}
+                        {typeof p.price === 'number' ? `₹${p.price.toLocaleString()}` : 'Not priced'}
                       </td>
                       <td className="py-3 px-space-md text-right">
-                        <StatusBadge status={p.stockStatus} />
+                        <StatusBadge status={p.stockStatus || 'Unspecified'} />
                       </td>
                     </tr>
                   ))}
@@ -218,7 +244,7 @@ export default function DashboardPage({
             </div>
 
             <div className="p-space-md grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {INITIAL_CATEGORIES.map((cat) => (
+              {categoryList.map((cat: any) => (
                 <div
                   key={cat.id}
                   onClick={() => setActiveModule && setActiveModule('categories')}
@@ -268,7 +294,7 @@ export default function DashboardPage({
             </div>
 
             <div className="divide-y divide-surface-container-low">
-              {recentAppointments.map((app) => (
+              {recentAppointments.map((app: any) => (
                 <div
                   key={app.id}
                   onClick={() => {
@@ -318,7 +344,7 @@ export default function DashboardPage({
             </div>
 
             <div className="divide-y divide-surface-container-low">
-              {recentConversations.map((c) => (
+              {recentConversations.map((c: any) => (
                 <div
                   key={c.id}
                   onClick={() => {

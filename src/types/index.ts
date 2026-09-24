@@ -11,10 +11,15 @@ export interface Product {
   id: string;
   name: string;
   sku: string;
+  /** Foreign key to Category.id — what the API stores and filters on. */
+  categoryId: string;
+  /** Display name, derived by the API from categoryId. Read-only for the client. */
   category: string;
-  price: number;
-  stockStatus: 'In Stock' | 'Low Stock' | 'Out of Stock' | string;
-  stock: number;
+  /** Optional: an offering can be created before it is priced. */
+  price?: number;
+  /** `Unspecified` when no stock figure has been entered — unknown, not zero. */
+  stockStatus?: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Unspecified' | string;
+  stock?: number;
   image: string;
   description?: string;
   salesLast30Days?: number;
@@ -31,12 +36,15 @@ export interface Product {
 }
 
 export interface Category {
+  /** Referenced by Product.categoryId; assigned once and never changed. */
   id: string;
   name: string;
   description: string;
   icon: string;
-  productCount: number;
-  subcategories: string[];
+  color?: string;
+  /** Derived by the API from the products pointing at this category. */
+  productsCount: number;
+  updated?: string;
 }
 
 export interface KnowledgeDocument {

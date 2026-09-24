@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { INITIAL_TEAM } from '../data/mockData';
-import { Button, MetricsCard, Icon } from '../components/common';
+import { teamApi } from '../api';
+import { useApi, useDebounced } from '../hooks/useApi';
+import { Button, MetricsCard, Icon, ErrorBanner } from '../components/common';
 
 export default function TeamsPage() {
-  const [team, setTeam] = useState(INITIAL_TEAM);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('All');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // New Member Form
   const [newName, setNewName] = useState('');
@@ -16,38 +18,60 @@ export default function TeamsPage() {
   const [newDept, setNewDept] = useState('');
   const [newRole, setNewRole] = useState('Editor');
 
-  const filteredTeam = team.filter((m) => {
-    const matchesSearch =
-      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.department.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = selectedRoleFilter === 'All' || m.role === selectedRoleFilter;
-    const matchesStatus = selectedStatusFilter === 'All' || m.status === selectedStatusFilter;
-    return matchesSearch && matchesRole && matchesStatus;
-  });
+  /* Search, role and status all filter server-side. */
+  const debouncedSearch = useDebounced(searchQuery);
+  const teamState = useApi(
+    () =>
+      teamApi.list({
+        search: debouncedSearch || undefined,
+        role: selectedRoleFilter === 'All' ? undefined : selectedRoleFilter,
+        status: selectedStatusFilter === 'All' ? undefined : selectedStatusFilter
+      }),
+    [debouncedSearch, selectedRoleFilter, selectedStatusFilter]
+  );
 
-  const handleAddMemberSubmit = (e) => {
+  const filteredTeam = teamState.data?.data || [];
+
+  /* The stat cards count the whole workspace, so they can't come from a filtered list. */
+  const allMembers = useApi(() => teamApi.list(), []);
+  const roster = allMembers.data?.data || [];
+  const totalMembers = allMembers.data?.total ?? roster.length;
+
+  const handleAddMemberSubmit = async (e) => {
     e.preventDefault();
     if (!newName || !newEmail) return;
-    const newMember = {
-      id: `team-${Date.now()}`,
-      name: newName,
-      email: newEmail,
-      department: newDept || 'Operations',
-      role: newRole,
-      status: 'Active',
-      avatar: ''
-    };
-    setTeam([...team, newMember]);
-    setNewName('');
-    setNewEmail('');
-    setNewDept('');
-    setIsAddMemberOpen(false);
+    setSaveError('');
+    setIsSaving(true);
+    try {
+      await teamApi.create({
+        name: newName,
+        email: newEmail,
+        department: newDept || 'Operations',
+        role: newRole
+      });
+      setNewName('');
+      setNewEmail('');
+      setNewDept('');
+      setIsAddMemberOpen(false);
+      teamState.refetch();
+      allMembers.refetch();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not add the member.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleRevokeAccess = (id) => {
-    setTeam(team.filter((m) => m.id !== id));
+  const handleRevokeAccess = async (id) => {
     setOpenMenuId(null);
+    setSaveError('');
+    try {
+      await teamApi.remove(id);
+      teamState.refetch();
+      allMembers.refetch();
+    } catch (err) {
+      setSaveError(err?.message || 'Could not revoke access.');
+    }
   };
 
   return (
@@ -60,7 +84,7 @@ export default function TeamsPage() {
               Team Members
             </h1>
             <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container-high text-on-surface-variant font-semibold">
-              {team.length} Total
+              {totalMembers} Total
             </span>
           </div>
           <p className="font-body-md text-body-md text-on-surface-variant mt-1">
@@ -96,7 +120,7 @@ export default function TeamsPage() {
             </span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="font-display-lg text-display-lg text-on-surface font-bold">
-                {team.filter(m => m.status === 'Active').length}
+                {roster.filter((m) => m.status === 'Active').length}
               </span>
               <span className="font-caption text-caption text-secondary font-medium">/ 10 Seats Used</span>
             </div>
@@ -113,7 +137,7 @@ export default function TeamsPage() {
             </span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="font-display-lg text-display-lg text-on-surface font-bold">
-                {team.filter(m => m.status !== 'Active').length}
+                {roster.filter((m) => m.status !== 'Active').length}
               </span>
               <span className="font-caption text-caption text-outline font-medium">Awaiting setup</span>
             </div>
@@ -138,6 +162,13 @@ export default function TeamsPage() {
           </div>
         </div>
       </div>
+
+      {(teamState.error || saveError) && (
+        <ErrorBanner
+          message={teamState.error || saveError}
+          onRetry={teamState.error ? teamState.refetch : undefined}
+        />
+      )}
 
       {/* Main Table Container */}
       <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -192,6 +223,20 @@ export default function TeamsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container-low/40 font-body-sm text-body-sm">
+              {teamState.loading && filteredTeam.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center font-body-sm text-body-sm text-on-surface-variant">
+                    Loading team members…
+                  </td>
+                </tr>
+              )}
+              {!teamState.loading && filteredTeam.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center font-body-sm text-body-sm text-on-surface-variant">
+                    No members matched your search or filters.
+                  </td>
+                </tr>
+              )}
               {filteredTeam.map((m) => (
                 <tr key={m.id} className="h-16 hover:bg-surface-container-low/60 transition-colors group">
                   <td className="pl-space-lg pr-4 py-space-xs">
@@ -363,8 +408,9 @@ export default function TeamsPage() {
                   variant="primary"
                   size="md"
                   type="submit"
+                  disabled={isSaving}
                 >
-                  Send Invitation
+                  {isSaving ? 'Sending…' : 'Send Invitation'}
                 </Button>
               </div>
             </form>

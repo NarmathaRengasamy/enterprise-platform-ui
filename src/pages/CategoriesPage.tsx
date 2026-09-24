@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { INITIAL_CATEGORIES } from '../data/mockData';
+import { categoriesApi } from '../api';
+import { useApi, useDebounced } from '../hooks/useApi';
 import {
   Button,
   MetricsCard,
@@ -11,18 +12,31 @@ import {
   TableCell,
   TableEmptyState,
   SearchInput,
-  Icon
+  Icon,
+  ErrorBanner
 } from '../components/common';
 
 interface CategoriesPageProps {
   setActiveModule: (module: string) => void;
+  /** Opens the product list filtered to one category. */
+  onViewCategoryProducts?: (categoryId: string) => void;
 }
 
-export default function CategoriesPage({ setActiveModule }: CategoriesPageProps) {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+export default function CategoriesPage({
+  setActiveModule,
+  onViewCategoryProducts
+}: CategoriesPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  /* Set while an edit is in flight so the modal knows to PUT instead of POST. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const debouncedSearch = useDebounced(searchQuery);
+  const categoriesState = useApi(() => categoriesApi.list(debouncedSearch || undefined), [debouncedSearch]);
+  const categories = categoriesState.data?.data || [];
 
   // Selection state
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
@@ -54,21 +68,15 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('category');
 
-  // Filtered & Sorted Categories
+  /* Search runs server-side; the status filter and sort are still client-side —
+     the API has no hasProducts/sortBy parameters yet. */
   const filteredCategories = categories
-    .filter((c) => {
-      const matchesSearch =
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.id.toLowerCase().includes(searchQuery.toLowerCase());
-
-      if (!matchesSearch) return false;
-
+    .filter((c: any) => {
       if (filterType === 'with-products') return c.productsCount > 0;
       if (filterType === 'empty') return c.productsCount === 0;
       return true;
     })
-    .sort((a, b) => {
+    .sort((a: any, b: any) => {
       if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
       if (sortBy === 'products-desc') return b.productsCount - a.productsCount;
       return 0;
@@ -77,14 +85,14 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
   // Select All handlers
   const isAllSelected =
     filteredCategories.length > 0 &&
-    filteredCategories.every((c) => selectedCategoryIds.includes(c.id));
+    filteredCategories.every((c: any) => selectedCategoryIds.includes(c.id));
   const isSomeSelected = selectedCategoryIds.length > 0 && !isAllSelected;
 
   const handleToggleSelectAll = () => {
     if (isAllSelected) {
       setSelectedCategoryIds([]);
     } else {
-      setSelectedCategoryIds(filteredCategories.map((c) => c.id));
+      setSelectedCategoryIds(filteredCategories.map((c: any) => c.id));
     }
   };
 
@@ -94,9 +102,17 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
     );
   };
 
-  const handleBulkDelete = () => {
-    setCategories((prev) => prev.filter((c) => !selectedCategoryIds.includes(c.id)));
-    setSelectedCategoryIds([]);
+  /* No bulk-delete endpoint yet, so the selection is deleted one call at a time. */
+  const handleBulkDelete = async () => {
+    setSaveError('');
+    try {
+      await Promise.all(selectedCategoryIds.map((id) => categoriesApi.remove(id)));
+    } catch (err: any) {
+      setSaveError(err?.message || 'Some categories could not be deleted.');
+    } finally {
+      setSelectedCategoryIds([]);
+      categoriesState.refetch();
+    }
   };
 
   const handleRefresh = () => {
@@ -105,35 +121,71 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
     setFilterType('all');
     setSortBy('default');
     setSelectedCategoryIds([]);
-    setTimeout(() => {
-      setCategories(INITIAL_CATEGORIES);
-      setIsRefreshing(false);
-    }, 400);
+    categoriesState.refetch();
+    setTimeout(() => setIsRefreshing(false), 400);
   };
 
-  const handleAddCategorySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCatName) return;
-    const newCategory = {
-      id: newCatCode || `CAT-00${categories.length + 1}`,
-      name: newCatName,
-      description: newCatDesc || 'General category item',
-      productsCount: 0,
-      updated: 'Just now',
-      icon: newCatIcon || 'category',
-      color: 'primary'
-    };
-    setCategories([newCategory, ...categories]);
+  const handleOpenAddModal = () => {
+    setEditingId(null);
     setNewCatName('');
     setNewCatCode('');
     setNewCatDesc('');
-    setIsAddModalOpen(false);
+    setNewCatIcon('category');
+    setSaveError('');
+    setIsAddModalOpen(true);
   };
 
-  const handleDeleteCategory = (id: string) => {
-    setCategories(categories.filter((c) => c.id !== id));
-    setSelectedCategoryIds((prev) => prev.filter((item) => item !== id));
+  const handleOpenEditModal = (cat: any) => {
+    setEditingId(cat.id);
+    setNewCatName(cat.name);
+    setNewCatCode(cat.id);
+    setNewCatDesc(cat.description);
+    setNewCatIcon(cat.icon || 'category');
+    setSaveError('');
+    setIsAddModalOpen(true);
+  };
+
+  const handleAddCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName) return;
+    setSaveError('');
+    setIsSaving(true);
+
+    const payload = {
+      name: newCatName,
+      description: newCatDesc || 'General category item',
+      icon: newCatIcon || 'category'
+    };
+
+    try {
+      if (editingId) {
+        await categoriesApi.update(editingId, payload);
+      } else {
+        await categoriesApi.create({ ...payload, id: newCatCode || undefined });
+      }
+      setIsAddModalOpen(false);
+      setEditingId(null);
+      setNewCatName('');
+      setNewCatCode('');
+      setNewCatDesc('');
+      categoriesState.refetch();
+    } catch (err: any) {
+      setSaveError(err?.message || 'Could not save the category.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    setSaveError('');
     setOpenDropdownId(null);
+    try {
+      await categoriesApi.remove(id);
+      setSelectedCategoryIds((prev) => prev.filter((item) => item !== id));
+      categoriesState.refetch();
+    } catch (err: any) {
+      setSaveError(err?.message || 'Could not delete the category.');
+    }
   };
 
   return (
@@ -160,12 +212,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
             variant="primary"
             size="md"
             startIcon="add"
-            onClick={() => {
-              setNewCatName('');
-              setNewCatCode('');
-              setNewCatDesc('');
-              setIsAddModalOpen(true);
-            }}
+            onClick={handleOpenAddModal}
           >
             Add Category
           </Button>
@@ -176,7 +223,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg">
         <MetricsCard
           title="Total Categories"
-          value={categories.length}
+          value={categoriesState.data?.total ?? categories.length}
           trend="100% active status"
           trendType="positive"
           icon="category"
@@ -185,7 +232,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
 
         <MetricsCard
           title="Assigned SKUs"
-          value={categories.reduce((sum, c) => sum + c.productsCount, 0)}
+          value={categories.reduce((sum: number, c: any) => sum + (c.productsCount || 0), 0)}
           trend="100% categorized"
           trendType="positive"
           trendIcon="check_circle"
@@ -210,6 +257,14 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
           variant="tertiary"
         />
       </div>
+
+      {(categoriesState.error || saveError) && (
+        <ErrorBanner
+          message={categoriesState.error || saveError}
+          onRetry={categoriesState.error ? categoriesState.refetch : undefined}
+          className="mb-space-md"
+        />
+      )}
 
       {/* Primary Content Card & Table Container */}
       <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 flex flex-col relative">
@@ -370,7 +425,14 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
             </tr>
           </TableHead>
           <TableBody>
-            {filteredCategories.length === 0 ? (
+            {categoriesState.loading ? (
+              <TableEmptyState
+                icon="progress_activity"
+                title="Loading categories…"
+                description="Fetching categories from the API."
+                colSpan={4}
+              />
+            ) : filteredCategories.length === 0 ? (
               <TableEmptyState
                 icon="category"
                 title="No categories found"
@@ -378,7 +440,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                 colSpan={4}
               />
             ) : (
-              filteredCategories.map((cat) => {
+              filteredCategories.map((cat: any) => {
                 const isSelected = selectedCategoryIds.includes(cat.id);
                 return (
                   <TableRow
@@ -422,12 +484,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                           variant="ghost"
                           size="icon-sm"
                           startIcon="edit"
-                          onClick={() => {
-                            setNewCatName(cat.name);
-                            setNewCatCode(cat.id);
-                            setNewCatDesc(cat.description);
-                            setIsAddModalOpen(true);
-                          }}
+                          onClick={() => handleOpenEditModal(cat)}
                           title="Edit Category"
                           aria-label="Edit Category"
                         />
@@ -443,7 +500,13 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                             <div className="absolute right-0 top-full mt-1 w-44 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 border border-surface-container-high">
                               <button
                                 type="button"
-                                onClick={() => { setActiveModule('products'); setOpenDropdownId(null); }}
+                                onClick={() => {
+                                  setOpenDropdownId(null);
+                                  /* Products reference this category by id, so the
+                                     list can filter on it exactly. */
+                                  if (onViewCategoryProducts) onViewCategoryProducts(cat.id);
+                                  else setActiveModule('products');
+                                }}
                                 className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors"
                               >
                                 <Icon name="visibility" size="sm" color="outline" />
@@ -479,7 +542,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
               <div className="flex items-center gap-2">
                 <Icon name="category" size="lg" color="primary" />
                 <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">
-                  {newCatCode ? 'Edit Category' : 'Add New Category'}
+                  {editingId ? 'Edit Category' : 'Add New Category'}
                 </h2>
               </div>
               <Button
@@ -511,9 +574,22 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                     type="text"
                     value={newCatCode}
                     onChange={(e) => setNewCatCode(e.target.value)}
-                    placeholder="CAT-005"
-                    className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary uppercase"
+                    placeholder="Auto-generated"
+                    /* Products reference this code, so it is fixed once the
+                       category exists — the API ignores any change to it. */
+                    readOnly={Boolean(editingId)}
+                    title={editingId ? 'The code cannot change — products reference it' : undefined}
+                    className={`w-full h-10 px-3 rounded-xl text-on-surface border border-surface-container-high focus:outline-none focus:border-primary uppercase ${
+                      editingId
+                        ? 'bg-surface-container text-on-surface-variant cursor-not-allowed'
+                        : 'bg-surface-container-low'
+                    }`}
                   />
+                  <span className="font-caption text-caption text-outline">
+                    {editingId
+                      ? 'Fixed — products reference this code'
+                      : 'Optional; generated if left blank'}
+                  </span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="font-label-md text-label-md text-on-surface">Icon Symbol</label>
@@ -542,6 +618,10 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                 />
               </div>
 
+              {saveError && (
+                <span className="font-body-sm text-body-sm text-error">{saveError}</span>
+              )}
+
               <div className="flex justify-end gap-2 pt-2 border-t border-surface-container-low">
                 <Button
                   variant="ghost"
@@ -554,8 +634,9 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                   variant="primary"
                   size="md"
                   type="submit"
+                  disabled={isSaving}
                 >
-                  Save Category
+                  {isSaving ? 'Saving…' : 'Save Category'}
                 </Button>
               </div>
             </form>

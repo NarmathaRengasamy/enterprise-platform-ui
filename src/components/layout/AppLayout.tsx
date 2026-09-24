@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { authApi, conversationsApi } from '../../api';
+import { useApi } from '../../hooks/useApi';
 
 export default function AppLayout({ activeModule, setActiveModule, children, onLogout }) {
+  /* Header identity comes from the signed-in user, not a hardcoded name. */
+  const currentUser = useApi(() => authApi.me(), []);
+  const user = currentUser.data;
+  const initials = (user?.name || '')
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  /* The sidebar badge counts threads with unread messages. There is no
+     unread-count endpoint yet, so it is derived from the thread list. */
+  const conversationsState = useApi(() => conversationsApi.list(), []);
+  const unreadConversations = (conversationsState.data?.data || []).filter(
+    (c) => (c.unread || 0) > 0
+  ).length;
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
     activeModule === 'products' ||
     activeModule === 'categories' ||
@@ -162,9 +181,11 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                   <span className="material-symbols-outlined text-lg">chat</span>
                   <span>Conversations</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary font-bold text-[11px]">
-                  3
-                </span>
+                {unreadConversations > 0 && (
+                  <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary font-bold text-[11px]">
+                    {unreadConversations}
+                  </span>
+                )}
               </button>
 
               {/* 3. Products Submenu */}
@@ -430,11 +451,15 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
                 <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-primary to-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-xs ring-1 ring-primary/30">
-                  SJ
+                  {initials || '—'}
                 </div>
                 <div className="flex flex-col text-left sm:flex">
-                  <span className="font-title-sm text-xs text-on-surface font-bold leading-tight">Sarah Jenkins</span>
-                  <span className="font-caption text-[9.5px] text-on-surface-variant uppercase tracking-wider font-semibold">Admin</span>
+                  <span className="font-title-sm text-xs text-on-surface font-bold leading-tight">
+                    {user?.name || 'Loading…'}
+                  </span>
+                  <span className="font-caption text-[9.5px] text-on-surface-variant uppercase tracking-wider font-semibold">
+                    {user?.role || ''}
+                  </span>
                 </div>
                 <span className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180 text-primary' : ''}`}>
                   expand_more
@@ -445,8 +470,8 @@ export default function AppLayout({ activeModule, setActiveModule, children, onL
               {profileDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl z-50 py-2 border border-slate-200/90 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70">
-                    <p className="font-title-sm text-sm text-on-surface font-bold">Sarah Jenkins</p>
-                    <p className="font-caption text-xs text-outline">sarah@omniflow.io</p>
+                    <p className="font-title-sm text-sm text-on-surface font-bold">{user?.name || '—'}</p>
+                    <p className="font-caption text-xs text-outline">{user?.email || ''}</p>
                   </div>
                   <div className="py-1">
                     <button
