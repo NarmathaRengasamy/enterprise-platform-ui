@@ -33,6 +33,59 @@ const isChatMessage = (m: ConversationMessage): boolean => {
   return CHAT_EVENT_TYPES.has(m.eventType) && Boolean((m.text || '').trim());
 };
 
+/* Events that are not chat turns but still belong in the transcript: what the
+   channel and the call did. Rendered as a line across the thread rather than a
+   bubble — nobody said them.
+
+   `delivery_status` is the one the platform shows as "Delivery failed". Its
+   payload carries no status and no reason — Perfox's own API returns the event
+   bare, whatever `include` is asked for — so it is reported as an unconfirmed
+   delivery rather than described as a failure it cannot prove. */
+const SYSTEM_EVENTS: Record<
+  string,
+  { icon: string; label: string; tone: 'neutral' | 'warn'; hint?: string }
+> = {
+  call_started: { icon: 'call', label: 'Call started', tone: 'neutral' },
+  call_ended: { icon: 'call_end', label: 'Call ended', tone: 'neutral' },
+  call_recorded: {
+    icon: 'graphic_eq',
+    label: 'Call recorded',
+    tone: 'neutral',
+    hint: 'Perfox holds the recording; its API does not return a link to it.'
+  },
+  status_change: { icon: 'flag', label: 'Status changed', tone: 'neutral' },
+  delivery_status: {
+    icon: 'error',
+    label: 'Delivery not confirmed',
+    tone: 'warn',
+    hint: 'The channel reported back on this message. Perfox does not include the outcome or the reason in its API — check the conversation in Perfox for the detail.'
+  }
+};
+
+const isSystemEvent = (m: ConversationMessage): boolean =>
+  Boolean(m.eventType && SYSTEM_EVENTS[m.eventType]);
+
+/** Kept in the transcript: real turns, plus the system events rendered above. */
+const isDisplayedEvent = (m: ConversationMessage): boolean =>
+  isChatMessage(m) || isSystemEvent(m);
+
+/* The channel a stretch of the thread ran on, for the divider between them. */
+const CHANNEL_MARKS: Record<string, { icon: string; label: string; dot: string }> = {
+  whatsapp: { icon: 'chat', label: 'WhatsApp', dot: 'bg-emerald-500' },
+  phone: { icon: 'call', label: 'Phone', dot: 'bg-purple-500' },
+  voice: { icon: 'call', label: 'Phone', dot: 'bg-purple-500' },
+  sms: { icon: 'sms', label: 'SMS', dot: 'bg-amber-500' },
+  email: { icon: 'mail', label: 'Email', dot: 'bg-sky-500' },
+  web: { icon: 'language', label: 'Web chat', dot: 'bg-blue-500' }
+};
+
+const channelMark = (channel?: string) =>
+  CHANNEL_MARKS[String(channel || '').toLowerCase()] || {
+    icon: 'forum',
+    label: channel || 'Conversation',
+    dot: 'bg-gray-400'
+  };
+
 /* Status dot: ended → blue, abandoned → grey, resolved → green.
    `active` is a live thread, so it gets its own amber; anything unrecognised
    falls back to grey rather than pretending to be one of the known states. */
@@ -295,7 +348,7 @@ export default function ConversationsPage({
       .getConversation(id, { signal })
       .then((detail) => {
         if (signal.aborted) return;
-        const messages = (detail.messages || []).filter(isChatMessage);
+        const messages = (detail.messages || []).filter(isDisplayedEvent);
         transcriptCache.current.set(id, messages);
         detailCache.current.set(
           id,
@@ -793,20 +846,66 @@ export default function ConversationsPage({
   };
 
   /* ── Group the thread into days ────────────────────────────────────────── */
+
+  /**
+   * Days, each holding its entries in order.
+   *
+   * Two things are worked out here rather than while rendering, because both
+   * depend on what came *before* a message and the day groups hide that:
+   *
+   *   - `channelSwitch`: the thread moves between channels — a WhatsApp chat
+   *     that becomes a phone call and comes back — so each stretch is marked
+   *     with the channel it ran on.
+   *   - `durationMs` on a `call_ended`: the length of the call, from the
+   *     `call_started` that opened it. Perfox sends neither event with a
+   *     duration, so it is the gap between the two.
+   */
   const messageDays = useMemo(() => {
-    const groups: { key: string; label: string; messages: ConversationMessage[] }[] = [];
+    type Entry = {
+      message: ConversationMessage;
+      channelSwitch?: string;
+      durationMs?: number;
+    };
+
+    const groups: { key: string; label: string; entries: Entry[] }[] = [];
+    let previousChannel = '';
+    let callStartedAt = 0;
+
     activeConvo.messages.forEach((m) => {
       const iso = m.timestamp || '';
+      const channel = String(m.channel || '').toLowerCase();
+      const entry: Entry = { message: m };
+
+      if (channel && channel !== previousChannel) {
+        entry.channelSwitch = channel;
+        previousChannel = channel;
+      }
+
+      if (m.eventType === 'call_started') {
+        callStartedAt = iso ? new Date(iso).getTime() : 0;
+      } else if (m.eventType === 'call_ended' && callStartedAt && iso) {
+        const ended = new Date(iso).getTime();
+        if (ended > callStartedAt) entry.durationMs = ended - callStartedAt;
+        callStartedAt = 0;
+      }
+
       const key = dayKey(iso);
       const last = groups[groups.length - 1];
       if (last && last.key === key) {
-        last.messages.push(m);
+        last.entries.push(entry);
       } else {
-        groups.push({ key, label: dayLabel(iso), messages: [m] });
+        groups.push({ key, label: dayLabel(iso), entries: [entry] });
       }
     });
+
     return groups;
   }, [activeConvo.messages]);
+
+  /** mm:ss, for a call whose length was worked out from its two events. */
+  const callLength = (ms: number) => {
+    const total = Math.round(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
 
   const activeStatus = statusStyle(activeConvo.status);
 
@@ -997,30 +1096,19 @@ export default function ConversationsPage({
                         {status.label}
                       </span>
                     </div>
-                    {c.unread > 0 && (
-                      <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-mono text-[11px] font-semibold shrink-0">
-                        {c.unread}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
             );
           })}
 
-          {/* Load more — pulls the next PAGE_SIZE rows and appends them */}
+          {/* Load more — widens the window onto the rows already fetched */}
           {hasMore && !loading && (
             <div className="p-2">
               <Button variant="hover" size="sm" fullWidth onClick={loadMore}>
-                {`Load more (${visibleConversations.length} of ${total})`}
+                Load more
               </Button>
             </div>
-          )}
-
-          {!loading && visibleConversations.length > 0 && (
-            <p className="py-2 text-center font-body-sm text-[11px] text-on-surface-variant">
-              {visibleConversations.length} of {total} conversations
-            </p>
           )}
         </div>
       </div>
@@ -1202,25 +1290,78 @@ export default function ConversationsPage({
                 </span>
               </div>
 
-              {day.messages.map((m) => {
+              {day.entries.map(({ message: m, channelSwitch, durationMs }) => {
                 const isMe = m.sender === 'me';
                 const isSystem = m.sender === 'system';
                 const isCurrentMatch = m.id === currentMatchId;
                 const isMatch = matchIds.includes(m.id);
+                const systemEvent = m.eventType ? SYSTEM_EVENTS[m.eventType] : undefined;
+
+                /* Where the thread moved to. A conversation can start on
+                   WhatsApp, become a phone call and come back, and without this
+                   the call's turns read as WhatsApp messages. */
+                const divider = channelSwitch ? (
+                  <div key={`${m.id}-channel`} className="flex items-center gap-3 py-1">
+                    <span className="h-px flex-1 bg-surface-container" />
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-lowest border border-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold shrink-0">
+                      <span className={`w-1.5 h-1.5 rounded-full ${channelMark(channelSwitch).dot}`} />
+                      <span className="material-symbols-outlined text-[14px]">
+                        {channelMark(channelSwitch).icon}
+                      </span>
+                      {channelMark(channelSwitch).label}
+                    </span>
+                    <span className="h-px flex-1 bg-surface-container" />
+                  </div>
+                ) : null;
+
+                /* Not a turn anybody took — a call opening or closing, a status
+                   change, a channel reporting back. Rendered as a line across
+                   the thread, in the order it happened. */
+                if (systemEvent) {
+                  const warn = systemEvent.tone === 'warn';
+                  return (
+                    <React.Fragment key={m.id}>
+                      {divider}
+                      <div className="flex items-center justify-center">
+                        <span
+                          title={systemEvent.hint}
+                          className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-[11px] ${
+                            warn
+                              ? 'bg-error/10 text-error border border-error/20'
+                              : 'bg-surface-container text-on-surface-variant'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[14px]">
+                            {systemEvent.icon}
+                          </span>
+                          {systemEvent.label}
+                          {durationMs ? ` · ${callLength(durationMs)}` : ''}
+                          <span className="font-mono opacity-70" title={fullTimestamp(m.timestamp)}>
+                            {clockTime(m.timestamp) || m.time}
+                          </span>
+                        </span>
+                      </div>
+                    </React.Fragment>
+                  );
+                }
 
                 if (isSystem) {
                   return (
-                    <div key={m.id} className="flex items-center justify-center">
-                      <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px]">
-                        {highlight(m.text, m.id)}
-                      </span>
-                    </div>
+                    <React.Fragment key={m.id}>
+                      {divider}
+                      <div className="flex items-center justify-center">
+                        <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px]">
+                          {highlight(m.text, m.id)}
+                        </span>
+                      </div>
+                    </React.Fragment>
                   );
                 }
 
                 return (
+                  <React.Fragment key={m.id}>
+                  {divider}
                   <div
-                    key={m.id}
                     ref={(el) => {
                       messageRefs.current[m.id] = el;
                     }}
@@ -1323,6 +1464,7 @@ export default function ConversationsPage({
                       </div>
                     </div>
                   </div>
+                  </React.Fragment>
                 );
               })}
             </div>
