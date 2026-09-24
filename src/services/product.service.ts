@@ -59,6 +59,31 @@ export interface ExportProductsParams {
   search?: string;
 }
 
+const normalizeStatusEnum = (status?: string, stock?: number | string): 'In Stock' | 'Low Stock' | 'Out of Stock' => {
+  const s = String(status || '').trim().toLowerCase();
+  if (s.includes('out') || s.includes('unavail') || s.includes('sold') || stock === 0 || stock === '0') {
+    return 'Out of Stock';
+  }
+  if (s.includes('low') || s.includes('limit')) {
+    return 'Low Stock';
+  }
+  return 'In Stock';
+};
+
+const sanitizeProductPayload = <T extends CreateProductInput | UpdateProductInput>(payload: T): T => {
+  const sanitized = { ...payload };
+  if (sanitized.variants && Array.isArray(sanitized.variants)) {
+    sanitized.variants = sanitized.variants.map((v) => ({
+      ...v,
+      status: normalizeStatusEnum(v.status, v.capacity ?? v.stock),
+    }));
+  }
+  if (sanitized.stockStatus) {
+    sanitized.stockStatus = normalizeStatusEnum(sanitized.stockStatus, sanitized.stock);
+  }
+  return sanitized;
+};
+
 export const productService = {
   /**
    * List products with pagination, search, and category/status filtering.
@@ -111,7 +136,8 @@ export const productService = {
    * Corresponds to POST /api/v1/products
    */
   async createProduct(payload: CreateProductInput): Promise<Product> {
-    const res = await client.post<Product>('/products', payload);
+    const cleanPayload = sanitizeProductPayload(payload);
+    const res = await client.post<Product>('/products', cleanPayload);
     if (!res.data) {
       throw new Error(res.message || 'Failed to create product');
     }
@@ -123,7 +149,8 @@ export const productService = {
    * Corresponds to PUT /api/v1/products/:id
    */
   async updateProduct(id: string, payload: UpdateProductInput): Promise<Product> {
-    const res = await client.put<Product>(`/products/${encodeURIComponent(id)}`, payload);
+    const cleanPayload = sanitizeProductPayload(payload);
+    const res = await client.put<Product>(`/products/${encodeURIComponent(id)}`, cleanPayload);
     if (!res.data) {
       throw new Error(res.message || 'Failed to update product');
     }
