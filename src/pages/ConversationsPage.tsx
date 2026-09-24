@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/common';
+import { useAuth } from '../hooks/useAuth';
 import { conversationService } from '../services/conversation.service';
 import type {
   ConversationAgentOption,
   ConversationItem,
   ConversationMessage,
   ConversationSource,
-  NewConversationPayload
+  OutboundChannel,
+  OutboundChannelOption
 } from '../types/conversation.types';
 import { clockTime, dayKey, dayLabel, fullTimestamp, relativeLabel } from '../utils/datetime';
 
@@ -66,6 +68,18 @@ const SENDABLE = [
   { key: 'email', label: 'Email' }
 ];
 
+/* The channels a new conversation can be opened on.
+   `phone` is here for the tab only: the service implements outbound for the
+   other three, so the call form is laid out but wired to nothing. */
+const START_TABS = [
+  { key: 'sms', label: 'SMS', icon: 'sms' },
+  { key: 'whatsapp', label: 'WhatsApp', icon: 'chat' },
+  { key: 'email', label: 'Email', icon: 'mail' },
+  { key: 'phone', label: 'Phone call', icon: 'call' }
+] as const;
+
+type StartTab = (typeof START_TABS)[number]['key'];
+
 const EMPTY_CONVO: ConversationItem = {
   id: '',
   name: '',
@@ -83,6 +97,19 @@ const EMPTY_CONVO: ConversationItem = {
   messages: []
 };
 
+/**
+ * Only the keys that actually came back.
+ *
+ * The detail route does not repeat every field a list row carries — `agentId`
+ * is one it leaves out, naming the agent but identifying it as `workflowId` —
+ * so a plain `{ ...row, ...detail }` merge would write `undefined` over what the
+ * row already knew and make an agent-backed thread look agent-less.
+ */
+const definedFields = <T extends object>(fields: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined)
+  ) as Partial<T>;
+
 const initialsOf = (name: string) => {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '';
@@ -93,6 +120,11 @@ export default function ConversationsPage({
   selectedConversationId: propSelectedConvoId,
   setSelectedConversationId: propSetSelectedConvoId
 }: ConversationsPageProps = {}) {
+  /* Sending is Admin or Editor. Mirrored here so a Viewer is not offered a
+     button the server is going to refuse. */
+  const { user } = useAuth();
+  const canSendOutbound = user?.role === 'Admin' || user?.role === 'Editor';
+
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [total, setTotal] = useState(0);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -100,6 +132,9 @@ export default function ConversationsPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [sendError, setSendError] = useState('');
+  /* What became of the last send. Perfox can accept a request and still not put
+     it out, so the outcome is reported rather than assumed from a 200. */
+  const [sendNotice, setSendNotice] = useState('');
 
   const [internalActiveConvoId, setInternalActiveConvoId] = useState<string | null>(
     propSelectedConvoId || null
@@ -113,6 +148,14 @@ export default function ConversationsPage({
      thread looking empty. The cache is what re-fills it. */
   const transcriptCache = useRef<Map<string, ConversationMessage[]>>(new Map());
 
+  /* The fields only the detail route resolves — above all `agentTriggerChannels`,
+     which the composer gates on. A list refetch replaces the open thread's row
+     with a plain list row that carries none of them, and re-fetching the detail
+     is suppressed by the transcript cache, so they are kept here and merged back
+     in. Only these fields: taking the whole detail would also restore its `unread`
+     and `lastMessage`, undoing a mark-as-read or a just-sent message. */
+  const detailCache = useRef<Map<string, Partial<ConversationItem>>>(new Map());
+
   /* Which store answered, and why the live one did not. A list served from the
      mirror looks exactly like a live one, so it has to say so. */
   const [source, setSource] = useState<ConversationSource>('perfox');
@@ -121,6 +164,15 @@ export default function ConversationsPage({
   /* The agent filter rides on the list response — no separate call. */
   const [agentOptions, setAgentOptions] = useState<ConversationAgentOption[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState('all');
+
+  /* Bumped when something outside the filters should re-read the list — a
+     conversation Perfox has just opened, for instance. */
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  /* A conversation that has just been started. Kept apart from the composer's
+     own notice, which is cleared whenever the open thread changes — and
+     starting a conversation changes it. */
+  const [startedNotice, setStartedNotice] = useState('');
 
   const [selectedChannelFilter, setSelectedChannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -197,7 +249,7 @@ export default function ConversationsPage({
     })();
 
     return () => controller.abort();
-  }, [selectedChannelFilter, debouncedSearch, selectedAgentId]);
+  }, [selectedChannelFilter, debouncedSearch, selectedAgentId, refreshKey]);
 
   /* An agent that no longer appears under the current channel and search cannot
      be cleared from a dropdown that no longer lists it, so clear it here. */
@@ -245,6 +297,22 @@ export default function ConversationsPage({
         if (signal.aborted) return;
         const messages = (detail.messages || []).filter(isChatMessage);
         transcriptCache.current.set(id, messages);
+        detailCache.current.set(
+          id,
+          definedFields({
+            agentId: detail.agentId,
+            workflowId: detail.workflowId,
+            agentName: detail.agentName,
+            agentStatus: detail.agentStatus,
+            agentChannels: detail.agentChannels,
+            agentSenderChannels: detail.agentSenderChannels,
+            agentTriggerChannels: detail.agentTriggerChannels,
+            /* Resolved from the customer record by id, which is the only place
+               an anonymous visitor's address ever comes from. */
+            phone: detail.phone,
+            email: detail.email
+          })
+        );
         setConversations((prev) => {
           const exists = prev.some((c) => c.id === id);
           if (!exists) return [{ ...detail, messages }, ...prev];
@@ -286,51 +354,79 @@ export default function ConversationsPage({
   const activeConvo = useMemo(() => {
     const row = conversations.find((c) => c.id === displayedId);
     if (!row) return EMPTY_CONVO;
-    // List rows carry no messages, so a row that came back from a refetch needs
-    // its transcript put back from the cache
-    if (row.messages.length > 0) return row;
+
+    // A refetched row is a plain list row: no transcript and none of the
+    // detail-only fields. Both caches are what put them back.
+    const detail = detailCache.current.get(row.id);
+    const base = detail ? { ...row, ...detail } : row;
+
+    if (base.messages.length > 0) return base;
     const cached = transcriptCache.current.get(row.id);
-    return cached && cached.length > 0 ? { ...row, messages: cached } : row;
+    return cached && cached.length > 0 ? { ...base, messages: cached } : base;
   }, [conversations, displayedId]);
+
+  /* A thread with no Perfox agent behind it — one started in this UI. Nothing
+     can send on its behalf, and `POST /:id/send` refuses it with a 409, so the
+     composer offers nothing rather than writing a message that reaches no one. */
+  /* `agentId` is the list row's name for it; the detail route calls the same id
+     `workflowId`. Either one means there is an agent. */
+  const threadAgentId = activeConvo.agentId || activeConvo.workflowId || '';
+  const isLocalThread = Boolean(activeConvo.id) && !threadAgentId;
 
   /* Which channels the composer may offer.
 
-     The agent that handled the thread decides this, not the customer's contact
-     details: holding a phone number does not mean an SMS integration exists to
-     send through, and `agentChannels` is exactly the list of what that agent is
-     integrated with. It arrives on the list row and again on the thread detail.
+     These are the conditions `POST /conversations/:id/send` enforces, in the
+     same order, so the button and the server cannot disagree:
 
-     A thread started in this UI has no Perfox agent behind it, so it falls back
-     to the channel it was created with — otherwise a local thread could never be
-     replied to at all.
+       1. the caller may send at all — Admin or Editor
+       2. the thread has an agent
+       3. the agent is published; a paused or draft agent cannot send
+       4. the channel is named by a TRIGGER on the agent's graph
+          (`agentTriggerChannels`, detail-only — `agentChannels` comes from the
+          cached list, which does not report every trigger, and gating on it
+          hides channels that would work)
+       5. the customer holds the matching address: an email for email, a phone
+          for WhatsApp and SMS
+
+     The customer's phone is never the test on its own — holding a number does
+     not mean there is an integration to send through it.
 
      Unavailable channels are disabled rather than hidden, so it stays visible
-     that they exist and are simply not wired up. */
+     that they exist and why they are not offered. The disabled state is a
+     convenience: the server answers 409 either way. */
   const channelOptions = useMemo(() => {
-    const integrated = (activeConvo.agentChannels ?? []).map((c) => c.toLowerCase());
-    const isLocalThread = !activeConvo.agentId;
+    const triggers = (activeConvo.agentTriggerChannels ?? []).map((c) => c.toLowerCase());
+    const agentLabel = activeConvo.agentName || 'The agent handling this thread';
 
     return SENDABLE.map((option) => {
-      const available = isLocalThread
-        ? activeConvo.channel === option.key
-        : integrated.some((c) => c.includes(option.key));
+      const address = option.key === 'email' ? activeConvo.email : activeConvo.phone;
 
-      return {
-        ...option,
-        available,
-        reason: available
-          ? ''
-          : isLocalThread
-            ? `This thread was started on ${activeConvo.channelLabel || 'another channel'}`
-            : `${activeConvo.agentName || 'The agent handling this thread'} is not integrated with ${option.label}`
-      };
+      let reason = '';
+      if (!canSendOutbound) {
+        reason = 'Only an Admin or Editor can send';
+      } else if (isLocalThread) {
+        reason = 'This conversation has no agent, so nothing can send on its behalf';
+      } else if (activeConvo.agentStatus && activeConvo.agentStatus !== 'published') {
+        reason = `${agentLabel} is ${activeConvo.agentStatus} — only a published agent can send`;
+      } else if (!triggers.includes(option.key)) {
+        reason = `${agentLabel} has no ${option.label} trigger configured`;
+      } else if (!address) {
+        reason =
+          option.key === 'email'
+            ? 'No email address on this customer'
+            : 'No phone number on this customer';
+      }
+
+      return { ...option, available: !reason, reason };
     });
   }, [
-    activeConvo.agentChannels,
-    activeConvo.agentId,
     activeConvo.agentName,
-    activeConvo.channel,
-    activeConvo.channelLabel
+    activeConvo.agentStatus,
+    activeConvo.agentTriggerChannels,
+    activeConvo.email,
+    activeConvo.phone,
+    canSendOutbound,
+    isLocalThread
   ]);
 
   const activeChannelOption = channelOptions.find((o) => o.key === composerChannel);
@@ -356,54 +452,187 @@ export default function ConversationsPage({
     return `Log phone call notes or trigger call with ${activeConvo.name}...`;
   };
 
-  /* ── New conversation ──────────────────────────────────────────────────── */
+  /* ── Start a new conversation ──────────────────────────────────────────── */
+
   const [showNewChat, setShowNewChat] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newChatError, setNewChatError] = useState('');
-  const [newChat, setNewChat] = useState({
-    name: '',
-    channel: 'whatsapp' as NewConversationPayload['channel'],
-    phone: '',
-    email: '',
-    initialMessage: ''
-  });
+
+  const [startChannel, setStartChannel] = useState<StartTab>('sms');
+  const [startAgentId, setStartAgentId] = useState('');
+  const [startTo, setStartTo] = useState('');
+  const [startOpening, setStartOpening] = useState('');
+
+  /* The call form is laid out but inert — these only drive the controls. */
+  const [callType, setCallType] = useState<'copilot' | 'ai'>('copilot');
+  const [callDirection, setCallDirection] = useState<'outbound' | 'inbound'>('outbound');
+  const [operator, setOperator] = useState({ name: user?.name || '', extension: '' });
+
+  /* Which channels a conversation can be started on, and the agents behind
+     each. One call answers both, and the server decides: the trigger channels
+     it matches on are read from each agent's graph during the sync, which is
+     the only place they are known. */
+  const [outboundChannels, setOutboundChannels] = useState<OutboundChannelOption[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentsError, setAgentsError] = useState('');
+
+  /* Whether the options have been asked for. A ref, not state: keeping it in
+     the effect's dependencies would make the effect re-run on its own loading
+     flag, and the re-run's cleanup would cancel the request it just made. */
+  const agentsRequested = useRef(false);
+
+  useEffect(() => {
+    if (!showNewChat || agentsRequested.current) return;
+
+    agentsRequested.current = true;
+    let cancelled = false;
+    setAgentsLoading(true);
+    setAgentsError('');
+
+    conversationService
+      .getOutboundOptions()
+      .then((result) => {
+        if (!cancelled) setOutboundChannels(result.channels || []);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setAgentsError(err?.message || 'Could not load the workflows.');
+      })
+      .finally(() => {
+        setAgentsLoading(false);
+        /* Closed mid-flight, so nothing was stored — let the next open ask
+           again rather than showing an empty picker for the rest of the page's
+           life. */
+        if (cancelled) agentsRequested.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showNewChat]);
+
+  /* Everything about the chosen channel comes from the server's own answer for
+     it: which agents hold a trigger for it, and whether the recipient is a
+     number or an address. */
+  const activeStartChannel = useMemo(
+    () => outboundChannels.find((channel) => channel.key === startChannel),
+    [outboundChannels, startChannel]
+  );
+
+  /* Agents that trigger on this channel. A paused or draft one is listed but
+     not selectable — Perfox refuses outbound from it, and "why is my agent
+     missing" is a worse question than "why is it greyed out". */
+  const startAgentOptions = useMemo(
+    () => activeStartChannel?.agents ?? [],
+    [activeStartChannel]
+  );
+
+  const selectableAgents = useMemo(
+    () => startAgentOptions.filter((agent) => agent.available),
+    [startAgentOptions]
+  );
+
+  /* Which contact detail this channel needs, as the server reports it. */
+  const wantsEmail = (activeStartChannel?.contact ?? 'phone') === 'email';
+
+  /* Open on a channel that can actually be used. The default tab is a guess
+     made before the options arrive; once they do, land on the first channel a
+     published workflow triggers on rather than an empty one. The call tab is
+     skipped — it has nothing behind it.
+
+     Once only, per opening: after that the tab is the operator's to choose, and
+     picking an empty channel has to stick rather than bounce back to this one. */
+  const startChannelPicked = useRef(false);
+
+  useEffect(() => {
+    if (!showNewChat) {
+      startChannelPicked.current = false;
+      return;
+    }
+    if (startChannelPicked.current || outboundChannels.length === 0) return;
+
+    startChannelPicked.current = true;
+    if (outboundChannels.find((channel) => channel.key === startChannel)?.available) return;
+
+    const firstUsable = outboundChannels.find(
+      (channel) => channel.available && channel.key !== 'phone'
+    );
+    if (firstUsable) setStartChannel(firstUsable.key as StartTab);
+  }, [showNewChat, outboundChannels, startChannel]);
+
+  /* Changing tab changes the eligible agents, so a selection made on the old
+     tab is dropped rather than carried somewhere it does not belong. */
+  useEffect(() => {
+    setStartAgentId((current) =>
+      selectableAgents.some((a) => a.id === current) ? current : selectableAgents[0]?.id || ''
+    );
+  }, [selectableAgents]);
 
   const resetNewChat = () => {
-    setNewChat({ name: '', channel: 'whatsapp', phone: '', email: '', initialMessage: '' });
+    setStartChannel('sms');
+    setStartAgentId('');
+    setStartTo('');
+    setStartOpening('');
     setNewChatError('');
   };
 
-  const handleCreateConversation = async (e?: React.FormEvent) => {
+  const handleStartConversation = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (creating) return;
+    if (creating || startChannel === 'phone') return;
 
-    const name = newChat.name.trim();
-    const initialMessage = newChat.initialMessage.trim();
-    if (!name || !initialMessage) {
-      setNewChatError('A name and a first message are both required.');
+    const to = startTo.trim();
+    const message = startOpening.trim();
+    if (!startAgentId || !to || !message) {
+      setNewChatError(
+        !startAgentId
+          ? 'Choose a workflow to start the conversation with.'
+          : !to
+            ? `A ${wantsEmail ? 'email address' : 'phone number'} is required.`
+            : 'An opening message is required.'
+      );
+      return;
+    }
+
+    /* The server rejects a mismatch with a 400, but naming it here saves the
+       round trip and points at the field. */
+    if (wantsEmail !== to.includes('@')) {
+      setNewChatError(
+        wantsEmail
+          ? 'Email needs an email address as the recipient.'
+          : `${startChannel} needs a phone number as the recipient.`
+      );
       return;
     }
 
     setCreating(true);
     setNewChatError('');
     try {
-      const created = await conversationService.createConversation({
-        name,
-        channel: newChat.channel,
-        initialMessage,
-        phone: newChat.phone.trim() || undefined,
-        email: newChat.email.trim() || undefined
+      const result = await conversationService.startConversation({
+        agentId: startAgentId,
+        channel: startChannel,
+        to,
+        message
       });
 
-      // The list call will not return it, so keep it in local state and cache
-      // its messages the same way a fetched transcript would be
-      transcriptCache.current.set(created.id, created.messages || []);
-      setConversations((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
-      setTotal((n) => n + 1);
-      setVisibleCount((n) => Math.max(n, 1));
-      setActiveConvoId(created.id);
+      /* Accepted is not sent — the agent still has to be authorized for the
+         channel, and that answer arrives with a success status. */
+      if (!result.sendAuthorized) {
+        setNewChatError(
+          result.message ||
+            'Perfox accepted the request but the workflow is not authorized to send on this channel.'
+        );
+        return;
+      }
+
       setShowNewChat(false);
       resetNewChat();
+      /* Perfox opened the conversation, so it is not in the list yet — and the
+         list is cached 30s upstream, so it may take a moment to appear. */
+      setStartedNotice(
+        `Conversation started with ${to} on ${startChannel}. Perfox opens it upstream, so it can take a moment to appear in this list.`
+      );
+      if (result.conversationId) setActiveConvoId(result.conversationId);
+      setRefreshKey((k) => k + 1);
     } catch (err: any) {
       setNewChatError(err?.message || 'Could not start the conversation.');
     } finally {
@@ -441,27 +670,49 @@ export default function ConversationsPage({
           : c
       )
     );
-    const sentAttachment = attachment;
     setInputMessage('');
     setSendError('');
+    setSendNotice('');
     setSending(true);
 
-    try {
-      const updated = await conversationService.sendMessage(convoId, {
-        text,
-        sender: 'me',
-        channel: composerChannel,
-        attachment: sentAttachment || undefined
-      });
-      transcriptCache.current.set(convoId, updated.messages || nextMessages);
-      setConversations((prev) => prev.map((c) => (c.id === convoId ? { ...c, ...updated } : c)));
-    } catch (err: any) {
-      // Put the text back so nothing is silently lost
+    /* Undo the optimistic bubble and give the operator their text back. Used
+       for a refusal as well as a failure: a message that did not go out must
+       not be left on screen looking as though it did. */
+    const rollBack = () => {
       transcriptCache.current.set(convoId, previousMessages);
       setConversations((prev) =>
         prev.map((c) => (c.id === convoId ? { ...c, messages: previousMessages } : c))
       );
       setInputMessage(text);
+    };
+
+    try {
+      const result = await conversationService.sendOutbound(convoId, {
+        channel: composerChannel as OutboundChannel,
+        text
+      });
+
+      /* Perfox took the request but the agent may still not be authorized to
+         put it out, and that answer arrives with a 200. */
+      if (!result.sendAuthorized) {
+        rollBack();
+        setSendError(
+          result.message ||
+            `Perfox accepted the request but ${activeConvo.agentName || 'the agent'} is not authorized to send on ${composerChannel}. The customer did not receive it.`
+        );
+        return;
+      }
+
+      setSendNotice(
+        /* Outbound opens a NEW conversation upstream, so the reply does not join
+           this transcript — saying so is better than leaving someone to wonder
+           why it never appears after a refresh. */
+        result.conversationId && result.conversationId !== convoId
+          ? `Sent to ${result.to} via ${result.channel}. Perfox opened a new conversation for it, so it will not appear in this transcript.`
+          : `Sent to ${result.to} via ${result.channel}.`
+      );
+    } catch (err: any) {
+      rollBack();
       setSendError(err?.message || 'Message could not be sent.');
     } finally {
       setSending(false);
@@ -481,6 +732,13 @@ export default function ConversationsPage({
   useEffect(() => {
     setMatchIndex(0);
   }, [messageSearch, activeConvo.id]);
+
+  /* The outcome of a send belongs to the thread it was sent from — carrying it
+     over to the next one would report it against a customer it never concerned. */
+  useEffect(() => {
+    setSendError('');
+    setSendNotice('');
+  }, [activeConvo.id]);
 
   // Bring the current hit into view
   useEffect(() => {
@@ -646,6 +904,25 @@ export default function ConversationsPage({
                   {sourceError ? ` ${sourceError}` : ''}
                 </span>
               </div>
+            </div>
+          )}
+
+          {startedNotice && (
+            <div className="m-2 p-3 rounded-xl bg-primary/5 border border-primary/20 flex items-start gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary shrink-0">
+                outgoing_mail
+              </span>
+              <span className="flex-1 font-body-sm text-[11px] text-on-surface-variant">
+                {startedNotice}
+              </span>
+              <button
+                type="button"
+                onClick={() => setStartedNotice('')}
+                className="material-symbols-outlined text-[16px] text-on-surface-variant hover:text-on-surface"
+                aria-label="Dismiss"
+              >
+                close
+              </button>
             </div>
           )}
 
@@ -1059,6 +1336,13 @@ export default function ConversationsPage({
             </div>
           )}
 
+          {sendNotice && !sendError && (
+            <div className="mb-2 px-3 py-2 rounded-lg bg-surface-container text-on-surface-variant font-body-sm text-body-sm flex items-start gap-2">
+              <span className="material-symbols-outlined text-[18px] shrink-0">info</span>
+              <span>{sendNotice}</span>
+            </div>
+          )}
+
           {/* Channel Selector Chips — a channel the handling agent is not
               integrated with is disabled rather than failing at send time */}
           <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
@@ -1079,21 +1363,22 @@ export default function ConversationsPage({
             ))}
           </div>
 
+          {/* Why nothing can be sent, in the server's own terms — the reason on
+              the chosen channel, or the first one standing in the way. */}
           {activeConvo.id && !canSendOnChannel && (
             <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
-              {activeConvo.agentId
-                ? `${activeConvo.agentName || 'The agent handling this thread'} is not integrated with any channel this composer can send on.`
-                : 'This thread was started here, so only the channel it was created with is available.'}
+              {activeChannelOption?.reason ||
+                channelOptions.find((o) => o.reason)?.reason ||
+                'This thread cannot be replied to.'}
             </p>
           )}
 
-          {/* Sending is not wired to Perfox: the message is written to this
-              workspace and the customer never receives it. Saying so beside the
-              box is the difference between a draft and a message believed sent. */}
+          {/* What pressing Send actually does — this goes out to the customer,
+              which is worth knowing before it is sent rather than after. */}
           {activeConvo.id && canSendOnChannel && (
             <p className="mb-2 font-body-sm text-[11px] text-on-surface-variant">
-              Replies are recorded on this thread only — there is no send endpoint yet, so the
-              customer will not receive them.
+              Sent through {activeConvo.agentName || 'the agent'} on Perfox — the customer
+              receives this.
             </p>
           )}
 
@@ -1131,7 +1416,7 @@ export default function ConversationsPage({
       </div>
     </div>
 
-      {/* New conversation dialog */}
+      {/* Start a new conversation */}
       {showNewChat && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
@@ -1143,13 +1428,13 @@ export default function ConversationsPage({
           }}
         >
           <form
-            onSubmit={handleCreateConversation}
+            onSubmit={handleStartConversation}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container p-space-lg space-y-space-sm"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container p-space-lg space-y-space-sm"
           >
             <div className="flex items-center justify-between">
               <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                Start a conversation
+                {startChannel === 'phone' ? 'Start a phone call' : 'Start a new conversation'}
               </h2>
               <Button
                 variant="ghost"
@@ -1171,70 +1456,195 @@ export default function ConversationsPage({
               </div>
             )}
 
-            <label className="block">
-              <span className="font-label-md text-label-md text-on-surface-variant">Customer name</span>
-              <input
-                autoFocus
-                value={newChat.name}
-                onChange={(e) => setNewChat((v) => ({ ...v, name: e.target.value }))}
-                placeholder="e.g. Anna Lakshmi"
-                className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </label>
+            {/* CHANNEL */}
+            <div className="space-y-1.5">
+              <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                Channel
+              </span>
+              <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-surface-container-low">
+                {/* Every channel reads the same and every one can be opened.
+                    Whether a workflow exists for it is answered by the agent
+                    picker below, which is where the reason belongs. */}
+                {START_TABS.map((tab) => {
+                  const option = outboundChannels.find((c) => c.key === tab.key);
 
-            <label className="block">
-              <span className="font-label-md text-label-md text-on-surface-variant">Channel</span>
-              <select
-                value={newChat.channel}
-                onChange={(e) =>
-                  setNewChat((v) => ({ ...v, channel: e.target.value as NewConversationPayload['channel'] }))
-                }
-                className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="whatsapp">WhatsApp</option>
-                <option value="sms">SMS</option>
-                <option value="email">Email</option>
-                <option value="voice">Voice</option>
-                <option value="web">Web</option>
-              </select>
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="font-label-md text-label-md text-on-surface-variant">Phone</span>
-                <input
-                  value={newChat.phone}
-                  onChange={(e) => setNewChat((v) => ({ ...v, phone: e.target.value }))}
-                  placeholder="+91…"
-                  className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </label>
-              <label className="block">
-                <span className="font-label-md text-label-md text-on-surface-variant">Email</span>
-                <input
-                  value={newChat.email}
-                  onChange={(e) => setNewChat((v) => ({ ...v, email: e.target.value }))}
-                  placeholder="name@example.com"
-                  className="mt-1 w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </label>
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => {
+                        setStartChannel(tab.key);
+                        setStartTo('');
+                        setNewChatError('');
+                      }}
+                      className={`flex items-center justify-center gap-1.5 h-9 rounded-lg font-label-md text-label-md transition-colors ${
+                        startChannel === tab.key
+                          ? 'bg-surface-container-lowest text-primary font-semibold shadow-xs'
+                          : 'text-on-surface-variant hover:text-on-surface'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
+                      <span className="truncate">{option?.label ?? tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <label className="block">
-              <span className="font-label-md text-label-md text-on-surface-variant">First message</span>
-              <textarea
-                rows={3}
-                value={newChat.initialMessage}
-                onChange={(e) => setNewChat((v) => ({ ...v, initialMessage: e.target.value }))}
-                placeholder="What did the customer ask?"
-                className="mt-1 w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+            {/* The call form is laid out only. Outbound is implemented for
+                WhatsApp, SMS and email, so nothing here is wired up — the
+                controls move, the button does not act. */}
+            {startChannel === 'phone' ? (
+              <>
+                <div className="space-y-1.5">
+                  <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                    Call type
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: 'copilot' as const, label: 'Copilot', hint: 'You talk · AI assists' },
+                      { key: 'ai' as const, label: 'AI agent', hint: 'AI talks to customer' }
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setCallType(option.key)}
+                        className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border transition-colors ${
+                          callType === option.key
+                            ? 'border-primary bg-primary/5 text-on-surface'
+                            : 'border-surface-container bg-surface-container-low text-on-surface-variant'
+                        }`}
+                      >
+                        <span className="font-label-lg text-label-lg font-semibold">
+                          {option.label}
+                        </span>
+                        <span className="text-[11px]">{option.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                    Direction
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: 'outbound' as const, label: 'Outbound', hint: 'You dial the customer' },
+                      { key: 'inbound' as const, label: 'Inbound', hint: 'Connect & wait for a call' }
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setCallDirection(option.key)}
+                        className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border transition-colors ${
+                          callDirection === option.key
+                            ? 'border-primary bg-primary/5 text-on-surface'
+                            : 'border-surface-container bg-surface-container-low text-on-surface-variant'
+                        }`}
+                      >
+                        <span className="font-label-lg text-label-lg font-semibold">
+                          {option.label}
+                        </span>
+                        <span className="text-[11px]">{option.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 p-3 rounded-xl border border-primary/30 bg-primary/[0.03]">
+                  <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                    Operator (you)
+                  </span>
+                  <div className="grid grid-cols-[1fr_6rem] gap-2">
+                    <input
+                      value={operator.name}
+                      onChange={(e) => setOperator((v) => ({ ...v, name: e.target.value }))}
+                      placeholder="Your name"
+                      className="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                      value={operator.extension}
+                      onChange={(e) => setOperator((v) => ({ ...v, extension: e.target.value }))}
+                      placeholder="Ext."
+                      className="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {/* AGENT — published workflows holding a trigger for this channel */}
+            <div className="space-y-1.5">
+              <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                Agent
+              </span>
+              <select
+                value={startAgentId}
+                onChange={(e) => setStartAgentId(e.target.value)}
+                disabled={agentsLoading || selectableAgents.length === 0}
+                className="w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:text-on-surface-variant cursor-pointer disabled:cursor-not-allowed"
+              >
+                {agentsLoading && <option>Loading workflows…</option>}
+                {!agentsLoading && selectableAgents.length === 0 && (
+                  <option value="">No published workflow handles this channel</option>
+                )}
+                {/* A paused or draft workflow is shown, not hidden: it triggers
+                    on this channel, it simply cannot send until it is
+                    published, and that is worth seeing. */}
+                {startAgentOptions.map((agent) => (
+                  <option key={agent.id} value={agent.id} disabled={!agent.available}>
+                    {agent.available ? agent.name : `${agent.name} — ${agent.status}`}
+                  </option>
+                ))}
+              </select>
+
+              {agentsError && (
+                <p className="font-body-sm text-[11px] text-error">{agentsError}</p>
+              )}
+              {!agentsError && !agentsLoading && selectableAgents.length === 0 && (
+                <p className="font-body-sm text-[11px] text-amber-700">
+                  {startAgentOptions.length > 0
+                    ? `A workflow triggers on ${startChannel}, but none of them is published.`
+                    : `Publish a workflow with a "${startChannel}" trigger node to enable this channel.`}
+                </p>
+              )}
+            </div>
+
+            {/* WHERE TO REACH THEM */}
+            <label className="block space-y-1.5">
+              <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                {wantsEmail ? 'Email address' : 'Phone number'}
+              </span>
+              <input
+                type={wantsEmail ? 'email' : 'tel'}
+                value={startTo}
+                onChange={(e) => setStartTo(e.target.value)}
+                placeholder={wantsEmail ? 'visitor@example.com' : '+91 9342022401'}
+                className="w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </label>
 
-            <p className="font-body-sm text-[11px] text-on-surface-variant">
-              This thread is stored locally. It will not appear in the list after a refresh until the
-              backend merges local threads into <code>GET /conversations</code>.
-            </p>
+            {startChannel !== 'phone' && (
+              <label className="block space-y-1.5">
+                <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                  Opening message *
+                </span>
+                <textarea
+                  rows={3}
+                  value={startOpening}
+                  onChange={(e) => setStartOpening(e.target.value)}
+                  placeholder="What the workflow opens the conversation with."
+                  className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                />
+              </label>
+            )}
+
+            {startChannel === 'phone' && (
+              <p className="font-body-sm text-[11px] text-on-surface-variant">
+                Calls are not wired up yet — outbound is implemented for WhatsApp, SMS and email.
+              </p>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-1">
               <Button
@@ -1252,10 +1662,20 @@ export default function ConversationsPage({
                 variant="primary"
                 size="sm"
                 type="submit"
+                endIcon="send"
                 loading={creating}
-                disabled={!newChat.name.trim() || !newChat.initialMessage.trim() || creating}
+                disabled={
+                  startChannel === 'phone' ||
+                  creating ||
+                  !startAgentId ||
+                  !startTo.trim() ||
+                  !startOpening.trim()
+                }
+                title={
+                  startChannel === 'phone' ? 'Calls are not implemented yet' : undefined
+                }
               >
-                Start conversation
+                {startChannel === 'phone' ? 'Call' : 'Start'}
               </Button>
             </div>
           </form>

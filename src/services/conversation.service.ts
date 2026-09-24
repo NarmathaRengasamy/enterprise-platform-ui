@@ -5,7 +5,11 @@ import {
   ConversationListEnvelope,
   ConversationListResult,
   NewConversationPayload,
+  OutboundOptions,
   SendMessagePayload,
+  SendOutboundPayload,
+  SendOutboundResult,
+  StartConversationPayload,
   UnreadCount,
 } from '../types/conversation.types';
 
@@ -92,7 +96,65 @@ export const conversationService = {
     return response.data;
   },
 
-  /** Append a message to a thread. Returns the updated thread. */
+  /**
+   * The channels a conversation can be started on, and the agents behind each.
+   *
+   * One call fills both dropdowns. Served from the agent cache, so it costs no
+   * Perfox requests — and it returns every channel, including the ones nothing
+   * triggers on, so the UI can disable rather than hide them.
+   */
+  async getOutboundOptions(options?: { signal?: AbortSignal }): Promise<OutboundOptions> {
+    const response = await client.get<OutboundOptions>(
+      '/conversations/outbound/options',
+      options
+    );
+    return response.data || { channels: [] };
+  },
+
+  /**
+   * Start a conversation that does not exist yet, through Perfox.
+   *
+   * `sendOutbound` continues a thread and reads the agent and address off it;
+   * neither exists here, so both are sent. Perfox opens the conversation, so
+   * what comes back is a **new** id, not one already on screen — and, as with
+   * `sendOutbound`, a resolved promise is not delivery: read `sendAuthorized`.
+   */
+  async startConversation(payload: StartConversationPayload): Promise<SendOutboundResult> {
+    const response = await client.post<SendOutboundResult>('/conversations/outbound', payload);
+    if (!response.data) {
+      throw new Error(response.message || 'The conversation could not be started');
+    }
+    return { ...response.data, message: response.message };
+  },
+
+  /**
+   * Send for real, through Perfox.
+   *
+   * Admin or Editor only. The server re-checks everything the composer checks —
+   * the agent exists, is published, has a trigger for that channel, and the
+   * customer holds the matching address — and answers 409 with the specific
+   * reason, so a caller that skips the UI cannot send where the UI would not.
+   *
+   * A resolved promise is **not** delivery: read `sendAuthorized` before
+   * showing the message as sent.
+   */
+  async sendOutbound(id: string, payload: SendOutboundPayload): Promise<SendOutboundResult> {
+    const response = await client.post<SendOutboundResult>(
+      `/conversations/${encodeURIComponent(id)}/send`,
+      payload
+    );
+    if (!response.data) {
+      throw new Error(response.message || 'The message could not be sent');
+    }
+    return { ...response.data, message: response.message };
+  },
+
+  /**
+   * Append a message to this thread **locally**.
+   *
+   * Nothing leaves the building: it is a record on the thread, not a message to
+   * the customer. Use `sendOutbound` to actually reach them.
+   */
   async sendMessage(id: string, payload: SendMessagePayload): Promise<ConversationItem> {
     const response = await client.post<ConversationItem>(
       `/conversations/${encodeURIComponent(id)}/messages`,
