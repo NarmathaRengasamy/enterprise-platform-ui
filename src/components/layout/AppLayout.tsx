@@ -177,64 +177,110 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     activeModule === 'product-details' ||
     activeModule === 'edit-product';
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem('omni_sidebar_open');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem('omni_sidebar_open', JSON.stringify(next));
+      return next;
+    });
+  };
+
   return (
     <div className="bg-background font-body-md text-on-surface antialiased min-h-screen">
-      {/* Persistent Collapsible Sidebar (240px Desktop) */}
-      <aside className="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none border-r border-surface-container/60">
-        <div className="flex flex-col">
-          {/* Streamlined Brand Header with Built-in High-Res Vector Mark */}
+      {/* Mobile Backdrop Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Persistent Collapsible Sidebar */}
+      <aside
+        className={`fixed left-0 top-0 h-full bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none border-r border-surface-container/60 transition-all duration-300 ease-in-out ${
+          isSidebarOpen
+            ? 'w-64 translate-x-0'
+            : 'w-[72px] -translate-x-full md:translate-x-0'
+        }`}
+      >
+        <div className="flex flex-col min-w-0">
+          {/* Streamlined Brand Header */}
           <div
-            className="h-16 px-4 flex items-center gap-3 cursor-pointer border-b border-surface-container/60 hover:bg-surface-container-low/40 transition-colors"
-            onClick={() => handleNav('dashboard', '/dashboard')}
+            className={`h-16 flex items-center border-b border-surface-container/60 transition-colors ${
+              isSidebarOpen ? 'px-4' : 'px-2 justify-center'
+            }`}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
-              <span className="material-symbols-outlined text-xl">all_inclusive</span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-headline-sm text-base text-on-surface tracking-tight font-bold leading-tight truncate">
-                OmniFlow
-              </span>
-              <span className="text-[10px] text-primary font-semibold tracking-wider uppercase">
-                Perfox Assistant
-              </span>
+            <div
+              className="flex items-center gap-3 cursor-pointer min-w-0 overflow-hidden w-full"
+              onClick={() => handleNav('dashboard', '/dashboard')}
+              title="OmniFlow Dashboard"
+            >
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                <span className="material-symbols-outlined text-xl">all_inclusive</span>
+              </div>
+              {isSidebarOpen && (
+                <div className="flex flex-col min-w-0 animate-fadeIn">
+                  <span className="font-headline-sm text-base text-on-surface tracking-tight font-bold leading-tight truncate">
+                    OmniFlow
+                  </span>
+                  <span className="text-[10px] text-primary font-semibold tracking-wider uppercase truncate">
+                    Perfox Assistant
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Navigation Menu */}
-          <div className="px-3 pt-3">
+          <div className={`pt-3 ${isSidebarOpen ? 'px-3' : 'px-2'}`}>
             <nav className="flex flex-col gap-1">
               {/* 1. Dashboard */}
               <button
                 type="button"
                 onClick={() => handleNav('dashboard', '/dashboard')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                title={!isSidebarOpen ? 'Dashboard' : undefined}
+                className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
+                } ${
                   activeModule === 'dashboard'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">dashboard</span>
-                <span>Dashboard</span>
+                <span className="material-symbols-outlined text-lg shrink-0">dashboard</span>
+                {isSidebarOpen && <span className="truncate animate-fadeIn">Dashboard</span>}
               </button>
 
               {/* 2. Conversations */}
               <button
                 type="button"
                 onClick={() => handleNav('conversations', '/conversations')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                title={!isSidebarOpen ? `Conversations ${unreadThreads > 0 ? `(${unreadThreads} unread)` : ''}` : undefined}
+                className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer relative ${
+                  isSidebarOpen ? 'justify-between px-3 py-2' : 'justify-center p-2.5'
+                } ${
                   activeModule === 'conversations'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <span className="material-symbols-outlined text-lg">chat</span>
-                  <span>Conversations</span>
+                <div className={`flex items-center ${isSidebarOpen ? 'gap-2.5 truncate' : ''}`}>
+                  <span className="material-symbols-outlined text-lg shrink-0">chat</span>
+                  {isSidebarOpen && <span className="truncate animate-fadeIn">Conversations</span>}
                 </div>
                 {unreadThreads > 0 && (
-                  <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary font-bold text-[11px]">
-                    {unreadThreads}
-                  </span>
+                  isSidebarOpen ? (
+                    <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary font-bold text-[11px] shrink-0">
+                      {unreadThreads}
+                    </span>
+                  ) : (
+                    <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-white"></span>
+                  )
                 )}
               </button>
 
@@ -242,30 +288,41 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               <div className="flex flex-col gap-0.5">
                 <button
                   type="button"
-                  onClick={() => setProductsSubmenuOpen(!productsSubmenuOpen)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  onClick={() => {
+                    if (!isSidebarOpen) {
+                      handleNav('products', '/products');
+                    } else {
+                      setProductsSubmenuOpen(!productsSubmenuOpen);
+                    }
+                  }}
+                  title={!isSidebarOpen ? 'Products' : undefined}
+                  className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                    isSidebarOpen ? 'justify-between px-3 py-2' : 'justify-center p-2.5'
+                  } ${
                     isProductsActive
-                      ? 'text-on-surface font-semibold hover:bg-surface-container-high'
+                      ? 'text-on-surface font-semibold bg-surface-container-low'
                       : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className={`material-symbols-outlined text-lg ${isProductsActive ? 'text-primary' : ''}`}>
+                  <div className={`flex items-center ${isSidebarOpen ? 'gap-2.5 truncate' : ''}`}>
+                    <span className={`material-symbols-outlined text-lg shrink-0 ${isProductsActive ? 'text-primary' : ''}`}>
                       inventory_2
                     </span>
-                    <span>Products</span>
+                    {isSidebarOpen && <span className="truncate animate-fadeIn">Products</span>}
                   </div>
-                  <span
-                    className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${
-                      productsSubmenuOpen ? 'rotate-180' : ''
-                    }`}
-                  >
-                    expand_more
-                  </span>
+                  {isSidebarOpen && (
+                    <span
+                      className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${
+                        productsSubmenuOpen ? 'rotate-180' : ''
+                      }`}
+                    >
+                      expand_more
+                    </span>
+                  )}
                 </button>
 
-                {productsSubmenuOpen && (
-                  <div className="flex flex-col gap-1 pl-6 ml-2">
+                {isSidebarOpen && productsSubmenuOpen && (
+                  <div className="flex flex-col gap-1 pl-6 ml-2 animate-fadeIn">
                     {/* 3.1 All Products */}
                     <button
                       type="button"
@@ -311,83 +368,125 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               <button
                 type="button"
                 onClick={() => handleNav('schedule', '/schedule')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                title={!isSidebarOpen ? 'Schedule' : undefined}
+                className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
+                } ${
                   activeModule === 'schedule' || activeModule === 'calendar' || activeModule === 'appointments'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">calendar_month</span>
-                <span>Schedule</span>
+                <span className="material-symbols-outlined text-lg shrink-0">calendar_month</span>
+                {isSidebarOpen && <span className="truncate animate-fadeIn">Schedule</span>}
               </button>
 
               {/* 5. Teams */}
               <button
                 type="button"
                 onClick={() => handleNav('teams', '/teams')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                title={!isSidebarOpen ? 'Teams' : undefined}
+                className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
+                } ${
                   activeModule === 'teams'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">groups</span>
-                <span>Teams</span>
+                <span className="material-symbols-outlined text-lg shrink-0">groups</span>
+                {isSidebarOpen && <span className="truncate animate-fadeIn">Teams</span>}
               </button>
 
               {/* 6. Knowledge Base */}
               <button
                 type="button"
                 onClick={() => handleNav('knowledge-base', '/knowledge-base')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                title={!isSidebarOpen ? 'Knowledge Base' : undefined}
+                className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
+                } ${
                   activeModule === 'knowledge-base' || activeModule === 'collections'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">menu_book</span>
-                <span>Knowledge Base</span>
+                <span className="material-symbols-outlined text-lg shrink-0">menu_book</span>
+                {isSidebarOpen && <span className="truncate animate-fadeIn">Knowledge Base</span>}
               </button>
 
               {/* 7. Developer */}
               <button
                 type="button"
                 onClick={() => handleNav('developer', '/developer')}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                title={!isSidebarOpen ? 'Developer' : undefined}
+                className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                  isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
+                } ${
                   activeModule === 'developer'
                     ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">terminal</span>
-                <span>Developer</span>
+                <span className="material-symbols-outlined text-lg shrink-0">terminal</span>
+                {isSidebarOpen && <span className="truncate animate-fadeIn">Developer</span>}
               </button>
             </nav>
           </div>
         </div>
 
         {/* Professional Sidebar Enterprise Footer */}
-        <div className="p-3.5 border-t border-surface-container/60 bg-surface-container-low/20">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[11px] font-semibold text-on-surface">Systems Active</span>
+        <div className={`border-t border-surface-container/60 bg-surface-container-low/20 transition-all ${
+          isSidebarOpen ? 'p-3.5' : 'p-2 flex flex-col items-center justify-center'
+        }`}>
+          {isSidebarOpen ? (
+            <>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[11px] font-semibold text-on-surface">Systems Active</span>
+                </div>
+                <span className="text-[10px] font-mono text-outline font-medium bg-surface-container px-1.5 py-0.2 rounded">v2.4.0</span>
+              </div>
+              <div className="flex flex-col gap-0.5 text-[10px] text-on-surface-variant">
+                <span className="text-outline font-medium truncate">Skillmine Enterprise Platform</span>
+                <span className="text-outline/80 truncate">&copy; 2026 OmniFlow. All rights reserved.</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-1" title="Systems Active (v2.4.0)">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
-            <span className="text-[10px] font-mono text-outline font-medium bg-surface-container px-1.5 py-0.2 rounded">v2.4.0</span>
-          </div>
-          <div className="flex flex-col gap-0.5 text-[10px] text-on-surface-variant">
-            <span className="text-outline font-medium">Skillmine Enterprise Platform</span>
-            <span className="text-outline/80">&copy; 2026 OmniFlow. All rights reserved.</span>
-          </div>
+          )}
         </div>
       </aside>
 
-      {/* Main Content Area (Offset 64 = 256px) */}
-      <div className="pl-64 flex flex-col min-h-screen">
+      {/* Main Content Area (Dynamic Offset) */}
+      <div
+        className={`flex flex-col min-h-screen transition-all duration-300 ease-in-out ${
+          isSidebarOpen ? 'md:pl-64' : 'md:pl-[72px]'
+        }`}
+      >
         {/* Top Header */}
-        <header className="fixed top-0 left-64 right-0 h-16 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)] z-40 flex items-center justify-between px-space-lg border-b border-surface-container">
-          {/* Universal Search Bar */}
-          <div className="flex items-center flex-1 max-w-md">
+        <header
+          className={`fixed top-0 right-0 h-16 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)] z-40 flex items-center justify-between px-space-lg border-b border-surface-container transition-all duration-300 ease-in-out ${
+            isSidebarOpen ? 'left-0 md:left-64' : 'left-0 md:left-[72px]'
+          }`}
+        >
+          {/* Universal Search Bar with Sidebar Toggle */}
+          <div className="flex items-center gap-2.5 flex-1 max-w-lg">
+            {/* Sidebar Toggle Button in Header */}
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="w-9 h-9 rounded-xl border border-surface-container bg-surface-container-low/80 hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors cursor-pointer shadow-2xs shrink-0"
+              title={isSidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
+            >
+              <span className="material-symbols-outlined text-xl">
+                {isSidebarOpen ? 'menu_open' : 'menu'}
+              </span>
+            </button>
+
             <div className="w-full flex items-center bg-surface-container-low px-3.5 py-1.5 rounded-xl text-on-surface-variant shadow-inner border border-surface-container/60">
               <span className="material-symbols-outlined text-lg mr-2 text-outline">search</span>
               <input
@@ -395,9 +494,9 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products, messages, KB..."
-                className="bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-outline flex-1 focus:outline-none"
+                className="bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-outline flex-1 focus:outline-none min-w-0"
               />
-              <span className="font-caption text-caption bg-surface-container text-on-surface-variant px-1.5 py-0.5 rounded-md font-semibold select-none text-[10px]">
+              <span className="font-caption text-caption bg-surface-container text-on-surface-variant px-1.5 py-0.5 rounded-md font-semibold select-none text-[10px] shrink-0">
                 ⌘K
               </span>
             </div>
