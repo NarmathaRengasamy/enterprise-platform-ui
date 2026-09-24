@@ -59,9 +59,9 @@ export interface ExportProductsParams {
   search?: string;
 }
 
-const normalizeStatusEnum = (status?: string, stock?: number | string): 'In Stock' | 'Low Stock' | 'Out of Stock' => {
+const normalizeStatusEnum = (status?: string): 'In Stock' | 'Low Stock' | 'Out of Stock' => {
   const s = String(status || '').trim().toLowerCase();
-  if (s.includes('out') || s.includes('unavail') || s.includes('sold') || stock === 0 || stock === '0') {
+  if (s.includes('out') || s.includes('unavail') || s.includes('sold')) {
     return 'Out of Stock';
   }
   if (s.includes('low') || s.includes('limit')) {
@@ -72,14 +72,23 @@ const normalizeStatusEnum = (status?: string, stock?: number | string): 'In Stoc
 
 const sanitizeProductPayload = <T extends CreateProductInput | UpdateProductInput>(payload: T): T => {
   const sanitized = { ...payload };
+
+  // Ensure top-level price is a valid finite number >= 0
+  const numPrice = Number(sanitized.price);
+  sanitized.price = isFinite(numPrice) && numPrice >= 0 ? numPrice : 0;
+
   if (sanitized.variants && Array.isArray(sanitized.variants)) {
-    sanitized.variants = sanitized.variants.map((v) => ({
-      ...v,
-      status: normalizeStatusEnum(v.status, v.capacity ?? v.stock),
-    }));
+    sanitized.variants = sanitized.variants.map((v) => {
+      const vPrice = Number(v.price);
+      return {
+        ...v,
+        price: isFinite(vPrice) && vPrice >= 0 ? vPrice : 0,
+        status: normalizeStatusEnum(v.status),
+      };
+    });
   }
   if (sanitized.stockStatus) {
-    sanitized.stockStatus = normalizeStatusEnum(sanitized.stockStatus, sanitized.stock);
+    sanitized.stockStatus = normalizeStatusEnum(sanitized.stockStatus);
   }
   return sanitized;
 };
