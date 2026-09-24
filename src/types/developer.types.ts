@@ -70,7 +70,14 @@ export interface DeveloperAgent {
   name: string;
   description: string;
   status: AgentStatus;
+  /** How conversations with this agent START, as Perfox's agent *list* reports
+      it. Incomplete on purpose upstream: the list does not name every trigger
+      on the graph, so an agent can hold a WhatsApp trigger this never mentions. */
   channels: string[];
+  /** What the agent can reach OUT on, read from the sender nodes on its graph
+      during a sync (`whatsapp_sender`, `sms_sender`, …). Empty until the agents
+      have been synced from Perfox at least once. */
+  senderChannels?: string[];
   activeVersion: number;
   nodeCount: number;
   perfoxCreatedAt: string;

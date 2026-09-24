@@ -171,6 +171,56 @@ export interface SendOutboundPayload {
   text: string;
 }
 
+/** A channel a conversation can be started on. `web` is not among them: a web
+    chat begins when a visitor opens the widget, not from here. */
+export type StartChannel = OutboundChannel | 'phone';
+
+/** An agent that holds a trigger for the channel it is listed under. */
+export interface OutboundAgentOption {
+  id: string;
+  name: string;
+  /** Perfox's vocabulary — published | paused | draft. */
+  status: string;
+  /** False for anything but a published agent: Perfox refuses outbound from
+      one, so it is offered disabled rather than hidden. */
+  available: boolean;
+}
+
+export interface OutboundChannelOption {
+  key: StartChannel;
+  label: string;
+  /** What the recipient field has to hold. */
+  contact: 'phone' | 'email';
+  /** False when no published agent triggers on it. */
+  available: boolean;
+  agents: OutboundAgentOption[];
+}
+
+/**
+ * What `GET /conversations/outbound/options` answers with.
+ *
+ * Every channel comes back, usable or not, so the UI can show what exists and
+ * disable the rest. It is served from the agent cache — the trigger channels
+ * are stored during the sync — so it costs no Perfox calls.
+ */
+export interface OutboundOptions {
+  channels: OutboundChannelOption[];
+}
+
+/** Starting a conversation that does not exist yet. */
+export interface StartConversationPayload {
+  agentId: string;
+  channel: StartChannel;
+  /** The number or address to reach. There is no thread yet, so there is no
+      customer record to resolve it from. Email wants an address, every other
+      channel a number, and the server rejects the mismatch with a 400. */
+  to: string;
+  /** Required: Perfox opens the conversation with it. */
+  message: string;
+  /** Links the new thread to a customer already known to the workspace. */
+  customerId?: string;
+}
+
 export interface SendOutboundResult {
   /** Perfox opens a **new** conversation for an outbound message, so this is
       not necessarily the thread it was sent from. */

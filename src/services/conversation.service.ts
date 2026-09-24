@@ -5,9 +5,11 @@ import {
   ConversationListEnvelope,
   ConversationListResult,
   NewConversationPayload,
+  OutboundOptions,
   SendMessagePayload,
   SendOutboundPayload,
   SendOutboundResult,
+  StartConversationPayload,
   UnreadCount,
 } from '../types/conversation.types';
 
@@ -92,6 +94,37 @@ export const conversationService = {
       throw new Error(response.message || 'Failed to start the conversation');
     }
     return response.data;
+  },
+
+  /**
+   * The channels a conversation can be started on, and the agents behind each.
+   *
+   * One call fills both dropdowns. Served from the agent cache, so it costs no
+   * Perfox requests — and it returns every channel, including the ones nothing
+   * triggers on, so the UI can disable rather than hide them.
+   */
+  async getOutboundOptions(options?: { signal?: AbortSignal }): Promise<OutboundOptions> {
+    const response = await client.get<OutboundOptions>(
+      '/conversations/outbound/options',
+      options
+    );
+    return response.data || { channels: [] };
+  },
+
+  /**
+   * Start a conversation that does not exist yet, through Perfox.
+   *
+   * `sendOutbound` continues a thread and reads the agent and address off it;
+   * neither exists here, so both are sent. Perfox opens the conversation, so
+   * what comes back is a **new** id, not one already on screen — and, as with
+   * `sendOutbound`, a resolved promise is not delivery: read `sendAuthorized`.
+   */
+  async startConversation(payload: StartConversationPayload): Promise<SendOutboundResult> {
+    const response = await client.post<SendOutboundResult>('/conversations/outbound', payload);
+    if (!response.data) {
+      throw new Error(response.message || 'The conversation could not be started');
+    }
+    return { ...response.data, message: response.message };
   },
 
   /**
