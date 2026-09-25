@@ -114,13 +114,13 @@ const sanitizeProductPayload = <T extends CreateProductInput | UpdateProductInpu
         cleanVar.status = normalizeStatusEnum(v.status);
       }
 
-      // Stock is numeric without units
+      // Stock is string without units as per API spec
       if (v.stock !== undefined && v.stock !== null && String(v.stock).trim() !== '') {
         const parsedStock = typeof v.stock === 'string'
           ? parseFloat(String(v.stock).replace(/[^0-9.]/g, ''))
           : Number(v.stock);
         if (isFinite(parsedStock) && parsedStock >= 0) {
-          cleanVar.stock = parsedStock;
+          cleanVar.stock = String(parsedStock);
         } else {
           delete cleanVar.stock;
         }

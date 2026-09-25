@@ -699,7 +699,7 @@ export default function AddEditProductPage({
                 ? parseFloat(rawStock.replace(/[^0-9.]/g, ''))
                 : Number(rawStock);
               if (!isNaN(numStock) && numStock >= 0) {
-                variantObj.stock = numStock;
+                variantObj.stock = String(numStock);
                 variantObj.capacity = numStock;
               }
             }
