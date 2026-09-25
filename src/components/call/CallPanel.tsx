@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useOperator } from '@perfox/operator-react';
 import { useOperatorStatus } from '../../context/OperatorContext';
 
@@ -60,6 +60,39 @@ function LiveCallPanel(): JSX.Element {
   const incomingCall = op.incomingCall;
   const isLive = activeCall?.status === 'live';
   const seconds = useCallTimer(Boolean(isLive), activeCall?.conversationId ?? '');
+
+  /* One call is one key, so "already handled" and "already dismissed" survive
+     the SDK handing back a fresh `activeCall` object on every tick. */
+  const callKey = activeCall ? activeCall.sessionId || activeCall.conversationId : '';
+  const [dismissedKey, setDismissedKey] = useState('');
+  const droppedForKey = useRef('');
+
+  /**
+   * A finished call takes the operator off duty.
+   *
+   * Going available starts a 2.5s ring poll and makes this user a target for
+   * inbound calls. Staying available after hanging up means the next one
+   * arrives while nobody is expecting it — going on duty was a decision, so
+   * coming back to it should be one too.
+   *
+   * Guarded by the call key: `activeCall` is a new object on every tick of a
+   * live call, so without it this would re-fire for as long as the ended card
+   * is on screen.
+   */
+  useEffect(() => {
+    if (!activeCall || activeCall.status !== 'ended') return;
+    if (droppedForKey.current === callKey) return;
+    droppedForKey.current = callKey;
+
+    if (op.availability === 'available') {
+      /* Best effort: failing to go off duty is not worth an error banner over
+         a call that already ended. The pill still shows the true state. */
+      void Promise.resolve(op.setAvailability('away')).catch(() => {});
+    }
+    /* Primitives only: `op` and `activeCall` are new objects every render, and
+       depending on them would re-run this on each tick for nothing.
+       eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [activeCall?.status, callKey, op.availability]);
 
   /* The SDK streams partial entries while a phrase is still being spoken. */
   const lines = useMemo(
@@ -142,8 +175,10 @@ function LiveCallPanel(): JSX.Element {
         </div>
       )}
 
-      {/* IN PROGRESS */}
-      {activeCall && activeCall.status !== 'idle' && (
+      {/* IN PROGRESS — and the ended card, until it is dismissed. It is not
+          cleared automatically: when the CUSTOMER hangs up, this is the only
+          thing that says so, and the transcript is still worth reading. */}
+      {activeCall && activeCall.status !== 'idle' && dismissedKey !== callKey && (
         <div className="w-full rounded-2xl bg-surface-container-lowest border border-surface-container shadow-xl overflow-hidden">
           <div className="p-4 flex flex-col gap-3">
             <div className="flex items-center gap-3">
@@ -177,6 +212,23 @@ function LiveCallPanel(): JSX.Element {
                   <span className="material-symbols-outlined text-[20px]">
                     {showTranscript ? 'expand_more' : 'expand_less'}
                   </span>
+                </button>
+              )}
+
+              {/* Only once it is over — dismissing a live call would hide the
+                  hang-up button while the line is still open. */}
+              {activeCall.status === 'ended' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDismissedKey(callKey);
+                    setShowTranscript(false);
+                  }}
+                  className="text-on-surface-variant hover:text-on-surface"
+                  title="Dismiss"
+                  aria-label="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
                 </button>
               )}
             </div>
