@@ -3,7 +3,7 @@ import { teamService } from '../services/team.service';
 import { TeamMemberItem, TeamStats } from '../types/team.types';
 import { UserRole } from '../types/auth.types';
 import { useAuth } from '../hooks/useAuth';
-import { Button, Icon } from '../components/common';
+import { Button, Icon, Pagination } from '../components/common';
 
 export default function TeamsPage() {
   const { user } = useAuth();
@@ -26,6 +26,10 @@ export default function TeamsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('All');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   // Modals & Menu State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -72,6 +76,19 @@ export default function TeamsPage() {
     return () => clearTimeout(timer);
   }, [loadData]);
 
+  // Reset to page 1 when search or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedRoleFilter, selectedStatusFilter]);
+
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil(team.length / itemsPerPage));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedTeam = team.slice(
+    (safeCurrentPage - 1) * itemsPerPage,
+    safeCurrentPage * itemsPerPage
+  );
+
   // Toast / notification timeout
   useEffect(() => {
     if (successMessage) {
@@ -90,7 +107,20 @@ export default function TeamsPage() {
   // Add Member Handler
   const handleAddMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newEmail.trim()) return;
+    if (!newName.trim()) {
+      setModalError('Full name is required');
+      return;
+    }
+    if (!newEmail.trim()) {
+      setModalError('Email address is required');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail.trim())) {
+      setModalError('Please enter a valid email address');
+      return;
+    }
 
     setModalError(null);
     setIsSubmitting(true);
@@ -111,7 +141,17 @@ export default function TeamsPage() {
       // Refresh stats
       teamService.getTeamStats().then(setStats).catch(() => {});
     } catch (err: any) {
-      setModalError(err.message || 'Failed to add team member');
+      const fieldError =
+        err.fieldErrors?.email ||
+        (err.fieldErrors && Object.values(err.fieldErrors)[0]);
+      let errorMsg = fieldError || err.message || 'Failed to add team member';
+      if (typeof errorMsg === 'string') {
+        errorMsg = errorMsg.replace(/^(email|name|role|department):\s*/i, '');
+        if (/valid email is required/i.test(errorMsg)) {
+          errorMsg = 'Please enter a valid email address';
+        }
+      }
+      setModalError(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -146,7 +186,13 @@ export default function TeamsPage() {
       // Refresh stats
       teamService.getTeamStats().then(setStats).catch(() => {});
     } catch (err: any) {
-      setModalError(err.message || 'Failed to update member');
+      const fieldError =
+        err.fieldErrors && Object.values(err.fieldErrors)[0];
+      let errorMsg = fieldError || err.message || 'Failed to update member';
+      if (typeof errorMsg === 'string') {
+        errorMsg = errorMsg.replace(/^(email|name|role|department|status):\s*/i, '');
+      }
+      setModalError(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -155,6 +201,10 @@ export default function TeamsPage() {
   // Resend Invite Handler
   const handleResendInvite = async (m: TeamMemberItem) => {
     setOpenMenuId(null);
+    if (m.status !== 'Pending') {
+      setError('Invitations can only be resent for pending members.');
+      return;
+    }
     try {
       await teamService.resendInvite(m.id);
       setSuccessMessage(`Invitation re-issued for ${m.email}`);
@@ -418,7 +468,7 @@ export default function TeamsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-container-low/40 font-body-sm text-body-sm">
-                {team.map((m, idx) => {
+                {paginatedTeam.map((m, idx) => {
                   const initials = m.name
                     .split(' ')
                     .filter(Boolean)
@@ -426,7 +476,7 @@ export default function TeamsPage() {
                     .join('')
                     .slice(0, 2)
                     .toUpperCase() || 'TM';
-                  const isBottomRows = idx >= Math.max(0, team.length - 2);
+                  const isBottomRows = idx >= Math.max(0, paginatedTeam.length - 2);
 
                   return (
                     <tr key={m.id} className="h-16 hover:bg-surface-container-low/60 transition-colors group">
@@ -523,14 +573,16 @@ export default function TeamsPage() {
                                       <span>Edit Role &amp; Details</span>
                                     </button>
 
-                                    <button
-                                      type="button"
-                                      onClick={() => handleResendInvite(m)}
-                                      className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
-                                    >
-                                      <span className="material-symbols-outlined text-base text-outline">mark_email_read</span>
-                                      <span>Resend Invite Token</span>
-                                    </button>
+                                    {m.status === 'Pending' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResendInvite(m)}
+                                        className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                      >
+                                        <span className="material-symbols-outlined text-base text-outline">mark_email_read</span>
+                                        <span>Resend Invite Token</span>
+                                      </button>
+                                    )}
 
                                     <div className="my-1 h-px bg-slate-100" />
                                     <button
@@ -559,6 +611,18 @@ export default function TeamsPage() {
             </table>
           )}
         </div>
+
+        {/* Table Pagination */}
+        {!isLoading && team.length > 0 && (
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalPages={totalPages}
+            totalItems={team.length}
+            itemsPerPage={itemsPerPage}
+            itemLabel="members"
+            onPageChange={(page) => setCurrentPage(page)}
+          />
+        )}
       </div>
 
       {/* Add Member Modal */}

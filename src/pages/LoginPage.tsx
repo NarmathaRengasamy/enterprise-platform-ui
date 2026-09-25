@@ -3,6 +3,8 @@ import { Button, Icon, LegalModal, LegalModalTab } from '../components/common';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole } from '../types/auth.types';
 
+const REMEMBERED_EMAIL_KEY = 'perfox_remembered_email';
+
 interface LoginPageProps {
   onLoginSuccess?: () => void;
   initialMode?: 'login' | 'signup';
@@ -16,6 +18,19 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+
+  // Restore remembered email on mount
+  React.useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (savedEmail) {
+        setLoginEmail(savedEmail);
+        setRememberMe(true);
+      }
+    } catch (err) {
+      console.warn('Could not read remembered email from storage:', err);
+    }
+  }, []);
   
   // Signup form state
   const [fullName, setFullName] = useState('');
@@ -70,6 +85,18 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
         password: loginPassword,
         rememberMe,
       });
+
+      // Persist or clear remembered email upon successful login
+      try {
+        if (rememberMe) {
+          localStorage.setItem(REMEMBERED_EMAIL_KEY, loginEmail.trim());
+        } else {
+          localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+        }
+      } catch (storageErr) {
+        console.warn('Could not update remembered email in storage:', storageErr);
+      }
+
       onLoginSuccess?.();
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
@@ -220,25 +247,9 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
 
           {/* Error Banner */}
           {error && (
-            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center justify-between gap-2 border border-error/20 animate-fadeIn">
-              <div className="flex items-center gap-2">
-                <Icon name="error" size="sm" color="error" />
-                <span>{error}</span>
-              </div>
-              {mode === 'signup' && (error.toLowerCase().includes('already') || signupEmailError) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('login');
-                    setLoginEmail(signupEmail);
-                    setError(null);
-                    setSignupEmailError(null);
-                  }}
-                  className="px-2.5 py-1 text-xs font-semibold bg-surface-container-lowest text-primary rounded-lg border border-primary/20 shadow-xs hover:bg-primary hover:text-white transition-all cursor-pointer shrink-0"
-                >
-                  Sign In
-                </button>
-              )}
+            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center gap-2 border border-error/20 animate-fadeIn">
+              <Icon name="error" size="sm" color="error" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -386,23 +397,9 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                   />
                 </div>
                 {signupEmailError && (
-                  <div className="flex items-center justify-between text-xs text-error mt-0.5 animate-fadeIn">
-                    <div className="flex items-center gap-1">
-                      <Icon name="error" size="xs" color="error" />
-                      <span>{signupEmailError}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode('login');
-                        setLoginEmail(signupEmail);
-                        setError(null);
-                        setSignupEmailError(null);
-                      }}
-                      className="text-primary font-semibold hover:underline cursor-pointer ml-2 shrink-0"
-                    >
-                      Sign in &rarr;
-                    </button>
+                  <div className="flex items-center gap-1 text-xs text-error mt-0.5 animate-fadeIn">
+                    <Icon name="error" size="xs" color="error" />
+                    <span>{signupEmailError}</span>
                   </div>
                 )}
               </div>
@@ -470,7 +467,7 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
 
                 <div className="flex flex-col gap-space-2xs">
                   <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="signup-confirm-pwd">
-                    Confirm <span className="text-error">*</span>
+                    Confirm Password <span className="text-error">*</span>
                   </label>
                   <div className="relative flex items-center">
                     <span className="absolute left-3 pointer-events-none select-none flex items-center">
