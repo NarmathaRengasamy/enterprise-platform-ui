@@ -15,6 +15,7 @@ export interface ProductGalleryItem {
 
 export interface ProductVariant {
   id?: string;
+  variantId?: string;
   option?: string;
   value?: string;
   title?: string;
@@ -24,6 +25,7 @@ export interface ProductVariant {
   capacity?: number;
   capacityUnit?: string;
   status?: string;
+  description?: string;
   attributes?: Array<{ name: string; value: string }>;
   images?: string[];
   videos?: any[];

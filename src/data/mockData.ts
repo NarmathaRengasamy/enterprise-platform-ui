@@ -26,9 +26,9 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Engineered with waterproof ballistic nylon and ergonomic memory-foam shoulder straps. Features an internal padded 16-inch laptop compartment, hidden passport pocket, and quick-access magnetic modular pockets for effortless daily transit and travel.",
     variants: [
-      { option: "Size", value: "M (Medium 20L)", price: 1299, stock: "18 units", status: "In Stock" },
-      { option: "Size", value: "L (Large 28L)", price: 1599, stock: "12 units", status: "In Stock" },
-      { option: "Colorway", value: "Stealth Slate", price: 1399, stock: "4 units (Low)", status: "Low Stock" },
+      { option: "Size", value: "M (Medium 20L)", price: 1299, stock: "18", status: "In Stock" },
+      { option: "Size", value: "L (Large 28L)", price: 1599, stock: "12", status: "In Stock" },
+      { option: "Colorway", value: "Stealth Slate", price: 1399, stock: "4", status: "Low Stock" },
     ],
     videos: [
       { id: 0, duration: "0:45", title: "Product Showcase", thumbnail: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=400&q=80" },
@@ -59,8 +59,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Sleek water-resistant sports chronograph with sapphire crystal glass, precision Japanese quartz movement, and a premium brushed stainless steel case.",
     variants: [
-      { option: "Color", value: "Midnight Black", price: 4499, stock: "40 units", status: "In Stock" },
-      { option: "Color", value: "Ocean Blue", price: 4499, stock: "45 units", status: "In Stock" }
+      { option: "Color", value: "Midnight Black", price: 4499, stock: "40", status: "In Stock" },
+      { option: "Color", value: "Ocean Blue", price: 4499, stock: "45", status: "In Stock" }
     ],
     videos: [
       { id: 0, duration: "0:50", title: "Timepiece Precision", thumbnail: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80" },
@@ -91,8 +91,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Touch-activated dimmable LED desk lamp crafted with solid European beechwood, warm ambient color temperatures, and matte powder-coated steel hardware.",
     variants: [
-      { option: "Finish", value: "Matte White", price: 2899, stock: "2 units", status: "Low Stock" },
-      { option: "Finish", value: "Matte Charcoal", price: 2899, stock: "1 unit", status: "Low Stock" }
+      { option: "Finish", value: "Matte White", price: 2899, stock: "2", status: "Low Stock" },
+      { option: "Finish", value: "Matte Charcoal", price: 2899, stock: "1", status: "Low Stock" }
     ],
     videos: [
       { id: 0, duration: "0:40", title: "Lighting Moods & Dimming", thumbnail: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=400&q=80" },
@@ -123,8 +123,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Engineered for 12+ hour postural support with adaptive lumbar alignment, breathable mesh backing, 4D adjustable armrests, and smooth synchronous tilt mechanism.",
     variants: [
-      { option: "Colorway", value: "Slate Grey & Chrome", price: 14999, stock: "30 units", status: "In Stock" },
-      { option: "Colorway", value: "Onyx Black & Matte Base", price: 15499, stock: "34 units", status: "In Stock" }
+      { option: "Colorway", value: "Slate Grey & Chrome", price: 14999, stock: "30", status: "In Stock" },
+      { option: "Colorway", value: "Onyx Black & Matte Base", price: 15499, stock: "34", status: "In Stock" }
     ],
     videos: [
       { id: 0, duration: "1:10", title: "Ergonomic Posture Demo", thumbnail: "https://images.unsplash.com/photo-1580481077194-469a4733cf6a?auto=format&fit=crop&w=400&q=80" },
@@ -155,8 +155,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Handcrafted natural solid oak tabletop coupled with dual-motor whisper-quiet lift columns, anti-collision sensor, and 4 programmable memory presets.",
     variants: [
-      { option: "Size", value: "140 x 70 cm", price: 24999, stock: "14 units", status: "In Stock" },
-      { option: "Size", value: "160 x 80 cm", price: 28999, stock: "8 units", status: "In Stock" }
+      { option: "Size", value: "140 x 70 cm", price: 24999, stock: "14", status: "In Stock" },
+      { option: "Size", value: "160 x 80 cm", price: 28999, stock: "8", status: "In Stock" }
     ],
     videos: [
       { id: 0, duration: "0:55", title: "Dual-Motor Lift Action", thumbnail: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=400&q=80" },
@@ -187,8 +187,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Active noise-canceling circumaural studio headphones with custom 40mm beryllium drivers, 45-hour battery lifespan, and memory-foam leather ear cushions.",
     variants: [
-      { option: "Color", value: "Matte Black", price: 7999, stock: "35 units", status: "In Stock" },
-      { option: "Color", value: "Silver Aluminium", price: 7999, stock: "23 units", status: "In Stock" }
+      { option: "Color", value: "Matte Black", price: 7999, stock: "35", status: "In Stock" },
+      { option: "Color", value: "Silver Aluminium", price: 7999, stock: "23", status: "In Stock" }
     ],
     videos: [
       { id: 0, duration: "1:00", title: "ANC Acoustic Test", thumbnail: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=400&q=80" },
@@ -219,8 +219,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Vegetable-tanned full-grain Tuscan leather wallet with RFID blocking shielding, 8 card slots, and an ultra-slim pocket profile.",
     variants: [
-      { option: "Leather", value: "Cognac Brown", price: 1499, stock: "60 units", status: "In Stock" },
-      { option: "Leather", value: "Obsidian Black", price: 1499, stock: "50 units", status: "In Stock" }
+      { option: "Leather", value: "Cognac Brown", price: 1499, stock: "60", status: "In Stock" },
+      { option: "Leather", value: "Obsidian Black", price: 1499, stock: "50", status: "In Stock" }
     ],
     videos: [
       { id: 0, duration: "0:35", title: "Handcrafting & Stitching", thumbnail: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=400&q=80" },
@@ -251,8 +251,8 @@ export const INITIAL_PRODUCTS = [
     ],
     description: "Breathable European flax blend overshirt designed with authentic horn buttons, relaxed modern cut, and reinforced double chest utility pockets.",
     variants: [
-      { option: "Size", value: "M", price: 3199, stock: "20 units", status: "In Stock" },
-      { option: "Size", value: "L", price: 3199, stock: "25 units", status: "In Stock" }
+      { option: "Size", value: "M", price: 3199, stock: "20", status: "In Stock" },
+      { option: "Size", value: "L", price: 3199, stock: "25", status: "In Stock" }
     ],
     videos: [
       { id: 0, duration: "0:45", title: "Fabric & Texture Closeup", thumbnail: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=400&q=80" },

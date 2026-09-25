@@ -211,21 +211,21 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
         // Update existing category
         const payload: UpdateCategoryInput = {
           name: formName.trim(),
-          description: formDesc.trim() || 'General category item',
-          icon: formIcon,
-          color: 'primary',
         };
+        if (formDesc.trim()) payload.description = formDesc.trim();
+        if (formIcon && formIcon.trim()) payload.icon = formIcon.trim();
+        
         await categoryService.updateCategory(editingCategory.id, payload);
         setToastMessage({ text: `Category "${formName}" updated successfully.`, type: 'success' });
       } else {
         // Create new category
         const payload: CreateCategoryInput = {
-          id: formCode.trim() || undefined,
           name: formName.trim(),
-          description: formDesc.trim() || 'General category item',
-          icon: formIcon,
-          color: 'primary',
         };
+        if (formCode.trim()) payload.id = formCode.trim();
+        if (formDesc.trim()) payload.description = formDesc.trim();
+        if (formIcon && formIcon.trim()) payload.icon = formIcon.trim();
+
         await categoryService.createCategory(payload);
         setToastMessage({ text: `Category "${formName}" created successfully.`, type: 'success' });
       }

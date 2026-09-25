@@ -73,7 +73,13 @@ export const categoryService = {
    * Corresponds to POST /api/v1/categories
    */
   async createCategory(payload: CreateCategoryInput): Promise<CategoryItem> {
-    const res = await client.post<CategoryItem>('/categories', payload);
+    const cleanPayload: any = { name: payload.name.trim() };
+    if (payload.id && payload.id.trim()) cleanPayload.id = payload.id.trim();
+    if (payload.description && payload.description.trim()) cleanPayload.description = payload.description.trim();
+    if (payload.icon && payload.icon.trim()) cleanPayload.icon = payload.icon.trim();
+    if (payload.color && payload.color.trim()) cleanPayload.color = payload.color.trim();
+    
+    const res = await client.post<CategoryItem>('/categories', cleanPayload);
     if (!res.data) {
       throw new Error(res.message || 'Failed to create category');
     }
@@ -85,7 +91,13 @@ export const categoryService = {
    * Corresponds to PUT /api/v1/categories/:id
    */
   async updateCategory(id: string, payload: UpdateCategoryInput): Promise<CategoryItem> {
-    const res = await client.put<CategoryItem>(`/categories/${encodeURIComponent(id)}`, payload);
+    const cleanPayload: any = {};
+    if (payload.name && payload.name.trim()) cleanPayload.name = payload.name.trim();
+    if (payload.description && payload.description.trim()) cleanPayload.description = payload.description.trim();
+    if (payload.icon && payload.icon.trim()) cleanPayload.icon = payload.icon.trim();
+    if (payload.color && payload.color.trim()) cleanPayload.color = payload.color.trim();
+
+    const res = await client.put<CategoryItem>(`/categories/${encodeURIComponent(id)}`, cleanPayload);
     if (!res.data) {
       throw new Error(res.message || 'Failed to update category');
     }

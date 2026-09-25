@@ -80,15 +80,20 @@ export default function ProductDetailsPage({
   const getActiveStockDisplay = () => {
     if (activeVariant) {
       if (activeVariant.stock !== undefined && activeVariant.stock !== null && String(activeVariant.stock).trim() !== '') {
-        return typeof activeVariant.stock === 'string'
+        const clean = typeof activeVariant.stock === 'string'
           ? activeVariant.stock.replace(/\s*units/gi, '').trim()
           : String(activeVariant.stock);
+        return clean || 'Unspecified';
       }
-      if (activeVariant.capacity !== undefined && activeVariant.capacity !== null && Number(activeVariant.capacity) > 0) {
+      if (activeVariant.capacity !== undefined && activeVariant.capacity !== null && Number(activeVariant.capacity) >= 0) {
         return String(activeVariant.capacity);
       }
+      return 'Unspecified';
     }
-    return product?.stock !== undefined ? String(product.stock) : '0';
+    if (product?.stock !== undefined && product?.stock !== null) {
+      return String(product.stock);
+    }
+    return 'Unspecified';
   };
 
   const handleCopySku = () => {
@@ -390,10 +395,16 @@ export default function ProductDetailsPage({
                   )}
                 </div>
                 <div className="flex items-baseline gap-space-xs mt-0.5">
-                  <span className="font-display-lg text-display-lg text-primary font-bold tracking-tight">
-                    ₹{activePrice.toLocaleString()}
-                  </span>
-                  {product.originalPrice && (
+                  {activePrice > 0 ? (
+                    <span className="font-display-lg text-display-lg text-primary font-bold tracking-tight">
+                      ₹{activePrice.toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="font-title-lg text-title-lg text-primary font-bold italic tracking-tight">
+                      Not priced (On enquiry)
+                    </span>
+                  )}
+                  {product.originalPrice && product.originalPrice > 0 && (
                     <span className="font-body-sm text-body-sm text-outline line-through">
                       ₹{product.originalPrice.toLocaleString()}
                     </span>
@@ -435,6 +446,12 @@ export default function ProductDetailsPage({
               <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed whitespace-pre-line">
                 {product.description || 'No description provided for this product.'}
               </p>
+              {hasVariants && activeVariant?.description && (
+                <div className="mt-2 p-3 rounded-xl bg-surface-container-low/70 border border-surface-container-high text-body-sm text-on-surface">
+                  <span className="font-semibold text-primary block mb-0.5">{activeVariant.value || activeVariant.title} notes:</span>
+                  <p className="text-on-surface-variant leading-relaxed whitespace-pre-line">{activeVariant.description}</p>
+                </div>
+              )}
             </div>
 
             {/* Variants Selector */}

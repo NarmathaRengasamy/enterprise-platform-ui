@@ -70,9 +70,9 @@ export default function AddEditProductPage({
   const [sku, setSku] = useState(selectedProduct?.sku || '');
   const [category, setCategory] = useState(selectedProduct?.categoryId || selectedProduct?.categoryCode || selectedProduct?.category || '');
   const [description, setDescription] = useState(selectedProduct?.description || '');
-  const [basePrice, setBasePrice] = useState<string | number>(selectedProduct?.price ?? '');
-  const [flatStock, setFlatStock] = useState<number | string>(selectedProduct?.stock ?? '');
-  const [flatStockStatus, setFlatStockStatus] = useState(selectedProduct?.stockStatus || 'In Stock');
+  const [basePrice, setBasePrice] = useState<string | number>(selectedProduct?.price !== undefined && selectedProduct?.price !== null ? selectedProduct.price : '');
+  const [flatStock, setFlatStock] = useState<number | string>(selectedProduct?.stock !== undefined && selectedProduct?.stock !== null ? selectedProduct.stock : '');
+  const [flatStockStatus, setFlatStockStatus] = useState(selectedProduct?.stockStatus || '');
   const [reorderPoint, setReorderPoint] = useState<number | string>(selectedProduct?.reorderPoint ?? 10);
   const [margin, setMargin] = useState(selectedProduct?.margin || '50.0%');
   const [discount, setDiscount] = useState(selectedProduct?.discount || '');
@@ -103,9 +103,9 @@ export default function AddEditProductPage({
           title: v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : 'Standard Package'),
           attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
           sku: v.sku || `${selectedProduct?.sku || sku || 'PROD001'}-${i + 1}`,
-          price: Number(v.price) || 0,
-          stock: typeof v.stock === 'string' ? (Number(v.stock.replace(/[^0-9]/g, '')) || 0) : (Number(v.stock ?? v.capacity) || 0),
-          status: v.status || 'Available'
+          price: v.price !== undefined && v.price !== null && v.price !== '' ? Number(v.price) : '',
+          stock: v.stock !== undefined && v.stock !== null && v.stock !== '' ? (typeof v.stock === 'string' ? v.stock.replace(/[^0-9.]/g, '') : String(v.stock)) : '',
+          status: v.status || ''
         }))
       : []
   );
@@ -119,10 +119,14 @@ export default function AddEditProductPage({
   const [isSingleModalOpen, setIsSingleModalOpen] = useState(false);
   const [editingVariantIndex, setEditingVariantIndex] = useState<number | null>(null);
   const [singleTitle, setSingleTitle] = useState('');
+  const [singleAttributes, setSingleAttributes] = useState<Array<{ name: string; value: string }>>([
+    { name: 'Option Dimension 1', value: '' }
+  ]);
+  const [singleDescription, setSingleDescription] = useState('');
   const [singleSku, setSingleSku] = useState('');
   const [singlePrice, setSinglePrice] = useState('');
   const [singleStock, setSingleStock] = useState('');
-  const [singleStatus, setSingleStatus] = useState('Available');
+  const [singleStatus, setSingleStatus] = useState('');
 
   // Matrix Generator Modal State (Multi-Dimension Builder)
   const [isMatrixModalOpen, setIsMatrixModalOpen] = useState(false);
@@ -195,9 +199,9 @@ export default function AddEditProductPage({
           setSku(prod.sku || '');
           setCategory(prod.categoryId || prod.categoryCode || prod.category || '');
           setDescription(prod.description || '');
-          setBasePrice(prod.price ?? '');
+          setBasePrice(prod.price !== undefined && prod.price !== null ? prod.price : '');
           setFlatStock(prod.stock !== undefined && prod.stock !== null ? prod.stock : '');
-          setFlatStockStatus(prod.stockStatus || 'In Stock');
+          setFlatStockStatus(prod.stockStatus || '');
           setReorderPoint(prod.reorderPoint ?? 10);
           setMargin(prod.margin || '50.0%');
           setDiscount(prod.discount || '');
@@ -216,15 +220,17 @@ export default function AddEditProductPage({
             setHasVariants(true);
             setVariants(
               prod.variants.map((v, i) => ({
-                id: `var-${i}-${Date.now()}`,
+                id: v.variantId || v.id || `var-${i}-${Date.now()}`,
+                variantId: v.variantId,
                 images: v.images || (v.image ? [v.image] : []),
                 videos: v.videos || [],
                 title: v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : `Option ${i + 1}`),
+                description: v.description || '',
                 attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
                 sku: v.sku || `${prod.sku}-${i + 1}`,
-                price: Number(v.price) || 0,
-                stock: typeof v.stock === 'string' ? (Number(v.stock.replace(/[^0-9]/g, '')) || 0) : (Number(v.stock ?? v.capacity) || 0),
-                status: v.status || 'Available',
+                price: v.price !== undefined && v.price !== null && v.price !== '' ? Number(v.price) : '',
+                stock: v.stock !== undefined && v.stock !== null && v.stock !== '' ? (typeof v.stock === 'string' ? v.stock.replace(/[^0-9.]/g, '') : String(v.stock)) : '',
+                status: v.status || '',
               }))
             );
           }
@@ -360,8 +366,11 @@ export default function AddEditProductPage({
   };
 
   const getVariantState = (v: any) => {
-    const s = String(v.status || 'Available').toLowerCase();
+    const s = String(v.status || '').toLowerCase();
 
+    if (s.includes('unspec') || s.includes('not set') || !s) {
+      return { key: 'unspecified', label: 'Not set', tone: 'bg-surface-container text-on-surface-variant', dot: 'bg-outline' };
+    }
     if (s.includes('out') || s.includes('unavail') || s.includes('sold')) {
       return { key: 'unavailable', label: 'Unavailable', tone: 'bg-rose-500/15 text-rose-600', dot: 'bg-rose-500' };
     }
@@ -372,17 +381,22 @@ export default function AddEditProductPage({
   };
 
   // Open Single Option Modal in Edit Mode
-  const handleEditSingle = (index) => {
+  const handleEditSingle = (index: number) => {
     const v = variants[index];
     setEditingVariantIndex(index);
-    setSingleTitle(v.title || '');
+    const attrs: Array<{ name: string; value: string }> = Array.isArray(v.attributes) && v.attributes.length > 0
+      ? v.attributes.map((a: any) => ({ name: String(a.name || 'Dimension').trim(), value: String(a.value || '').trim() }))
+      : [{ name: String(v.option || 'Option').trim(), value: String(v.value || v.title || 'Standard').trim() }];
+    setSingleAttributes(attrs.length > 0 ? attrs : [{ name: 'Option Dimension 1', value: '' }]);
+    setSingleTitle(v.title || (v.value ? `${v.option || 'Option'}: ${v.value}` : attrs.map((a) => a.value).filter(Boolean).join(' · ')));
+    setSingleDescription(v.description || '');
     setSingleSku(v.sku || `${sku || 'PROD001'}-${index + 1}`);
-    setSinglePrice(v.price !== undefined && v.price !== null ? String(v.price) : '');
+    setSinglePrice(v.price !== undefined && v.price !== null && v.price !== '' ? String(v.price) : '');
     const stockVal = v.stock !== undefined && v.stock !== null && v.stock !== ''
-      ? (typeof v.stock === 'string' ? v.stock.replace(/[^0-9]/g, '') : v.stock)
+      ? (typeof v.stock === 'string' ? v.stock.replace(/[^0-9.]/g, '') : v.stock)
       : (v.capacity !== undefined ? v.capacity : '');
     setSingleStock(stockVal !== '' && stockVal !== undefined ? String(stockVal) : '');
-    setSingleStatus(v.status || 'Available');
+    setSingleStatus(v.status || '');
     setIsSingleModalOpen(true);
   };
 
@@ -391,29 +405,68 @@ export default function AddEditProductPage({
     setEditingVariantIndex(null);
   };
 
-  const handleSaveSingleModal = (e) => {
+  const handleSingleAttributeChange = (attrIndex: number, field: 'name' | 'value', val: string) => {
+    const updated = singleAttributes.map((attr, idx) =>
+      idx === attrIndex ? { ...attr, [field]: val } : attr
+    );
+    setSingleAttributes(updated);
+    const computedTitle = updated.map((a) => a.value.trim()).filter(Boolean).join(' · ');
+    if (computedTitle) {
+      setSingleTitle(computedTitle);
+    }
+  };
+
+  const handleAddSingleAttribute = () => {
+    if (singleAttributes.length >= 6) return;
+    setSingleAttributes((prev) => [
+      ...prev,
+      { name: `Option Dimension ${prev.length + 1}`, value: '' }
+    ]);
+  };
+
+  const handleRemoveSingleAttribute = (attrIndex: number) => {
+    if (singleAttributes.length <= 1) return;
+    const updated = singleAttributes.filter((_, idx) => idx !== attrIndex);
+    setSingleAttributes(updated);
+    const computedTitle = updated.map((a) => a.value.trim()).filter(Boolean).join(' · ');
+    if (computedTitle) {
+      setSingleTitle(computedTitle);
+    }
+  };
+
+  const handleSaveSingleModal = (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!singleTitle) return;
+
+    const cleanedAttrs = singleAttributes
+      .map((a) => ({ name: a.name.trim(), value: a.value.trim() }))
+      .filter((a) => a.name && a.value);
+
+    const optionName = cleanedAttrs.map((a) => a.name).join(' / ') || 'Option';
+    const valName = cleanedAttrs.map((a) => a.value).join(' · ') || 'Standard';
+    const title = singleTitle.trim() || valName;
 
     const variantIndex = editingVariantIndex !== null ? editingVariantIndex : variants.length;
     const numPrice = singlePrice !== '' && !isNaN(Number(singlePrice)) ? Number(singlePrice) : undefined;
     const numStock = singleStock !== '' && !isNaN(Number(singleStock)) ? Number(singleStock) : undefined;
+    const existingVariant = editingVariantIndex !== null ? variants[editingVariantIndex] : null;
+
     const updatedItem: any = {
-      id: editingVariantIndex !== null ? variants[editingVariantIndex].id : `var-${Date.now()}`,
-      images: editingVariantIndex !== null ? variants[editingVariantIndex].images ?? [] : [],
-      videos: editingVariantIndex !== null ? variants[editingVariantIndex].videos ?? [] : [],
-      title: singleTitle,
-      attributes: editingVariantIndex !== null && variants[editingVariantIndex].attributes?.length
-        ? variants[editingVariantIndex].attributes
-        : [{ name: 'Configuration', value: singleTitle }],
-      sku: singleSku || `${sku || 'PROD001'}-${variantIndex + 1}`,
-      status: singleStatus
+      id: existingVariant?.id || `var-${Date.now()}`,
+      variantId: existingVariant?.variantId,
+      images: existingVariant?.images ?? [],
+      videos: existingVariant?.videos ?? [],
+      title,
+      option: optionName,
+      value: valName,
+      description: singleDescription.trim() || undefined,
+      attributes: cleanedAttrs.length > 0 ? cleanedAttrs : [{ name: 'Option', value: title }],
+      sku: singleSku.trim() || `${sku || 'PROD001'}-${variantIndex + 1}`,
+      status: singleStatus || ''
     };
 
     if (numPrice !== undefined) updatedItem.price = numPrice;
     if (numStock !== undefined) {
-      updatedItem.stock = numStock;
-      updatedItem.capacity = numStock;
+      updatedItem.stock = String(numStock);
     }
 
     if (editingVariantIndex !== null) {
@@ -428,11 +481,13 @@ export default function AddEditProductPage({
   // Open Single Option Modal in Create Mode
   const handleAddSingleVariant = () => {
     setEditingVariantIndex(null);
+    setSingleAttributes([{ name: 'Option Dimension 1', value: '' }]);
     setSingleTitle('');
+    setSingleDescription('');
     setSingleSku(`${sku || 'PROD001'}-${variants.length + 1}`);
-    setSinglePrice(basePrice ? String(basePrice) : '');
+    setSinglePrice(basePrice !== '' ? String(basePrice) : '');
     setSingleStock(flatStock !== '' ? String(flatStock) : '');
-    setSingleStatus('Available');
+    setSingleStatus('');
     setIsSingleModalOpen(true);
   };
 
@@ -530,9 +585,9 @@ export default function AddEditProductPage({
         sku: `${sku || 'PROD001'}-${variantNumber}`,
         images: [],
         videos: [],
-        price: 0,
-        stock: 0,
-        status: 'Available'
+        price: '',
+        stock: '',
+        status: ''
       };
     });
 
@@ -648,19 +703,31 @@ export default function AddEditProductPage({
       if (!sku.trim()) setSku(activeSku);
 
       const normalizeVariantStatus = (statusStr?: string) => {
-        const s = String(statusStr || '').toLowerCase();
+        if (!statusStr || !String(statusStr).trim()) return undefined;
+        const s = String(statusStr || '').trim().toLowerCase();
+        if (s.includes('unspec') || s.includes('not set') || s.includes('unknown')) {
+          return 'Unspecified';
+        }
         if (s.includes('out') || s.includes('unavail') || s.includes('sold')) {
           return 'Out of Stock';
         }
         if (s.includes('low') || s.includes('limit')) {
           return 'Low Stock';
         }
-        return 'In Stock';
+        if (s.includes('in') || s.includes('avail')) {
+          return 'In Stock';
+        }
+        return undefined;
       };
 
       const formattedVariants = hasVariants
         ? variants.map((v, idx) => {
             const variantObj: any = {};
+
+            // 0. Variant ID (send it back on update to preserve identity)
+            if (v.variantId || (v.id && !v.id.startsWith('var-') && !v.id.startsWith('gen-'))) {
+              variantObj.variantId = v.variantId || v.id;
+            }
 
             // 1. Option name (e.g. "Colour", or combined attribute names "Colour / Size", or fallback "Option")
             let optionName = v.option;
@@ -682,7 +749,12 @@ export default function AddEditProductPage({
             if (v.title) variantObj.title = v.title;
             variantObj.sku = v.sku || `${activeSku}-${idx + 1}`;
 
-            // 4. Price (number, optional if not set)
+            // 4. Description (max 1000 chars)
+            if (v.description && String(v.description).trim()) {
+              variantObj.description = String(v.description).trim();
+            }
+
+            // 5. Price (number, optional if not set - never send 0 if unpriced)
             if (v.price !== undefined && v.price !== null && v.price !== '') {
               const numPrice = Number(v.price);
               if (!isNaN(numPrice) && numPrice >= 0) {
@@ -690,7 +762,7 @@ export default function AddEditProductPage({
               }
             }
 
-            // 5. Stock (numeric without units, optional if not set)
+            // 6. Stock (string without units as per API specification, e.g. "24")
             const rawStock = v.stock !== undefined && v.stock !== null && v.stock !== ''
               ? v.stock
               : v.capacity;
@@ -700,17 +772,24 @@ export default function AddEditProductPage({
                 : Number(rawStock);
               if (!isNaN(numStock) && numStock >= 0) {
                 variantObj.stock = String(numStock);
-                variantObj.capacity = numStock;
               }
             }
 
-            // 6. Status ("In Stock" | "Low Stock" | "Out of Stock")
-            if (v.status) {
-              variantObj.status = normalizeVariantStatus(v.status);
+            // 7. Status ("In Stock" | "Low Stock" | "Out of Stock") - omit if not set or unspecified
+            if (v.status && String(v.status).trim() && String(v.status).trim() !== 'Unspecified' && String(v.status).trim().toLowerCase() !== 'not set') {
+              const norm = normalizeVariantStatus(v.status);
+              if (norm && norm !== 'Unspecified') {
+                variantObj.status = norm;
+              }
             }
 
-            // Attributes and media if present
-            if (v.attributes && v.attributes.length > 0) variantObj.attributes = v.attributes;
+            // 8. Attributes and media if present
+            if (v.attributes && v.attributes.length > 0) {
+              variantObj.attributes = v.attributes;
+            }
+            if (v.images?.[0] || v.image) {
+              variantObj.image = v.images?.[0] || v.image;
+            }
             if (v.images && v.images.length > 0) variantObj.images = v.images;
             if (v.videos && v.videos.length > 0) variantObj.videos = v.videos;
 
@@ -734,29 +813,61 @@ export default function AddEditProductPage({
         ? (countedStocks.length > 0 ? countedStocks.reduce((sum, n) => sum + n, 0) : undefined)
         : (flatStock !== '' && flatStock !== null && flatStock !== undefined && isFinite(Number(flatStock)) && Number(flatStock) >= 0 ? Number(flatStock) : undefined);
 
+      const resolvedCategoryId = categoriesList.find((c) => c.id === category || c.name.toLowerCase() === category.toLowerCase())?.id || category;
+
       const payload: CreateProductInput = {
         name: productName.trim(),
         sku: activeSku,
-        categoryId: category,
-        description: description.trim(),
-        variants: formattedVariants,
+        categoryId: resolvedCategoryId,
       };
 
-      if (computedPrice !== undefined) payload.price = computedPrice;
-      if (computedStock !== undefined) payload.stock = computedStock;
-      if (!hasVariants && flatStockStatus) payload.stockStatus = flatStockStatus;
-      if (reorderPoint !== '' && reorderPoint !== undefined && reorderPoint !== null && !isNaN(Number(reorderPoint))) {
+      if (description && description.trim()) {
+        payload.description = description.trim();
+      }
+
+      if (hasVariants && formattedVariants.length > 0) {
+        payload.variants = formattedVariants;
+      } else {
+        if (computedPrice !== undefined) {
+          payload.price = computedPrice;
+        }
+        if (computedStock !== undefined) {
+          payload.stock = computedStock;
+        }
+        if (flatStockStatus && flatStockStatus.trim() && flatStockStatus !== 'Unspecified' && flatStockStatus.toLowerCase() !== 'not set') {
+          const norm = normalizeVariantStatus(flatStockStatus);
+          if (norm && norm !== 'Unspecified') {
+            payload.stockStatus = norm;
+          }
+        }
+      }
+
+      if (reorderPoint !== '' && reorderPoint !== undefined && reorderPoint !== null && !isNaN(Number(reorderPoint)) && Number(reorderPoint) > 0) {
         payload.reorderPoint = Number(reorderPoint);
       }
-      if (margin) payload.margin = margin;
-      if (discount) payload.discount = discount;
-      if (mediaList[0]?.src || (formattedVariants[0]?.images?.[0])) {
-        payload.image = mediaList[0]?.src || formattedVariants[0]?.images?.[0];
+      if (margin && String(margin).trim()) {
+        payload.margin = String(margin).trim();
       }
-      if (mediaList.length > 0) {
-        payload.gallery = mediaList.map((m, idx) => ({ id: idx, label: m.label || `Image ${idx + 1}`, src: m.src }));
+      if (discount && String(discount).trim()) {
+        payload.discount = String(discount).trim();
       }
-      if (videoList.length > 0) payload.videos = videoList;
+
+      const primaryImg = mediaList[0]?.src || (formattedVariants[0]?.image) || (formattedVariants[0]?.images?.[0]);
+      if (primaryImg && String(primaryImg).trim()) {
+        payload.image = String(primaryImg).trim();
+      }
+
+      const validGallery = mediaList
+        .filter((m) => m.src && String(m.src).trim())
+        .map((m, idx) => ({ id: idx, label: m.label || `Image ${idx + 1}`, src: m.src }));
+      if (validGallery.length > 0) {
+        payload.gallery = validGallery;
+      }
+
+      const validVideos = videoList.filter((v: any) => v && (typeof v === 'string' ? v.trim() : (v.url && v.url.trim()) || (v.src && v.src.trim())));
+      if (validVideos.length > 0) {
+        payload.videos = validVideos;
+      }
 
       if (isEditing && (id || selectedProduct?.id)) {
         await productService.updateProduct(id || selectedProduct?.id || sku.trim(), payload);
@@ -1194,30 +1305,63 @@ export default function AddEditProductPage({
               )}
             </div>
 
-            {/* Stock field (when no variants) */}
+            {/* Stock & Status field (when no variants) */}
             {!hasVariants && (
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                  <span className="material-symbols-outlined text-xl">inventory_2</span>
-                </span>
-                <label
-                  className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1.5 whitespace-nowrap"
-                  htmlFor="offering-stock"
-                >
-                  Stock <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    id="offering-stock"
-                    type="number"
-                    min="0"
-                    value={flatStock}
-                    onChange={(e) => setFlatStock(e.target.value)}
-                    placeholder="e.g. 40"
-                    className="w-32 h-[42px] px-3.5 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                  />
+              <>
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <span className="material-symbols-outlined text-xl">inventory_2</span>
+                  </span>
+                  <label
+                    className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1.5 whitespace-nowrap"
+                    htmlFor="offering-stock"
+                  >
+                    Stock <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      id="offering-stock"
+                      type="number"
+                      min="0"
+                      value={flatStock}
+                      onChange={(e) => setFlatStock(e.target.value)}
+                      placeholder="e.g. 40"
+                      className="w-28 h-[42px] px-3.5 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    />
+                  </div>
                 </div>
-              </div>
+
+                <div className="flex items-center gap-2 min-w-0">
+                  <label
+                    className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1.5 whitespace-nowrap"
+                    htmlFor="offering-stock-status"
+                  >
+                    Status
+                  </label>
+                  <select
+                    id="offering-stock-status"
+                    value={
+                      String(flatStockStatus || '').toLowerCase().includes('unspec') || String(flatStockStatus || '').toLowerCase().includes('not set')
+                        ? 'Unspecified'
+                        : String(flatStockStatus || '').toLowerCase().includes('out') || String(flatStockStatus || '').toLowerCase().includes('unavail') || String(flatStockStatus || '').toLowerCase().includes('sold')
+                        ? 'Out of Stock'
+                        : String(flatStockStatus || '').toLowerCase().includes('low') || String(flatStockStatus || '').toLowerCase().includes('limit')
+                        ? 'Low Stock'
+                        : String(flatStockStatus || '').toLowerCase().includes('in') || String(flatStockStatus || '').toLowerCase().includes('avail')
+                        ? 'In Stock'
+                        : ''
+                    }
+                    onChange={(e) => setFlatStockStatus(e.target.value)}
+                    className="h-[42px] px-3 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
+                  >
+                    <option value="">Not set (Auto)</option>
+                    <option value="In Stock">In Stock</option>
+                    <option value="Low Stock">Low Stock</option>
+                    <option value="Out of Stock">Out of Stock</option>
+                    <option value="Unspecified">Unspecified (Not Set)</option>
+                  </select>
+                </div>
+              </>
             )}
           </div>
 
@@ -1565,42 +1709,54 @@ export default function AddEditProductPage({
 
                       {/* Price / Commercial Rate (Static Display) */}
                       <td className="py-3.5 px-space-sm">
-                        {Number(v.price) > 0 ? (
+                        {v.price !== undefined && v.price !== null && v.price !== '' && !isNaN(Number(v.price)) && Number(v.price) > 0 ? (
                           <span className="font-bold text-on-surface text-base">
                             ₹ {Number(v.price).toLocaleString()}.00
                           </span>
                         ) : (
-                          <span className="font-body-sm text-body-sm text-on-surface-variant font-mono">
-                            ₹ 0.00
+                          <span className="font-body-sm text-body-sm text-on-surface-variant italic">
+                            Not priced
                           </span>
                         )}
                       </td>
 
                       {/* Stock */}
                       <td className="py-3.5 px-space-sm">
-                        <span className="font-semibold text-on-surface">
-                          {Number(v.stock ?? v.capacity) || 0}
-                        </span>
+                        {v.stock !== undefined && v.stock !== null && v.stock !== '' ? (
+                          <span className="font-semibold text-on-surface">
+                            {v.stock}
+                          </span>
+                        ) : (
+                          <span className="font-body-sm text-body-sm text-on-surface-variant italic">
+                            Not set
+                          </span>
+                        )}
                       </td>
 
                       {/* Status Selector in Table Row */}
                       <td className="py-3.5 px-space-sm">
                         <select
                           value={
-                            String(v.status || '').toLowerCase().includes('out') || String(v.status || '').toLowerCase().includes('unavail') || String(v.status || '').toLowerCase().includes('sold')
+                            String(v.status || '').toLowerCase().includes('unspec') || String(v.status || '').toLowerCase().includes('not set')
+                              ? 'Unspecified'
+                              : String(v.status || '').toLowerCase().includes('out') || String(v.status || '').toLowerCase().includes('unavail') || String(v.status || '').toLowerCase().includes('sold')
                               ? 'Unavailable'
                               : String(v.status || '').toLowerCase().includes('low') || String(v.status || '').toLowerCase().includes('limit')
                               ? 'Limited'
-                              : 'Available'
+                              : String(v.status || '').toLowerCase().includes('in') || String(v.status || '').toLowerCase().includes('avail')
+                              ? 'Available'
+                              : ''
                           }
                           onChange={(e) => handleVariantField(i, 'status', e.target.value)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
                             getVariantState(v).tone
                           }`}
                         >
+                          <option value="">Not set</option>
                           <option value="Available">Available</option>
                           <option value="Limited">Limited</option>
                           <option value="Unavailable">Unavailable</option>
+                          <option value="Unspecified">Unspecified</option>
                         </select>
                       </td>
 
@@ -2025,10 +2181,75 @@ export default function AddEditProductPage({
                 </div>
               )}
 
+              {/* Dimension Attributes Section */}
+              <div className="flex flex-col gap-2.5 p-3.5 rounded-xl bg-surface-container-low/60 border border-surface-container-high">
+                <div className="flex items-center justify-between">
+                  <span className="font-label-sm text-label-sm font-semibold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-primary">tune</span>
+                    Dimension Attributes ({singleAttributes.length}/6)
+                  </span>
+                  {singleAttributes.length < 6 && (
+                    <button
+                      type="button"
+                      onClick={handleAddSingleAttribute}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-primary hover:bg-primary/10 font-label-sm text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      <span>Add Axis</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {singleAttributes.map((attr, aIdx) => (
+                    <div key={`single-attr-${aIdx}`} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                      <div className="sm:col-span-5">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Axis Name (e.g. Colour)"
+                          value={attr.name}
+                          onChange={(e) => handleSingleAttributeChange(aIdx, 'name', e.target.value)}
+                          className="w-full h-9 px-3 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-xs font-medium"
+                        />
+                      </div>
+                      <div className="sm:col-span-6">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Axis Value (e.g. Midnight Navy)"
+                          value={attr.value}
+                          onChange={(e) => handleSingleAttributeChange(aIdx, 'value', e.target.value)}
+                          className="w-full h-9 px-3 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-xs font-semibold"
+                        />
+                      </div>
+                      <div className="sm:col-span-1 flex justify-center">
+                        {singleAttributes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleAttribute(aIdx)}
+                            className="p-1 text-error hover:bg-error-container/40 rounded-md transition-colors cursor-pointer"
+                            title="Remove this dimension axis"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Option Descriptor / Title */}
               <div className="flex flex-col gap-1.5">
-                <label className="font-label-md text-label-md text-on-surface font-medium">
-                  Option Descriptor / Title <span className="text-error">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-label-md text-label-md text-on-surface font-medium">
+                    Composite Display Title <span className="text-error">*</span>
+                  </label>
+                  <span className="font-caption text-caption text-outline">
+                    Derived from axes
+                  </span>
+                </div>
                 <input
                   type="text"
                   required
@@ -2036,6 +2257,26 @@ export default function AddEditProductPage({
                   value={singleTitle}
                   onChange={(e) => setSingleTitle(e.target.value)}
                   className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-body-md"
+                />
+              </div>
+
+              {/* Combination Description / Copy */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-label-md text-label-md text-on-surface font-medium">
+                    Combination Description / Copy <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
+                  </label>
+                  <span className="text-xs text-outline font-normal">
+                    {singleDescription.length}/1000
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  maxLength={1000}
+                  placeholder="e.g. Best seller. Ships same day."
+                  value={singleDescription}
+                  onChange={(e) => setSingleDescription(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-sm resize-none"
                 />
               </div>
 
@@ -2086,22 +2327,28 @@ export default function AddEditProductPage({
 
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Status
+                    Status <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
                   </label>
                   <select
                     value={
-                      String(singleStatus || '').toLowerCase().includes('out') || String(singleStatus || '').toLowerCase().includes('unavail') || String(singleStatus || '').toLowerCase().includes('sold')
+                      String(singleStatus || '').toLowerCase().includes('unspec') || String(singleStatus || '').toLowerCase().includes('not set')
+                        ? 'Unspecified'
+                        : String(singleStatus || '').toLowerCase().includes('out') || String(singleStatus || '').toLowerCase().includes('unavail') || String(singleStatus || '').toLowerCase().includes('sold')
                         ? 'Unavailable'
                         : String(singleStatus || '').toLowerCase().includes('low') || String(singleStatus || '').toLowerCase().includes('limit')
                         ? 'Limited'
-                        : 'Available'
+                        : String(singleStatus || '').toLowerCase().includes('in') || String(singleStatus || '').toLowerCase().includes('avail')
+                        ? 'Available'
+                        : ''
                     }
                     onChange={(e) => setSingleStatus(e.target.value)}
                     className="w-full h-11 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md cursor-pointer"
                   >
-                    <option value="Available">Available</option>
-                    <option value="Limited">Limited</option>
-                    <option value="Unavailable">Unavailable</option>
+                    <option value="">Not set (Default)</option>
+                    <option value="Available">Available (In Stock)</option>
+                    <option value="Limited">Limited (Low Stock)</option>
+                    <option value="Unavailable">Unavailable (Out of Stock)</option>
+                    <option value="Unspecified">Unspecified (Not Set)</option>
                   </select>
                 </div>
               </div>
