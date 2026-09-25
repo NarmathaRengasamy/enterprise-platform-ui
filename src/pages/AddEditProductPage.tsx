@@ -14,8 +14,7 @@ const INDUSTRY_PRESETS = [
     dimensions: [
       { name: "Plan Tier", values: ["Starter", "Pro", "Enterprise"] },
       { name: "Billing Cycle", values: ["Monthly", "Annual (Save 20%)"] }
-    ],
-    defaultUnit: "licenses"
+    ]
   },
   {
     label: "Hospitality & Stay",
@@ -23,8 +22,7 @@ const INDUSTRY_PRESETS = [
     dimensions: [
       { name: "Room Category", values: ["Deluxe King Room", "Executive Suite"] },
       { name: "Meal Package", values: ["Room Only", "Breakfast Included"] }
-    ],
-    defaultUnit: "rooms"
+    ]
   },
   {
     label: "Consulting & Services",
@@ -32,8 +30,7 @@ const INDUSTRY_PRESETS = [
     dimensions: [
       { name: "Deliverable Scope", values: ["Standard Audit", "Full Implementation"] },
       { name: "Turnaround SLA", values: ["Standard (7 Days)", "Rush Priority (48h)"] }
-    ],
-    defaultUnit: "slots"
+    ]
   },
   {
     label: "Healthcare & Clinic",
@@ -41,8 +38,7 @@ const INDUSTRY_PRESETS = [
     dimensions: [
       { name: "Consultation Mode", values: ["Tele-Health Video", "In-Clinic Visit"] },
       { name: "Practitioner", values: ["General Specialist", "Senior Consultant"] }
-    ],
-    defaultUnit: "appointments"
+    ]
   },
   {
     label: "Physical Goods & Gear",
@@ -50,8 +46,7 @@ const INDUSTRY_PRESETS = [
     dimensions: [
       { name: "Size / Capacity", values: ["Medium (20L)", "Large (28L)"] },
       { name: "Colorway", values: ["Stealth Slate", "Obsidian Black"] }
-    ],
-    defaultUnit: "units"
+    ]
   }
 ];
 
@@ -76,7 +71,7 @@ export default function AddEditProductPage({
   const [category, setCategory] = useState(selectedProduct?.categoryId || selectedProduct?.categoryCode || selectedProduct?.category || '');
   const [description, setDescription] = useState(selectedProduct?.description || '');
   const [basePrice, setBasePrice] = useState<string | number>(selectedProduct?.price ?? '');
-  const [flatStock, setFlatStock] = useState<number | string>(selectedProduct?.stock ?? 10);
+  const [flatStock, setFlatStock] = useState<number | string>(selectedProduct?.stock ?? '');
   const [flatStockStatus, setFlatStockStatus] = useState(selectedProduct?.stockStatus || 'In Stock');
   const [reorderPoint, setReorderPoint] = useState<number | string>(selectedProduct?.reorderPoint ?? 10);
   const [margin, setMargin] = useState(selectedProduct?.margin || '50.0%');
@@ -109,8 +104,7 @@ export default function AddEditProductPage({
           attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
           sku: v.sku || `${selectedProduct?.sku || sku || 'PROD001'}-${i + 1}`,
           price: Number(v.price) || 0,
-          capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock ?? v.capacity) || 0,
-          capacityUnit: v.capacityUnit || 'units',
+          stock: typeof v.stock === 'string' ? (Number(v.stock.replace(/[^0-9]/g, '')) || 0) : (Number(v.stock ?? v.capacity) || 0),
           status: v.status || 'Available'
         }))
       : []
@@ -127,8 +121,7 @@ export default function AddEditProductPage({
   const [singleTitle, setSingleTitle] = useState('');
   const [singleSku, setSingleSku] = useState('');
   const [singlePrice, setSinglePrice] = useState('');
-  const [singleCapacity, setSingleCapacity] = useState('');
-  const [singleCapacityUnit, setSingleCapacityUnit] = useState('units');
+  const [singleStock, setSingleStock] = useState('');
   const [singleStatus, setSingleStatus] = useState('Available');
 
   // Matrix Generator Modal State (Multi-Dimension Builder)
@@ -137,8 +130,6 @@ export default function AddEditProductPage({
     { id: 'dim-1', name: 'Option Dimension 1', values: ['Standard', 'Premium'], tagInput: '' },
     { id: 'dim-2', name: 'Option Dimension 2', values: ['Tier A', 'Tier B'], tagInput: '' }
   ]);
-  // Unit is no longer edited here — it just follows whichever preset was loaded
-  const [matrixCapacityUnit, setMatrixCapacityUnit] = useState('units');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [isDiscardVariantsOpen, setIsDiscardVariantsOpen] = useState(false);
@@ -205,7 +196,7 @@ export default function AddEditProductPage({
           setCategory(prod.categoryId || prod.categoryCode || prod.category || '');
           setDescription(prod.description || '');
           setBasePrice(prod.price ?? '');
-          setFlatStock(prod.stock ?? 10);
+          setFlatStock(prod.stock !== undefined && prod.stock !== null ? prod.stock : '');
           setFlatStockStatus(prod.stockStatus || 'In Stock');
           setReorderPoint(prod.reorderPoint ?? 10);
           setMargin(prod.margin || '50.0%');
@@ -232,8 +223,7 @@ export default function AddEditProductPage({
                 attributes: v.attributes || [{ name: v.option || 'Option', value: v.value || 'Standard' }],
                 sku: v.sku || `${prod.sku}-${i + 1}`,
                 price: Number(v.price) || 0,
-                capacity: typeof v.stock === 'string' ? Number(v.stock.replace(/[^0-9]/g, '')) || 0 : Number(v.stock ?? v.capacity) || 0,
-                capacityUnit: v.capacityUnit || 'units',
+                stock: typeof v.stock === 'string' ? (Number(v.stock.replace(/[^0-9]/g, '')) || 0) : (Number(v.stock ?? v.capacity) || 0),
                 status: v.status || 'Available',
               }))
             );
@@ -387,9 +377,11 @@ export default function AddEditProductPage({
     setEditingVariantIndex(index);
     setSingleTitle(v.title || '');
     setSingleSku(v.sku || `${sku || 'PROD001'}-${index + 1}`);
-    setSinglePrice(v.price !== undefined ? v.price : '');
-    setSingleCapacity(v.capacity !== undefined ? v.capacity : '10');
-    setSingleCapacityUnit(v.capacityUnit || 'units');
+    setSinglePrice(v.price !== undefined && v.price !== null ? String(v.price) : '');
+    const stockVal = v.stock !== undefined && v.stock !== null && v.stock !== ''
+      ? (typeof v.stock === 'string' ? v.stock.replace(/[^0-9]/g, '') : v.stock)
+      : (v.capacity !== undefined ? v.capacity : '');
+    setSingleStock(stockVal !== '' && stockVal !== undefined ? String(stockVal) : '');
     setSingleStatus(v.status || 'Available');
     setIsSingleModalOpen(true);
   };
@@ -404,7 +396,9 @@ export default function AddEditProductPage({
     if (!singleTitle) return;
 
     const variantIndex = editingVariantIndex !== null ? editingVariantIndex : variants.length;
-    const updatedItem = {
+    const numPrice = singlePrice !== '' && !isNaN(Number(singlePrice)) ? Number(singlePrice) : undefined;
+    const numStock = singleStock !== '' && !isNaN(Number(singleStock)) ? Number(singleStock) : undefined;
+    const updatedItem: any = {
       id: editingVariantIndex !== null ? variants[editingVariantIndex].id : `var-${Date.now()}`,
       images: editingVariantIndex !== null ? variants[editingVariantIndex].images ?? [] : [],
       videos: editingVariantIndex !== null ? variants[editingVariantIndex].videos ?? [] : [],
@@ -413,11 +407,14 @@ export default function AddEditProductPage({
         ? variants[editingVariantIndex].attributes
         : [{ name: 'Configuration', value: singleTitle }],
       sku: singleSku || `${sku || 'PROD001'}-${variantIndex + 1}`,
-      price: Number(singlePrice) || 0,
-      capacity: Number(singleCapacity) || 0,
-      capacityUnit: singleCapacityUnit || 'units',
       status: singleStatus
     };
+
+    if (numPrice !== undefined) updatedItem.price = numPrice;
+    if (numStock !== undefined) {
+      updatedItem.stock = numStock;
+      updatedItem.capacity = numStock;
+    }
 
     if (editingVariantIndex !== null) {
       setVariants(variants.map((v, idx) => (idx === editingVariantIndex ? updatedItem : v)));
@@ -434,8 +431,7 @@ export default function AddEditProductPage({
     setSingleTitle('');
     setSingleSku(`${sku || 'PROD001'}-${variants.length + 1}`);
     setSinglePrice(basePrice ? String(basePrice) : '');
-    setSingleCapacity('10');
-    setSingleCapacityUnit(matrixCapacityUnit || 'units');
+    setSingleStock(flatStock !== '' ? String(flatStock) : '');
     setSingleStatus('Available');
     setIsSingleModalOpen(true);
   };
@@ -454,7 +450,6 @@ export default function AddEditProductPage({
         tagInput: ''
       }))
     );
-    setMatrixCapacityUnit(preset.defaultUnit);
   };
 
   const handleAddDimension = () => {
@@ -536,8 +531,7 @@ export default function AddEditProductPage({
         images: [],
         videos: [],
         price: 0,
-        capacity: 0,
-        capacityUnit: matrixCapacityUnit,
+        stock: 0,
         status: 'Available'
       };
     });
@@ -696,15 +690,18 @@ export default function AddEditProductPage({
               }
             }
 
-            // 5. Stock (string formatted with unit or raw number/string)
-            if (v.stock !== undefined && v.stock !== null && v.stock !== '') {
-              variantObj.stock = v.stock;
-            } else if (v.capacity !== undefined && v.capacity !== null && v.capacity !== '' && Number(v.capacity) > 0) {
-              const capNum = Number(v.capacity);
-              const unit = v.capacityUnit || 'units';
-              variantObj.stock = `${capNum} ${unit}`;
-              variantObj.capacity = capNum;
-              variantObj.capacityUnit = unit;
+            // 5. Stock (numeric without units, optional if not set)
+            const rawStock = v.stock !== undefined && v.stock !== null && v.stock !== ''
+              ? v.stock
+              : v.capacity;
+            if (rawStock !== undefined && rawStock !== null && rawStock !== '') {
+              const numStock = typeof rawStock === 'string'
+                ? parseFloat(rawStock.replace(/[^0-9.]/g, ''))
+                : Number(rawStock);
+              if (!isNaN(numStock) && numStock >= 0) {
+                variantObj.stock = numStock;
+                variantObj.capacity = numStock;
+              }
             }
 
             // 6. Status ("In Stock" | "Low Stock" | "Out of Stock")
@@ -727,14 +724,15 @@ export default function AddEditProductPage({
 
       const computedPrice = hasVariants
         ? (pricedVariants.length > 0 ? Math.min(...pricedVariants) : undefined)
-        : (isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : undefined);
+        : (basePrice !== '' && basePrice !== null && basePrice !== undefined && isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : undefined);
+
+      const countedStocks = formattedVariants
+        .map((v) => Number(v.stock ?? v.capacity))
+        .filter((n) => !isNaN(n) && isFinite(n));
 
       const computedStock = hasVariants
-        ? formattedVariants.reduce((sum, v) => {
-            const raw = typeof v.stock === 'string' ? parseFloat(v.stock) : (v.stock || v.capacity || 0);
-            return sum + (Number(raw) || 0);
-          }, 0)
-        : (Number(flatStock) || 0);
+        ? (countedStocks.length > 0 ? countedStocks.reduce((sum, n) => sum + n, 0) : undefined)
+        : (flatStock !== '' && flatStock !== null && flatStock !== undefined && isFinite(Number(flatStock)) && Number(flatStock) >= 0 ? Number(flatStock) : undefined);
 
       const payload: CreateProductInput = {
         name: productName.trim(),
@@ -745,9 +743,11 @@ export default function AddEditProductPage({
       };
 
       if (computedPrice !== undefined) payload.price = computedPrice;
-      if (computedStock !== undefined && computedStock > 0) payload.stock = computedStock;
+      if (computedStock !== undefined) payload.stock = computedStock;
       if (!hasVariants && flatStockStatus) payload.stockStatus = flatStockStatus;
-      if (reorderPoint) payload.reorderPoint = Number(reorderPoint);
+      if (reorderPoint !== '' && reorderPoint !== undefined && reorderPoint !== null && !isNaN(Number(reorderPoint))) {
+        payload.reorderPoint = Number(reorderPoint);
+      }
       if (margin) payload.margin = margin;
       if (discount) payload.discount = discount;
       if (mediaList[0]?.src || (formattedVariants[0]?.images?.[0])) {
@@ -1152,44 +1152,72 @@ export default function AddEditProductPage({
           )}
         </div>
 
-        {/* Commercial row: the single price and the variant switch share one slim
-            bar — with variants on, the price gives way to a note and the matrix rules */}
+        {/* Commercial row: the single price, stock (when no variants), and variant switch */}
         <div className="bg-surface-container-lowest rounded-2xl px-space-lg py-space-sm shadow-sm border border-surface-container flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm w-full">
-          {/* Price / Rate */}
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <span className="material-symbols-outlined text-xl">payments</span>
-            </span>
-            {hasVariants ? (
-              <span className="flex flex-col min-w-0">
-                <span className="font-title-sm text-title-sm text-on-surface font-semibold">Pricing</span>
-                <span className="font-caption text-caption text-on-surface-variant truncate">
-                  Set per combination in the matrix below.
-                </span>
+          {/* Price / Rate & Stock */}
+          <div className="flex items-center gap-6 min-w-0 flex-wrap">
+            {/* Price / Rate */}
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-xl">payments</span>
               </span>
-            ) : (
-              <>
+              {hasVariants ? (
+                <span className="flex flex-col min-w-0">
+                  <span className="font-title-sm text-title-sm text-on-surface font-semibold">Pricing</span>
+                  <span className="font-caption text-caption text-on-surface-variant truncate">
+                    Set per combination in the matrix below.
+                  </span>
+                </span>
+              ) : (
+                <>
+                  <label
+                    className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1.5 whitespace-nowrap"
+                    htmlFor="offering-price"
+                  >
+                    Price / Rate <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-space-sm font-body-md text-body-md text-on-surface-variant pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      id="offering-price"
+                      type="number"
+                      min="0"
+                      value={basePrice}
+                      onChange={(e) => setBasePrice(e.target.value)}
+                      placeholder="e.g. 3499"
+                      className="w-36 h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Stock field (when no variants) */}
+            {!hasVariants && (
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <span className="material-symbols-outlined text-xl">inventory_2</span>
+                </span>
                 <label
                   className="font-title-sm text-title-sm text-on-surface font-semibold flex items-center gap-1.5 whitespace-nowrap"
-                  htmlFor="offering-price"
+                  htmlFor="offering-stock"
                 >
-                  Price / Rate <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
+                  Stock <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
                 </label>
                 <div className="relative flex items-center">
-                  <span className="absolute left-space-sm font-body-md text-body-md text-on-surface-variant pointer-events-none">
-                    ₹
-                  </span>
                   <input
-                    id="offering-price"
+                    id="offering-stock"
                     type="number"
                     min="0"
-                    value={basePrice}
-                    onChange={(e) => setBasePrice(e.target.value)}
-                    placeholder="e.g. 3499"
-                    className="w-40 h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    value={flatStock}
+                    onChange={(e) => setFlatStock(e.target.value)}
+                    placeholder="e.g. 40"
+                    className="w-32 h-[42px] px-3.5 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                   />
                 </div>
-              </>
+              </div>
             )}
           </div>
 
@@ -1551,10 +1579,7 @@ export default function AddEditProductPage({
                       {/* Stock */}
                       <td className="py-3.5 px-space-sm">
                         <span className="font-semibold text-on-surface">
-                          {Number(v.capacity) || 0}{' '}
-                          <span className="font-normal text-on-surface-variant text-xs">
-                            {v.capacityUnit || 'units'}
-                          </span>
+                          {Number(v.stock ?? v.capacity) || 0}
                         </span>
                       </td>
 
@@ -2044,37 +2069,19 @@ export default function AddEditProductPage({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Stock <span className="text-error">*</span>
+                    Stock <span className="text-xs font-normal text-on-surface-variant">(Optional)</span>
                   </label>
                   <input
                     type="number"
-                    required
+                    min="0"
                     placeholder="e.g. 25"
-                    value={singleCapacity}
-                    onChange={(e) => setSingleCapacity(e.target.value)}
+                    value={singleStock}
+                    onChange={(e) => setSingleStock(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md"
                   />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-label-md text-label-md text-on-surface font-medium">
-                    Unit
-                  </label>
-                  <select
-                    value={singleCapacityUnit}
-                    onChange={(e) => setSingleCapacityUnit(e.target.value)}
-                    className="w-full h-11 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md cursor-pointer"
-                  >
-                    <option value="units">units</option>
-                    <option value="slots">slots</option>
-                    <option value="licenses">licenses</option>
-                    <option value="rooms">rooms</option>
-                    <option value="appointments">appointments</option>
-                    <option value="hours">hours</option>
-                  </select>
                 </div>
 
                 <div className="flex flex-col gap-1.5">

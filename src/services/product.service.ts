@@ -74,32 +74,62 @@ const sanitizeProductPayload = <T extends CreateProductInput | UpdateProductInpu
   const sanitized = { ...payload };
 
   // If top-level price is provided, ensure it is a valid finite number >= 0
-  if (sanitized.price !== undefined && sanitized.price !== null) {
+  if (sanitized.price !== undefined && sanitized.price !== null && sanitized.price !== ('' as any)) {
     const numPrice = Number(sanitized.price);
     if (isFinite(numPrice) && numPrice >= 0) {
       sanitized.price = numPrice;
     } else {
       delete sanitized.price;
     }
+  } else {
+    delete sanitized.price;
+  }
+
+  // If top-level stock is provided, ensure it is a valid finite number >= 0
+  if (sanitized.stock !== undefined && sanitized.stock !== null && sanitized.stock !== ('' as any)) {
+    const numStock = typeof sanitized.stock === 'string'
+      ? parseFloat(String(sanitized.stock).replace(/[^0-9.]/g, ''))
+      : Number(sanitized.stock);
+    if (isFinite(numStock) && numStock >= 0) {
+      sanitized.stock = numStock;
+    } else {
+      delete sanitized.stock;
+    }
+  } else {
+    delete sanitized.stock;
   }
 
   if (sanitized.variants && Array.isArray(sanitized.variants)) {
     sanitized.variants = sanitized.variants.map((v) => {
       const cleanVar: any = { ...v };
 
-      if (v.price !== undefined && v.price !== null) {
+      if (v.price !== undefined && v.price !== null && v.price !== ('' as any)) {
         const vPrice = Number(v.price);
         cleanVar.price = isFinite(vPrice) && vPrice >= 0 ? vPrice : undefined;
+      } else {
+        delete cleanVar.price;
       }
 
       if (v.status) {
         cleanVar.status = normalizeStatusEnum(v.status);
       }
 
-      // Stock can be string (e.g. "24 units") or number
+      // Stock is numeric without units
       if (v.stock !== undefined && v.stock !== null && String(v.stock).trim() !== '') {
-        cleanVar.stock = v.stock;
+        const parsedStock = typeof v.stock === 'string'
+          ? parseFloat(String(v.stock).replace(/[^0-9.]/g, ''))
+          : Number(v.stock);
+        if (isFinite(parsedStock) && parsedStock >= 0) {
+          cleanVar.stock = parsedStock;
+        } else {
+          delete cleanVar.stock;
+        }
+      } else {
+        delete cleanVar.stock;
       }
+
+      // Remove capacityUnit if present
+      delete cleanVar.capacityUnit;
 
       return cleanVar;
     });
