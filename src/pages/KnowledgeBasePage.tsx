@@ -949,35 +949,45 @@ export default function KnowledgeBasePage() {
                     const isSelected = selectedFolderId === folder.id;
 
                     return (
-                      <div key={folder.id} className="space-y-0.5">
+                      <div key={folder.id} className="space-y-0.5 group/folder">
                         <div
                           onClick={() => setSelectedFolderId(folder.id)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center cursor-pointer transition-all ${
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
                             isSelected
                               ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs'
                               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                           }`}
                           title={folder.summary || folder.name}
                         >
-                          <div className="flex items-center gap-1.5 truncate">
+                          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
                             {hasKids ? (
                               <button
                                 type="button"
                                 onClick={(e) => toggleFolderExpanded(folder.id, e)}
-                                className="p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                                className="p-0.5 text-slate-400 hover:text-slate-600 rounded shrink-0"
                               >
                                 <Icon name={isExpanded ? 'expand_more' : 'chevron_right'} size="xs" />
                               </button>
                             ) : (
-                              <span className="w-3 inline-block text-center text-slate-300 text-[10px]">•</span>
+                              <span className="w-3 inline-block text-center text-slate-300 text-[10px] shrink-0">•</span>
                             )}
                             <Icon
                               name="folder"
                               size="xs"
-                              className={isSelected ? 'text-primary' : 'text-amber-500'}
+                              className={isSelected ? 'text-primary shrink-0' : 'text-amber-500 shrink-0'}
                             />
                             <span className="truncate text-xs">{folder.name}</span>
                           </div>
+
+                          {/* Hover Delete Action for Folder */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+                            className="opacity-0 group-hover/folder:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1"
+                            title={`Delete folder "${folder.name}"`}
+                          >
+                            <Icon name="delete" size="xs" />
+                          </button>
                         </div>
 
                         {/* Children if expanded */}
@@ -990,16 +1000,30 @@ export default function KnowledgeBasePage() {
                                 return (
                                   <div
                                     key={child.id}
-                                    onClick={() => setSelectedFolderId(child.id)}
-                                    className={`w-full text-left px-2.5 py-1 rounded-lg flex items-center cursor-pointer transition-all text-xs ${
-                                      isChildSelected
-                                        ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs'
-                                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-                                    }`}
+                                    className="group/child"
                                   >
-                                    <div className="flex items-center gap-1.5 truncate">
-                                      <Icon name="folder" size="xs" className="text-amber-400" />
-                                      <span className="truncate">{child.name}</span>
+                                    <div
+                                      onClick={() => setSelectedFolderId(child.id)}
+                                      className={`w-full text-left px-2.5 py-1 rounded-lg flex items-center justify-between cursor-pointer transition-all text-xs ${
+                                        isChildSelected
+                                          ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs'
+                                          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                                        <Icon name="folder" size="xs" className="text-amber-400 shrink-0" />
+                                        <span className="truncate">{child.name}</span>
+                                      </div>
+
+                                      {/* Child Folder Delete */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteFolder(child.id, child.name, e)}
+                                        className="opacity-0 group-hover/child:opacity-100 p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1"
+                                        title={`Delete folder "${child.name}"`}
+                                      >
+                                        <Icon name="delete" size="xs" />
+                                      </button>
                                     </div>
                                   </div>
                                 );
@@ -1041,8 +1065,26 @@ export default function KnowledgeBasePage() {
               </button>
             </div>
 
-            {/* Right: New Folder + Upload Action Buttons */}
-            <div className="flex items-center gap-2.5">
+            {/* Right: New Folder + Delete Folder + Upload Action Buttons */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* If an actual folder is opened, provide Delete Folder button */}
+              {selectedFolderId !== 'ALL' && selectedFolderId !== 'ROOT' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentFolder = folders.find((f) => f.id === selectedFolderId);
+                    if (currentFolder) {
+                      handleDeleteFolder(currentFolder.id, currentFolder.name);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Delete the currently selected folder"
+                >
+                  <Icon name="delete" size="xs" className="text-rose-600" />
+                  <span>Delete Folder</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {

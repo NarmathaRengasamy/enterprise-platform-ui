@@ -73,23 +73,42 @@ const normalizeStatusEnum = (status?: string): 'In Stock' | 'Low Stock' | 'Out o
 const sanitizeProductPayload = <T extends CreateProductInput | UpdateProductInput>(payload: T): T => {
   const sanitized = { ...payload };
 
-  // Ensure top-level price is a valid finite number >= 0
-  const numPrice = Number(sanitized.price);
-  sanitized.price = isFinite(numPrice) && numPrice >= 0 ? numPrice : 0;
+  // If top-level price is provided, ensure it is a valid finite number >= 0
+  if (sanitized.price !== undefined && sanitized.price !== null) {
+    const numPrice = Number(sanitized.price);
+    if (isFinite(numPrice) && numPrice >= 0) {
+      sanitized.price = numPrice;
+    } else {
+      delete sanitized.price;
+    }
+  }
 
   if (sanitized.variants && Array.isArray(sanitized.variants)) {
     sanitized.variants = sanitized.variants.map((v) => {
-      const vPrice = Number(v.price);
-      return {
-        ...v,
-        price: isFinite(vPrice) && vPrice >= 0 ? vPrice : 0,
-        status: normalizeStatusEnum(v.status),
-      };
+      const cleanVar: any = { ...v };
+
+      if (v.price !== undefined && v.price !== null) {
+        const vPrice = Number(v.price);
+        cleanVar.price = isFinite(vPrice) && vPrice >= 0 ? vPrice : undefined;
+      }
+
+      if (v.status) {
+        cleanVar.status = normalizeStatusEnum(v.status);
+      }
+
+      // Stock can be string (e.g. "24 units") or number
+      if (v.stock !== undefined && v.stock !== null && String(v.stock).trim() !== '') {
+        cleanVar.stock = v.stock;
+      }
+
+      return cleanVar;
     });
   }
+
   if (sanitized.stockStatus) {
     sanitized.stockStatus = normalizeStatusEnum(sanitized.stockStatus);
   }
+
   return sanitized;
 };
 

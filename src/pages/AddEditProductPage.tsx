@@ -428,6 +428,18 @@ export default function AddEditProductPage({
     handleCloseSingleModal();
   };
 
+  // Open Single Option Modal in Create Mode
+  const handleAddSingleVariant = () => {
+    setEditingVariantIndex(null);
+    setSingleTitle('');
+    setSingleSku(`${sku || 'PROD001'}-${variants.length + 1}`);
+    setSinglePrice(basePrice ? String(basePrice) : '');
+    setSingleCapacity('10');
+    setSingleCapacityUnit(matrixCapacityUnit || 'units');
+    setSingleStatus('Available');
+    setIsSingleModalOpen(true);
+  };
+
   // Matrix Generator Operations
   const handleOpenMatrixModal = () => {
     setIsMatrixModalOpen(true);
@@ -530,7 +542,18 @@ export default function AddEditProductPage({
       };
     });
 
-    setVariants(generatedVariants);
+    // Merge newly generated combinations with existing variants without removing previously configured variants
+    setVariants((prev) => {
+      if (prev.length === 0) return generatedVariants;
+      const startingIndex = prev.length;
+      const adjustedGenerated = generatedVariants.map((v, idx) => ({
+        ...v,
+        id: `gen-${Date.now()}-${startingIndex + idx}`,
+        sku: `${sku || 'PROD001'}-${startingIndex + idx + 1}`,
+      }));
+      return [...prev, ...adjustedGenerated];
+    });
+
     setSelectedVariantIndices([]);
     setIsMatrixModalOpen(false);
   };
@@ -643,51 +666,97 @@ export default function AddEditProductPage({
 
       const formattedVariants = hasVariants
         ? variants.map((v, idx) => {
-            const cap = typeof v.capacity === 'number' ? v.capacity : Number(v.capacity) || 0;
-            return {
-              option: v.attributes?.[0]?.name || 'Option',
-              value: v.attributes?.[0]?.value || v.title || 'Standard',
-              title: v.title,
-              sku: v.sku || `${activeSku}-${idx + 1}`,
-              price: Number(v.price) || 0,
-              stock: cap,
-              capacity: cap,
-              capacityUnit: v.capacityUnit || 'units',
-              status: normalizeVariantStatus(v.status || 'Available'),
-              images: v.images || [],
-              videos: v.videos || [],
-            };
+            const variantObj: any = {};
+
+            // 1. Option name (e.g. "Colour", or combined attribute names "Colour / Size", or fallback "Option")
+            let optionName = v.option;
+            if (!optionName && v.attributes && v.attributes.length > 0) {
+              optionName = v.attributes.length === 1
+                ? v.attributes[0].name
+                : v.attributes.map((a: any) => a.name).filter(Boolean).join(' / ');
+            }
+            variantObj.option = optionName || 'Option';
+
+            // 2. Value (e.g. "Navy / M", or combined attribute values, or title)
+            let valName = v.value;
+            if (!valName && v.attributes && v.attributes.length > 0) {
+              valName = v.attributes.map((a: any) => a.value).filter(Boolean).join(' / ');
+            }
+            variantObj.value = valName || v.title || 'Standard';
+
+            // 3. Title & SKU
+            if (v.title) variantObj.title = v.title;
+            variantObj.sku = v.sku || `${activeSku}-${idx + 1}`;
+
+            // 4. Price (number, optional if not set)
+            if (v.price !== undefined && v.price !== null && v.price !== '') {
+              const numPrice = Number(v.price);
+              if (!isNaN(numPrice) && numPrice >= 0) {
+                variantObj.price = numPrice;
+              }
+            }
+
+            // 5. Stock (string formatted with unit or raw number/string)
+            if (v.stock !== undefined && v.stock !== null && v.stock !== '') {
+              variantObj.stock = v.stock;
+            } else if (v.capacity !== undefined && v.capacity !== null && v.capacity !== '' && Number(v.capacity) > 0) {
+              const capNum = Number(v.capacity);
+              const unit = v.capacityUnit || 'units';
+              variantObj.stock = `${capNum} ${unit}`;
+              variantObj.capacity = capNum;
+              variantObj.capacityUnit = unit;
+            }
+
+            // 6. Status ("In Stock" | "Low Stock" | "Out of Stock")
+            if (v.status) {
+              variantObj.status = normalizeVariantStatus(v.status);
+            }
+
+            // Attributes and media if present
+            if (v.attributes && v.attributes.length > 0) variantObj.attributes = v.attributes;
+            if (v.images && v.images.length > 0) variantObj.images = v.images;
+            if (v.videos && v.videos.length > 0) variantObj.videos = v.videos;
+
+            return variantObj;
           })
         : [];
 
       const pricedVariants = formattedVariants
-        .map((v) => Number(v.price) || 0)
-        .filter((n) => n > 0 && isFinite(n));
+        .map((v) => Number(v.price))
+        .filter((n) => !isNaN(n) && n > 0);
 
       const computedPrice = hasVariants
-        ? (pricedVariants.length > 0 ? Math.min(...pricedVariants) : 0)
-        : (isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : 0);
+        ? (pricedVariants.length > 0 ? Math.min(...pricedVariants) : undefined)
+        : (isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : undefined);
 
       const computedStock = hasVariants
-        ? formattedVariants.reduce((sum, v) => sum + (Number(v.capacity) || 0), 0)
+        ? formattedVariants.reduce((sum, v) => {
+            const raw = typeof v.stock === 'string' ? parseFloat(v.stock) : (v.stock || v.capacity || 0);
+            return sum + (Number(raw) || 0);
+          }, 0)
         : (Number(flatStock) || 0);
 
       const payload: CreateProductInput = {
         name: productName.trim(),
         sku: activeSku,
         categoryId: category,
-        price: computedPrice,
-        stock: computedStock,
-        stockStatus: hasVariants ? undefined : flatStockStatus,
-        reorderPoint: Number(reorderPoint) || 10,
-        margin: margin || '50.0%',
-        discount: discount || '',
         description: description.trim(),
-        image: mediaList[0]?.src || (formattedVariants[0]?.images?.[0] || ''),
-        gallery: mediaList.map((m, idx) => ({ id: idx, label: m.label || `Image ${idx + 1}`, src: m.src })),
-        videos: videoList,
         variants: formattedVariants,
       };
+
+      if (computedPrice !== undefined) payload.price = computedPrice;
+      if (computedStock !== undefined && computedStock > 0) payload.stock = computedStock;
+      if (!hasVariants && flatStockStatus) payload.stockStatus = flatStockStatus;
+      if (reorderPoint) payload.reorderPoint = Number(reorderPoint);
+      if (margin) payload.margin = margin;
+      if (discount) payload.discount = discount;
+      if (mediaList[0]?.src || (formattedVariants[0]?.images?.[0])) {
+        payload.image = mediaList[0]?.src || formattedVariants[0]?.images?.[0];
+      }
+      if (mediaList.length > 0) {
+        payload.gallery = mediaList.map((m, idx) => ({ id: idx, label: m.label || `Image ${idx + 1}`, src: m.src }));
+      }
+      if (videoList.length > 0) payload.videos = videoList;
 
       if (isEditing && (id || selectedProduct?.id)) {
         await productService.updateProduct(id || selectedProduct?.id || sku.trim(), payload);
@@ -1220,6 +1289,16 @@ export default function AddEditProductPage({
                   </button>
                 </div>
               )}
+
+              <button
+                type="button"
+                onClick={handleAddSingleVariant}
+                className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl font-label-md text-label-md text-on-primary bg-primary hover:bg-primary/90 shadow-xs transition-all cursor-pointer"
+                title="Add a new individual variant combination"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+                <span>Add Variant</span>
+              </button>
 
               <button
                 type="button"

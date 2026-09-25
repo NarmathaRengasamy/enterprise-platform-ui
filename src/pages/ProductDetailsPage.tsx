@@ -24,7 +24,7 @@ export default function ProductDetailsPage({
 
   const [selectedThumbIndex, setSelectedThumbIndex] = useState(0);
   const [mediaTab, setMediaTab] = useState<'images' | 'videos'>('images');
-  const [selectedVariant, setSelectedVariant] = useState('');
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [copiedSku, setCopiedSku] = useState(false);
 
   // Delete modal state
@@ -55,16 +55,43 @@ export default function ProductDetailsPage({
 
   useEffect(() => {
     setSelectedThumbIndex(0);
-    if (product?.variants && product.variants.length > 0) {
-      setSelectedVariant(product.variants[0].value || product.variants[0].title || 'Option 1');
-    } else {
-      setSelectedVariant('Standard');
-    }
+    setSelectedVariantIndex(0);
   }, [product?.id, product?.sku]);
 
+  const variantsList = product?.variants && product.variants.length > 0
+    ? product.variants
+    : [];
+
+  const hasVariants = variantsList.length > 0;
+  const activeVariant = hasVariants ? (variantsList[selectedVariantIndex] || variantsList[0]) : null;
+
+  // Selected Variant Price or fallback to base price
+  const activePrice = activeVariant && activeVariant.price !== undefined && activeVariant.price !== null && Number(activeVariant.price) > 0
+    ? Number(activeVariant.price)
+    : (product?.price || 0);
+
+  // Selected Variant SKU or product SKU
+  const activeSku = activeVariant?.sku || product?.sku || '';
+
+  // Selected Variant Status or product stock status
+  const activeStatus = activeVariant?.status || product?.stockStatus || 'In Stock';
+
+  // Selected Variant Stock / Capacity
+  const getActiveStockDisplay = () => {
+    if (activeVariant) {
+      if (activeVariant.stock !== undefined && activeVariant.stock !== null && String(activeVariant.stock).trim() !== '') {
+        return typeof activeVariant.stock === 'number' ? `${activeVariant.stock} units` : activeVariant.stock;
+      }
+      if (activeVariant.capacity !== undefined && activeVariant.capacity !== null && Number(activeVariant.capacity) > 0) {
+        return `${activeVariant.capacity} ${activeVariant.capacityUnit || 'units'}`;
+      }
+    }
+    return product?.stock !== undefined ? `${product.stock} units` : '0 units';
+  };
+
   const handleCopySku = () => {
-    if (!product?.sku) return;
-    navigator.clipboard.writeText(product.sku);
+    if (!activeSku) return;
+    navigator.clipboard.writeText(activeSku);
     setCopiedSku(true);
     setTimeout(() => setCopiedSku(false), 2000);
   };
@@ -122,28 +149,24 @@ export default function ProductDetailsPage({
     );
   }
 
-  const gallery = product.gallery && product.gallery.length > 0
+  // Combine variant images with product gallery
+  const variantGallery = activeVariant?.images && activeVariant.images.length > 0
+    ? activeVariant.images.map((src: string, idx: number) => ({ id: `v-${idx}`, label: `${activeVariant.value || 'Variant'} ${idx + 1}`, src }))
+    : [];
+
+  const baseGallery = product.gallery && product.gallery.length > 0
     ? product.gallery
-    : [
-        { id: 0, label: 'Front', src: product.image },
-        { id: 1, label: 'Side', src: product.image },
-        { id: 2, label: 'Angled', src: product.image },
-        { id: 3, label: 'Detail', src: product.image },
-      ];
+    : product.image
+      ? [
+          { id: 0, label: 'Front', src: product.image },
+          { id: 1, label: 'Side', src: product.image },
+          { id: 2, label: 'Angled', src: product.image },
+          { id: 3, label: 'Detail', src: product.image },
+        ]
+      : [];
 
+  const gallery = variantGallery.length > 0 ? [...variantGallery, ...baseGallery] : baseGallery;
   const currentImage = gallery[selectedThumbIndex]?.src || product.image;
-
-  const variantsList = product.variants && product.variants.length > 0
-    ? product.variants
-    : [
-        {
-          option: 'Option',
-          value: 'Standard',
-          price: product.price,
-          stock: `${product.stock} units`,
-          status: product.stockStatus,
-        },
-      ];
 
   return (
     <div className="flex flex-col w-full pt-space-xs">
@@ -331,13 +354,13 @@ export default function ProductDetailsPage({
                 <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">
                   {product.name}
                 </h1>
-                <StatusBadge status={product.stockStatus} />
+                <StatusBadge status={activeStatus} />
               </div>
               {/* SKU Meta Tag */}
               <div className="flex items-center gap-space-2xs">
                 <span className="font-body-sm text-body-sm text-outline">SKU:</span>
                 <span className="font-body-sm text-body-sm font-semibold text-on-surface-variant font-mono">
-                  {product.sku}
+                  {activeSku}
                 </span>
                 <button
                   type="button"
@@ -354,10 +377,19 @@ export default function ProductDetailsPage({
             {/* Price & Operational Analytics */}
             <div className="p-space-md rounded-xl bg-surface-container-low flex items-baseline justify-between">
               <div className="flex flex-col">
-                <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Retail Price</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">
+                    {hasVariants ? 'Selected Variant Price' : 'Retail Price'}
+                  </span>
+                  {hasVariants && activeVariant && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary">
+                      {activeVariant.value || activeVariant.title || 'Selected'}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-baseline gap-space-xs mt-0.5">
                   <span className="font-display-lg text-display-lg text-primary font-bold tracking-tight">
-                    ₹{(product.price || 0).toLocaleString()}
+                    ₹{activePrice.toLocaleString()}
                   </span>
                   {product.originalPrice && (
                     <span className="font-body-sm text-body-sm text-outline line-through">
@@ -404,26 +436,52 @@ export default function ProductDetailsPage({
             </div>
 
             {/* Variants Selector */}
-            {variantsList.length > 0 && (
+            {hasVariants && (
               <div className="flex flex-col gap-space-2xs pt-space-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">
-                    Variants ({variantsList.length})
+                    Available Variants ({variantsList.length})
                   </span>
+                  {activeVariant && (
+                    <span className="font-caption text-caption text-primary font-semibold">
+                      Selected: {activeVariant.value || activeVariant.title || `Variant ${selectedVariantIndex + 1}`}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-space-sm flex-wrap mt-1">
                   {variantsList.map((v: any, vIdx: number) => {
+                    const isSelected = selectedVariantIndex === vIdx;
                     const label = v.value || v.title || `Variant ${vIdx + 1}`;
+                    const vPrice = v.price !== undefined && v.price !== null && Number(v.price) > 0 ? Number(v.price) : null;
+                    const vStatus = v.status || 'In Stock';
+                    const isOut = String(vStatus).toLowerCase().includes('out') || String(vStatus).toLowerCase().includes('unavail');
+
                     return (
-                      <Button
-                        key={v.id || v.sku || label}
-                        variant={selectedVariant === label ? 'primary' : 'hover'}
-                        size="md"
-                        startIcon={selectedVariant === label ? 'check' : undefined}
-                        onClick={() => setSelectedVariant(label)}
+                      <button
+                        key={v.id || v.sku || `${label}-${vIdx}`}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVariantIndex(vIdx);
+                          setSelectedThumbIndex(0);
+                        }}
+                        className={`px-3.5 py-2 rounded-xl text-body-sm font-semibold transition-all flex items-center gap-2 cursor-pointer border ${
+                          isSelected
+                            ? 'bg-primary text-on-primary border-primary shadow-md ring-2 ring-primary/20'
+                            : isOut
+                              ? 'bg-surface-container-low text-outline border-surface-container-high opacity-70 hover:opacity-100 hover:border-outline'
+                              : 'bg-surface-container-lowest text-on-surface border-surface-container-high hover:border-primary/50 hover:bg-surface-container-low'
+                        }`}
                       >
-                        {label} {v.price ? `(₹${v.price})` : ''}
-                      </Button>
+                        {isSelected && <Icon name="check" size="xs" color="inherit" />}
+                        <span>{label}</span>
+                        {vPrice !== null && (
+                          <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded-md ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-surface-container text-primary'
+                          }`}>
+                            ₹{vPrice.toLocaleString()}
+                          </span>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
@@ -434,10 +492,12 @@ export default function ProductDetailsPage({
             <div className="grid grid-cols-3 gap-space-sm pt-space-xs">
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Available</span>
-                <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1">
-                  {product.stock || 0}
+                <span className="font-headline-sm text-headline-sm text-on-surface font-bold mt-1 truncate" title={getActiveStockDisplay()}>
+                  {getActiveStockDisplay()}
                 </span>
-                <span className="font-caption text-caption text-secondary font-medium">In Warehouse</span>
+                <span className="font-caption text-caption text-secondary font-medium">
+                  {activeStatus === 'Out of Stock' ? 'Sold Out' : activeStatus === 'Low Stock' ? 'Limited Stock' : 'Available'}
+                </span>
               </div>
               <div className="p-space-sm rounded-xl bg-surface-container-low flex flex-col">
                 <span className="font-caption text-caption text-outline uppercase tracking-wider">Committed</span>
