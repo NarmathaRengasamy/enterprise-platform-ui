@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import CallPanel from '../call/CallPanel';
 
 interface AppLayoutProps {
   activeModule?: string;
@@ -639,6 +640,10 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
         <main className="w-full pt-[5.25rem] px-space-lg pb-space-lg bg-background flex-1 flex flex-col">
           {children || <Outlet />}
         </main>
+
+        {/* Docked above every page: a call keeps running while the operator
+            moves around the app, and an incoming one has to ring here too. */}
+        <CallPanel />
       </div>
     </div>
   );

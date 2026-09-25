@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '../components/common';
+import OperatorSiteCard from '../components/developer/OperatorSiteCard';
 import { useAuth } from '../hooks/useAuth';
 import {
   developerService,
@@ -730,6 +731,17 @@ export default function DeveloperPage() {
           </div>
         </div>
       </div>
+
+      {/* ===================================================================== */}
+      {/* OPERATOR CALLING                                                       */}
+      {/* ===================================================================== */}
+      {/* A second credential, and it depends on the one above: the server
+          answers 409 until the workspace connection exists. */}
+      <OperatorSiteCard
+        platform={platform}
+        onSaved={setPlatform}
+        canEdit={user?.role === 'Admin'}
+      />
 
       {/* Real counts only — nothing here is a placeholder figure. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-sm">

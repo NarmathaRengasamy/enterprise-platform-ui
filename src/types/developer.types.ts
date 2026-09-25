@@ -5,6 +5,8 @@
 
 /* ── Platform connection ──────────────────────────────────────────────────── */
 
+import type { OperatorSite } from './operator.types';
+
 export type PlatformStatus = 'Connected' | 'Unverified' | 'Error';
 
 /** Where the credentials in force came from: the Developer Hub, the server's
@@ -26,6 +28,14 @@ export interface PlatformConnection {
   source: PlatformSource;
   /** The Perfox path the server calls to prove the credentials work. */
   verifyPath: string;
+
+  /* ── The operator site ───────────────────────────────────────────────────
+     A second, separate credential: the Perfox Site a HUMAN operator signs in
+     against to take calls in the browser. It rides on this same response. */
+
+  /** What calling gates on: without a site there is nobody to sign. */
+  operatorConfigured?: boolean;
+  operatorSite?: OperatorSite;
 }
 
 /** The result of actually calling Perfox. `reachable` false is a verdict to
