@@ -59,6 +59,25 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Helper to calculate and format price display (e.g. price range for products with different variant prices)
+  const formatProductPrice = (p: Product) => {
+    if (p.variants && p.variants.length > 0) {
+      const validPrices = p.variants
+        .map((v) => (typeof v.price === 'number' ? v.price : Number(v.price)))
+        .filter((price) => !isNaN(price) && price > 0);
+
+      if (validPrices.length > 0) {
+        const min = Math.min(...validPrices);
+        const max = Math.max(...validPrices);
+        if (min !== max) {
+          return `₹${min.toLocaleString()} - ₹${max.toLocaleString()}`;
+        }
+        return `₹${min.toLocaleString()}`;
+      }
+    }
+    return `₹${(p.price || 0).toLocaleString()}`;
+  };
+
   // Load stats and categories on mount
   const loadStatsAndCategories = useCallback(async () => {
     try {
@@ -208,9 +227,9 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 overflow-hidden flex flex-col">
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 flex flex-col">
         {/* Table Search & Filter Bar */}
-        <div className="p-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm bg-surface-container-lowest">
+        <div className="p-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm bg-surface-container-lowest rounded-t-xl">
           <SearchInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -233,33 +252,39 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
               </Button>
 
               {filterMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 border border-surface-container-high max-h-64 overflow-y-auto">
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedCategory('All'); setFilterMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2 font-body-sm text-body-sm transition-colors cursor-pointer ${
-                      selectedCategory === 'All'
-                        ? 'bg-primary/10 text-primary font-semibold'
-                        : 'text-on-surface hover:bg-surface-container-low'
-                    }`}
-                  >
-                    All Categories
-                  </button>
-                  {categories.map((cat) => (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setFilterMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-64 bg-surface-container-lowest rounded-xl shadow-2xl z-50 py-1.5 border border-surface-container-high max-h-64 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95">
                     <button
-                      key={cat.id || cat.name}
                       type="button"
-                      onClick={() => { setSelectedCategory(cat.name); setFilterMenuOpen(false); }}
+                      onClick={() => { setSelectedCategory('All'); setFilterMenuOpen(false); }}
                       className={`w-full text-left px-3.5 py-2 font-body-sm text-body-sm transition-colors cursor-pointer ${
-                        selectedCategory === cat.name
+                        selectedCategory === 'All'
                           ? 'bg-primary/10 text-primary font-semibold'
                           : 'text-on-surface hover:bg-surface-container-low'
                       }`}
                     >
-                      {cat.name}
+                      All Categories
                     </button>
-                  ))}
-                </div>
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id || cat.name}
+                        type="button"
+                        onClick={() => { setSelectedCategory(cat.name); setFilterMenuOpen(false); }}
+                        className={`w-full text-left px-3.5 py-2 font-body-sm text-body-sm transition-colors cursor-pointer ${
+                          selectedCategory === cat.name
+                            ? 'bg-primary/10 text-primary font-semibold'
+                            : 'text-on-surface hover:bg-surface-container-low'
+                        }`}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
@@ -278,22 +303,28 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
               </Button>
 
               {statusMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 border border-surface-container-high">
-                  {['All', 'In Stock', 'Low Stock', 'Out of Stock'].map((st) => (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => { setSelectedStatus(st); setStatusMenuOpen(false); }}
-                      className={`w-full text-left px-3.5 py-2 font-body-sm text-body-sm transition-colors cursor-pointer ${
-                        selectedStatus === st
-                          ? 'bg-primary/10 text-primary font-semibold'
-                          : 'text-on-surface hover:bg-surface-container-low'
-                      }`}
-                    >
-                      {st === 'All' ? 'All Statuses' : st}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setStatusMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-2xl z-50 py-1.5 border border-surface-container-high max-h-60 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95">
+                    {['All', 'In Stock', 'Low Stock', 'Out of Stock'].map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => { setSelectedStatus(st); setStatusMenuOpen(false); }}
+                        className={`w-full text-left px-3.5 py-2 font-body-sm text-body-sm transition-colors cursor-pointer ${
+                          selectedStatus === st
+                            ? 'bg-primary/10 text-primary font-semibold'
+                            : 'text-on-surface hover:bg-surface-container-low'
+                        }`}
+                      >
+                        {st === 'All' ? 'All Statuses' : st}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
@@ -419,8 +450,8 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                       {p.category}
                     </span>
                   </TableCell>
-                  <TableCell className="font-title-sm text-title-sm font-bold">
-                    ₹{(p.price || 0).toLocaleString()}
+                  <TableCell className="font-title-sm text-title-sm font-bold whitespace-nowrap">
+                    {formatProductPrice(p)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={p.stockStatus || (p.stock > 10 ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock')} />

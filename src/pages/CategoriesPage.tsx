@@ -603,7 +603,9 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
               </TableHeadCell>
               <TableHeadCell>Description</TableHeadCell>
               <TableHeadCell>Products</TableHeadCell>
-              <TableHeadCell className="text-right">Actions</TableHeadCell>
+              <TableHeadCell className="w-28 text-right">
+                <div className="flex items-center justify-end w-full">Actions</div>
+              </TableHeadCell>
             </tr>
           </TableHead>
           <TableBody>
@@ -627,8 +629,10 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                   <TableCell>
                     <div className="w-12 h-6 rounded-full bg-surface-container-high animate-pulse" />
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="w-8 h-8 rounded bg-surface-container-high animate-pulse inline-block" />
+                  <TableCell className="w-28 text-right whitespace-nowrap">
+                    <div className="flex justify-end">
+                      <div className="w-16 h-8 rounded bg-surface-container-high animate-pulse" />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -683,8 +687,8 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                         <span>{cat.productsCount ?? 0}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right relative">
-                      <div className="inline-flex items-center justify-end gap-1">
+                    <TableCell className="w-28 text-right whitespace-nowrap relative">
+                      <div className="inline-flex items-center justify-end gap-1.5">
                         {canEdit && (
                           <Button
                             variant="ghost"
