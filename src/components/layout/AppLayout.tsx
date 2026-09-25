@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { conversationService } from '../../services/conversation.service';
+import CallPanel from '../call/CallPanel';
 
 interface AppLayoutProps {
   activeModule?: string;
@@ -112,27 +112,6 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   ]);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
-
-  /* Threads with unread messages, for the badge on the Conversations item.
-     Re-read on every navigation: opening a thread marks it read, so the badge
-     would otherwise keep counting it until a reload. A failure leaves the badge
-     hidden rather than showing a number nobody can trust. */
-  const [unreadThreads, setUnreadThreads] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    conversationService
-      .getUnreadCount()
-      .then((count) => {
-        if (!cancelled) setUnreadThreads(count.threads);
-      })
-      .catch(() => {
-        if (!cancelled) setUnreadThreads(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [location.pathname]);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -260,7 +239,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               <button
                 type="button"
                 onClick={() => handleNav('conversations', '/conversations')}
-                title={!isSidebarOpen ? `Conversations ${unreadThreads > 0 ? `(${unreadThreads} unread)` : ''}` : undefined}
+                title={!isSidebarOpen ? 'Conversations' : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer relative ${
                   isSidebarOpen ? 'justify-between px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -273,15 +252,6 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                   <span className="material-symbols-outlined text-lg shrink-0">chat</span>
                   {isSidebarOpen && <span className="truncate animate-fadeIn">Conversations</span>}
                 </div>
-                {unreadThreads > 0 && (
-                  isSidebarOpen ? (
-                    <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-primary text-on-primary font-bold text-[11px] shrink-0">
-                      {unreadThreads}
-                    </span>
-                  ) : (
-                    <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-white"></span>
-                  )
-                )}
               </button>
 
               {/* 3. Products Submenu */}
@@ -670,6 +640,10 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
         <main className="w-full pt-[5.25rem] px-space-lg pb-space-lg bg-background flex-1 flex flex-col">
           {children || <Outlet />}
         </main>
+
+        {/* Docked above every page: a call keeps running while the operator
+            moves around the app, and an incoming one has to ring here too. */}
+        <CallPanel />
       </div>
     </div>
   );

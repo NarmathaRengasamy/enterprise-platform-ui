@@ -156,20 +156,9 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
 
           {/* Error Banner */}
           {error && (
-            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center justify-between gap-2 border border-error/20 animate-fadeIn">
-              <div className="flex items-center gap-2">
-                <Icon name="error" size="sm" color="error" />
-                <span>{error}</span>
-              </div>
-              {(error.toLowerCase().includes('already') || emailError) && onSwitchToLogin && (
-                <button
-                  type="button"
-                  onClick={onSwitchToLogin}
-                  className="px-2.5 py-1 text-xs font-semibold bg-surface-container-lowest text-primary rounded-lg border border-primary/20 shadow-xs hover:bg-primary hover:text-white transition-all cursor-pointer shrink-0"
-                >
-                  Sign In
-                </button>
-              )}
+            <div className="mb-space-md p-space-sm bg-error-container text-on-error-container rounded-xl text-label-md flex items-center gap-2 border border-error/20 animate-fadeIn">
+              <Icon name="error" size="sm" color="error" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -229,20 +218,9 @@ export default function SignupPage({ onSignupSuccess, onSwitchToLogin }: SignupP
                 />
               </div>
               {emailError && (
-                <div className="flex items-center justify-between text-xs text-error mt-0.5 animate-fadeIn">
-                  <div className="flex items-center gap-1">
-                    <Icon name="error" size="xs" color="error" />
-                    <span>{emailError}</span>
-                  </div>
-                  {onSwitchToLogin && (
-                    <button
-                      type="button"
-                      onClick={onSwitchToLogin}
-                      className="text-primary font-semibold hover:underline cursor-pointer ml-2 shrink-0"
-                    >
-                      Sign in &rarr;
-                    </button>
-                  )}
+                <div className="flex items-center gap-1 text-xs text-error mt-0.5 animate-fadeIn">
+                  <Icon name="error" size="xs" color="error" />
+                  <span>{emailError}</span>
                 </div>
               )}
             </div>

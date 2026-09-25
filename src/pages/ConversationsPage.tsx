@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/common';
+import CallButton from '../components/call/CallButton';
+import PhoneDialButton from '../components/call/PhoneDialButton';
 import { useAuth } from '../hooks/useAuth';
 import { conversationService } from '../services/conversation.service';
 import type {
@@ -32,6 +34,59 @@ const isChatMessage = (m: ConversationMessage): boolean => {
   if (!m.eventType) return true; // locally composed messages carry no event type
   return CHAT_EVENT_TYPES.has(m.eventType) && Boolean((m.text || '').trim());
 };
+
+/* Events that are not chat turns but still belong in the transcript: what the
+   channel and the call did. Rendered as a line across the thread rather than a
+   bubble — nobody said them.
+
+   `delivery_status` is the one the platform shows as "Delivery failed". Its
+   payload carries no status and no reason — Perfox's own API returns the event
+   bare, whatever `include` is asked for — so it is reported as an unconfirmed
+   delivery rather than described as a failure it cannot prove. */
+const SYSTEM_EVENTS: Record<
+  string,
+  { icon: string; label: string; tone: 'neutral' | 'warn'; hint?: string }
+> = {
+  call_started: { icon: 'call', label: 'Call started', tone: 'neutral' },
+  call_ended: { icon: 'call_end', label: 'Call ended', tone: 'neutral' },
+  call_recorded: {
+    icon: 'graphic_eq',
+    label: 'Call recorded',
+    tone: 'neutral',
+    hint: 'Perfox holds the recording; its API does not return a link to it.'
+  },
+  status_change: { icon: 'flag', label: 'Status changed', tone: 'neutral' },
+  delivery_status: {
+    icon: 'error',
+    label: 'Delivery not confirmed',
+    tone: 'warn',
+    hint: 'The channel reported back on this message. Perfox does not include the outcome or the reason in its API — check the conversation in Perfox for the detail.'
+  }
+};
+
+const isSystemEvent = (m: ConversationMessage): boolean =>
+  Boolean(m.eventType && SYSTEM_EVENTS[m.eventType]);
+
+/** Kept in the transcript: real turns, plus the system events rendered above. */
+const isDisplayedEvent = (m: ConversationMessage): boolean =>
+  isChatMessage(m) || isSystemEvent(m);
+
+/* The channel a stretch of the thread ran on, for the divider between them. */
+const CHANNEL_MARKS: Record<string, { icon: string; label: string; dot: string }> = {
+  whatsapp: { icon: 'chat', label: 'WhatsApp', dot: 'bg-emerald-500' },
+  phone: { icon: 'call', label: 'Phone', dot: 'bg-purple-500' },
+  voice: { icon: 'call', label: 'Phone', dot: 'bg-purple-500' },
+  sms: { icon: 'sms', label: 'SMS', dot: 'bg-amber-500' },
+  email: { icon: 'mail', label: 'Email', dot: 'bg-sky-500' },
+  web: { icon: 'language', label: 'Web chat', dot: 'bg-blue-500' }
+};
+
+const channelMark = (channel?: string) =>
+  CHANNEL_MARKS[String(channel || '').toLowerCase()] || {
+    icon: 'forum',
+    label: channel || 'Conversation',
+    dot: 'bg-gray-400'
+  };
 
 /* Status dot: ended → blue, abandoned → grey, resolved → green.
    `active` is a live thread, so it gets its own amber; anything unrecognised
@@ -295,7 +350,7 @@ export default function ConversationsPage({
       .getConversation(id, { signal })
       .then((detail) => {
         if (signal.aborted) return;
-        const messages = (detail.messages || []).filter(isChatMessage);
+        const messages = (detail.messages || []).filter(isDisplayedEvent);
         transcriptCache.current.set(id, messages);
         detailCache.current.set(
           id,
@@ -463,10 +518,6 @@ export default function ConversationsPage({
   const [startTo, setStartTo] = useState('');
   const [startOpening, setStartOpening] = useState('');
 
-  /* The call form is laid out but inert — these only drive the controls. */
-  const [callType, setCallType] = useState<'copilot' | 'ai'>('copilot');
-  const [callDirection, setCallDirection] = useState<'outbound' | 'inbound'>('outbound');
-  const [operator, setOperator] = useState({ name: user?.name || '', extension: '' });
 
   /* Which channels a conversation can be started on, and the agents behind
      each. One call answers both, and the server decides: the trigger channels
@@ -793,20 +844,66 @@ export default function ConversationsPage({
   };
 
   /* ── Group the thread into days ────────────────────────────────────────── */
+
+  /**
+   * Days, each holding its entries in order.
+   *
+   * Two things are worked out here rather than while rendering, because both
+   * depend on what came *before* a message and the day groups hide that:
+   *
+   *   - `channelSwitch`: the thread moves between channels — a WhatsApp chat
+   *     that becomes a phone call and comes back — so each stretch is marked
+   *     with the channel it ran on.
+   *   - `durationMs` on a `call_ended`: the length of the call, from the
+   *     `call_started` that opened it. Perfox sends neither event with a
+   *     duration, so it is the gap between the two.
+   */
   const messageDays = useMemo(() => {
-    const groups: { key: string; label: string; messages: ConversationMessage[] }[] = [];
+    type Entry = {
+      message: ConversationMessage;
+      channelSwitch?: string;
+      durationMs?: number;
+    };
+
+    const groups: { key: string; label: string; entries: Entry[] }[] = [];
+    let previousChannel = '';
+    let callStartedAt = 0;
+
     activeConvo.messages.forEach((m) => {
       const iso = m.timestamp || '';
+      const channel = String(m.channel || '').toLowerCase();
+      const entry: Entry = { message: m };
+
+      if (channel && channel !== previousChannel) {
+        entry.channelSwitch = channel;
+        previousChannel = channel;
+      }
+
+      if (m.eventType === 'call_started') {
+        callStartedAt = iso ? new Date(iso).getTime() : 0;
+      } else if (m.eventType === 'call_ended' && callStartedAt && iso) {
+        const ended = new Date(iso).getTime();
+        if (ended > callStartedAt) entry.durationMs = ended - callStartedAt;
+        callStartedAt = 0;
+      }
+
       const key = dayKey(iso);
       const last = groups[groups.length - 1];
       if (last && last.key === key) {
-        last.messages.push(m);
+        last.entries.push(entry);
       } else {
-        groups.push({ key, label: dayLabel(iso), messages: [m] });
+        groups.push({ key, label: dayLabel(iso), entries: [entry] });
       }
     });
+
     return groups;
   }, [activeConvo.messages]);
+
+  /** mm:ss, for a call whose length was worked out from its two events. */
+  const callLength = (ms: number) => {
+    const total = Math.round(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
 
   const activeStatus = statusStyle(activeConvo.status);
 
@@ -997,30 +1094,19 @@ export default function ConversationsPage({
                         {status.label}
                       </span>
                     </div>
-                    {c.unread > 0 && (
-                      <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center font-mono text-[11px] font-semibold shrink-0">
-                        {c.unread}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
             );
           })}
 
-          {/* Load more — pulls the next PAGE_SIZE rows and appends them */}
+          {/* Load more — widens the window onto the rows already fetched */}
           {hasMore && !loading && (
             <div className="p-2">
               <Button variant="hover" size="sm" fullWidth onClick={loadMore}>
-                {`Load more (${visibleConversations.length} of ${total})`}
+                Load more
               </Button>
             </div>
-          )}
-
-          {!loading && visibleConversations.length > 0 && (
-            <p className="py-2 text-center font-body-sm text-[11px] text-on-surface-variant">
-              {visibleConversations.length} of {total} conversations
-            </p>
           )}
         </div>
       </div>
@@ -1099,19 +1185,21 @@ export default function ConversationsPage({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              variant="soft"
-              size="sm"
-              startIcon="call"
+            {/* A HUMAN operator on the line, over WebRTC — not the outbound
+                route, which has the AI agent place the call server-side.
+
+                The number: a list row carries it on `customerPhone`, and the
+                detail route folds the resolved customer's onto `phone`.
+
+                The agent: the one that handled this thread. Passing it is not
+                optional — omitted, Perfox answers as the tenant default and
+                the wrong agent is on the call. */}
+            <CallButton
+              phone={activeConvo.phone || activeConvo.customerPhone || ''}
+              agentId={threadAgentId}
+              customerName={activeConvo.name}
               disabled={!activeConvo.id}
-              onClick={() => {
-                setComposerChannel('voice');
-                alert(`Starting voice call / logging call with ${activeConvo.name} (${activeConvo.phone})`);
-              }}
-              title="Call via Phone"
-            >
-              <span className="hidden sm:inline">Call</span>
-            </Button>
+            />
             <Button
               variant="ghost"
               size="icon-sm"
@@ -1202,25 +1290,78 @@ export default function ConversationsPage({
                 </span>
               </div>
 
-              {day.messages.map((m) => {
+              {day.entries.map(({ message: m, channelSwitch, durationMs }) => {
                 const isMe = m.sender === 'me';
                 const isSystem = m.sender === 'system';
                 const isCurrentMatch = m.id === currentMatchId;
                 const isMatch = matchIds.includes(m.id);
+                const systemEvent = m.eventType ? SYSTEM_EVENTS[m.eventType] : undefined;
+
+                /* Where the thread moved to. A conversation can start on
+                   WhatsApp, become a phone call and come back, and without this
+                   the call's turns read as WhatsApp messages. */
+                const divider = channelSwitch ? (
+                  <div key={`${m.id}-channel`} className="flex items-center gap-3 py-1">
+                    <span className="h-px flex-1 bg-surface-container" />
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-lowest border border-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold shrink-0">
+                      <span className={`w-1.5 h-1.5 rounded-full ${channelMark(channelSwitch).dot}`} />
+                      <span className="material-symbols-outlined text-[14px]">
+                        {channelMark(channelSwitch).icon}
+                      </span>
+                      {channelMark(channelSwitch).label}
+                    </span>
+                    <span className="h-px flex-1 bg-surface-container" />
+                  </div>
+                ) : null;
+
+                /* Not a turn anybody took — a call opening or closing, a status
+                   change, a channel reporting back. Rendered as a line across
+                   the thread, in the order it happened. */
+                if (systemEvent) {
+                  const warn = systemEvent.tone === 'warn';
+                  return (
+                    <React.Fragment key={m.id}>
+                      {divider}
+                      <div className="flex items-center justify-center">
+                        <span
+                          title={systemEvent.hint}
+                          className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-label-sm text-[11px] ${
+                            warn
+                              ? 'bg-error/10 text-error border border-error/20'
+                              : 'bg-surface-container text-on-surface-variant'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[14px]">
+                            {systemEvent.icon}
+                          </span>
+                          {systemEvent.label}
+                          {durationMs ? ` · ${callLength(durationMs)}` : ''}
+                          <span className="font-mono opacity-70" title={fullTimestamp(m.timestamp)}>
+                            {clockTime(m.timestamp) || m.time}
+                          </span>
+                        </span>
+                      </div>
+                    </React.Fragment>
+                  );
+                }
 
                 if (isSystem) {
                   return (
-                    <div key={m.id} className="flex items-center justify-center">
-                      <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px]">
-                        {highlight(m.text, m.id)}
-                      </span>
-                    </div>
+                    <React.Fragment key={m.id}>
+                      {divider}
+                      <div className="flex items-center justify-center">
+                        <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px]">
+                          {highlight(m.text, m.id)}
+                        </span>
+                      </div>
+                    </React.Fragment>
                   );
                 }
 
                 return (
+                  <React.Fragment key={m.id}>
+                  {divider}
                   <div
-                    key={m.id}
                     ref={(el) => {
                       messageRefs.current[m.id] = el;
                     }}
@@ -1323,6 +1464,7 @@ export default function ConversationsPage({
                       </div>
                     </div>
                   </div>
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -1434,7 +1576,7 @@ export default function ConversationsPage({
           >
             <div className="flex items-center justify-between">
               <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                {startChannel === 'phone' ? 'Start a phone call' : 'Start a new conversation'}
+                Start a new conversation
               </h2>
               <Button
                 variant="ghost"
@@ -1491,125 +1633,64 @@ export default function ConversationsPage({
               </div>
             </div>
 
-            {/* The call form is laid out only. Outbound is implemented for
-                WhatsApp, SMS and email, so nothing here is wired up — the
-                controls move, the button does not act. */}
-            {startChannel === 'phone' ? (
-              <>
-                <div className="space-y-1.5">
-                  <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
-                    Call type
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { key: 'copilot' as const, label: 'Copilot', hint: 'You talk · AI assists' },
-                      { key: 'ai' as const, label: 'AI agent', hint: 'AI talks to customer' }
-                    ].map((option) => (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => setCallType(option.key)}
-                        className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border transition-colors ${
-                          callType === option.key
-                            ? 'border-primary bg-primary/5 text-on-surface'
-                            : 'border-surface-container bg-surface-container-low text-on-surface-variant'
-                        }`}
-                      >
-                        <span className="font-label-lg text-label-lg font-semibold">
-                          {option.label}
-                        </span>
-                        <span className="text-[11px]">{option.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
-                    Direction
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { key: 'outbound' as const, label: 'Outbound', hint: 'You dial the customer' },
-                      { key: 'inbound' as const, label: 'Inbound', hint: 'Connect & wait for a call' }
-                    ].map((option) => (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => setCallDirection(option.key)}
-                        className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border transition-colors ${
-                          callDirection === option.key
-                            ? 'border-primary bg-primary/5 text-on-surface'
-                            : 'border-surface-container bg-surface-container-low text-on-surface-variant'
-                        }`}
-                      >
-                        <span className="font-label-lg text-label-lg font-semibold">
-                          {option.label}
-                        </span>
-                        <span className="text-[11px]">{option.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 p-3 rounded-xl border border-primary/30 bg-primary/[0.03]">
-                  <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
-                    Operator (you)
-                  </span>
-                  <div className="grid grid-cols-[1fr_6rem] gap-2">
-                    <input
-                      value={operator.name}
-                      onChange={(e) => setOperator((v) => ({ ...v, name: e.target.value }))}
-                      placeholder="Your name"
-                      className="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                    <input
-                      value={operator.extension}
-                      onChange={(e) => setOperator((v) => ({ ...v, extension: e.target.value }))}
-                      placeholder="Ext."
-                      className="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {/* AGENT — published workflows holding a trigger for this channel */}
-            <div className="space-y-1.5">
-              <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
-                Agent
-              </span>
-              <select
-                value={startAgentId}
-                onChange={(e) => setStartAgentId(e.target.value)}
-                disabled={agentsLoading || selectableAgents.length === 0}
-                className="w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:text-on-surface-variant cursor-pointer disabled:cursor-not-allowed"
-              >
-                {agentsLoading && <option>Loading workflows…</option>}
-                {!agentsLoading && selectableAgents.length === 0 && (
-                  <option value="">No published workflow handles this channel</option>
-                )}
-                {/* A paused or draft workflow is shown, not hidden: it triggers
-                    on this channel, it simply cannot send until it is
-                    published, and that is worth seeing. */}
-                {startAgentOptions.map((agent) => (
-                  <option key={agent.id} value={agent.id} disabled={!agent.available}>
-                    {agent.available ? agent.name : `${agent.name} — ${agent.status}`}
-                  </option>
-                ))}
-              </select>
-
-              {agentsError && (
-                <p className="font-body-sm text-[11px] text-error">{agentsError}</p>
-              )}
-              {!agentsError && !agentsLoading && selectableAgents.length === 0 && (
-                <p className="font-body-sm text-[11px] text-amber-700">
-                  {startAgentOptions.length > 0
-                    ? `A workflow triggers on ${startChannel}, but none of them is published.`
-                    : `Publish a workflow with a "${startChannel}" trigger node to enable this channel.`}
+            {/* A human operator places this call, so there is nothing to
+                configure: no agent answers it, and the direction is implied by
+                dialling. Perfox opens the conversation for the call itself. */}
+            {startChannel === 'phone' && (
+              <div className="space-y-1 p-3 rounded-xl border border-primary/30 bg-primary/[0.03]">
+                <p className="font-label-lg text-label-lg font-semibold text-on-surface">
+                  You place this call yourself
                 </p>
-              )}
-            </div>
+                <p className="font-body-sm text-[11px] text-on-surface-variant">
+                  Your microphone goes live when they pick up. There is no agent to
+                  choose — the call opens its own conversation, with its own recording.
+                </p>
+              </div>
+            )}
+
+            {/* AGENT — only for the channels where one does the talking. A
+                phone call is placed by the operator, so there is no agent to
+                pick and the row is not rendered at all. */}
+            {startChannel !== 'phone' && (
+              <>
+              {/* AGENT — published workflows holding a trigger for this channel */}
+              <div className="space-y-1.5">
+                <span className="font-label-sm text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant">
+                  Agent
+                </span>
+                <select
+                  value={startAgentId}
+                  onChange={(e) => setStartAgentId(e.target.value)}
+                  disabled={agentsLoading || selectableAgents.length === 0}
+                  className="w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:text-on-surface-variant cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {agentsLoading && <option>Loading workflows…</option>}
+                  {!agentsLoading && selectableAgents.length === 0 && (
+                    <option value="">No published workflow handles this channel</option>
+                  )}
+                  {/* A paused or draft workflow is shown, not hidden: it triggers
+                      on this channel, it simply cannot send until it is
+                      published, and that is worth seeing. */}
+                  {startAgentOptions.map((agent) => (
+                    <option key={agent.id} value={agent.id} disabled={!agent.available}>
+                      {agent.available ? agent.name : `${agent.name} — ${agent.status}`}
+                    </option>
+                  ))}
+                </select>
+
+                {agentsError && (
+                  <p className="font-body-sm text-[11px] text-error">{agentsError}</p>
+                )}
+                {!agentsError && !agentsLoading && selectableAgents.length === 0 && (
+                  <p className="font-body-sm text-[11px] text-amber-700">
+                    {startAgentOptions.length > 0
+                      ? `A workflow triggers on ${startChannel}, but none of them is published.`
+                      : `Publish a workflow with a "${startChannel}" trigger node to enable this channel.`}
+                  </p>
+                )}
+              </div>
+              </>
+            )}
 
             {/* WHERE TO REACH THEM */}
             <label className="block space-y-1.5">
@@ -1640,12 +1721,6 @@ export default function ConversationsPage({
               </label>
             )}
 
-            {startChannel === 'phone' && (
-              <p className="font-body-sm text-[11px] text-on-surface-variant">
-                Calls are not wired up yet — outbound is implemented for WhatsApp, SMS and email.
-              </p>
-            )}
-
             <div className="flex items-center justify-end gap-2 pt-1">
               <Button
                 variant="hover"
@@ -1658,25 +1733,33 @@ export default function ConversationsPage({
               >
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                type="submit"
-                endIcon="send"
-                loading={creating}
-                disabled={
-                  startChannel === 'phone' ||
-                  creating ||
-                  !startAgentId ||
-                  !startTo.trim() ||
-                  !startOpening.trim()
-                }
-                title={
-                  startChannel === 'phone' ? 'Calls are not implemented yet' : undefined
-                }
-              >
-                {startChannel === 'phone' ? 'Call' : 'Start'}
-              </Button>
+
+              {/* Two different actions behind one position. A phone call is
+                  placed in this browser by the operator SDK and never touches
+                  `POST /conversations/outbound`; the text channels hand the
+                  conversation to an agent, server-side. */}
+              {startChannel === 'phone' ? (
+                <PhoneDialButton
+                  phone={startTo}
+                  onPlaced={() => {
+                    setShowNewChat(false);
+                    resetNewChat();
+                  }}
+                />
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  type="submit"
+                  endIcon="send"
+                  loading={creating}
+                  disabled={
+                    creating || !startAgentId || !startTo.trim() || !startOpening.trim()
+                  }
+                >
+                  Start
+                </Button>
+              )}
             </div>
           </form>
         </div>

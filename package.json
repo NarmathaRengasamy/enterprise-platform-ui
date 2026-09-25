@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@perfox/operator-react": "file:vendor/perfox-operator-react-0.1.0.tgz",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
     "mammoth": "^1.12.3",
