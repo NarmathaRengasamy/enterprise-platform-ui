@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { OperatorSessionProvider } from './context/OperatorContext';
 import { useAuth } from './hooks/useAuth';
 import AppLayout from './components/layout/AppLayout';
 import DashboardPage from './pages/DashboardPage';
@@ -344,7 +345,12 @@ function AppRoutes(): JSX.Element {
 export default function App(): JSX.Element {
   return (
     <AuthProvider>
-      <AppRoutes />
+      {/* Around the WHOLE app, not one page: an incoming call has to ring
+          wherever the operator is, and a live call dies with its provider — so
+          unmounting this on navigation would hang up the call. */}
+      <OperatorSessionProvider>
+        <AppRoutes />
+      </OperatorSessionProvider>
     </AuthProvider>
   );
 }
