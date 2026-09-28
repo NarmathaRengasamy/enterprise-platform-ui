@@ -213,6 +213,21 @@ export default function TeamsPage() {
     }
   };
 
+  // Restore Access Handler
+  const handleRestoreAccess = async (id: string, name: string) => {
+    setOpenMenuId(null);
+    try {
+      await teamService.updateTeamMember(id, { status: 'Active' });
+      setTeam((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, status: 'Active' as const } : m))
+      );
+      setSuccessMessage(`Access restored for ${name}`);
+      teamService.getTeamStats().then(setStats).catch(() => {});
+    } catch (err: any) {
+      setError(err.message || 'Could not restore access');
+    }
+  };
+
   // Revoke Access Handler
   const handleRevokeAccess = async (id: string, name: string) => {
     if (!window.confirm(`Are you sure you want to revoke access for ${name}?`)) {
@@ -584,15 +599,31 @@ export default function TeamsPage() {
                                       </button>
                                     )}
 
-                                    <div className="my-1 h-px bg-slate-100" />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRevokeAccess(m.id, m.name)}
-                                      className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2 cursor-pointer font-semibold"
-                                    >
-                                      <span className="material-symbols-outlined text-base text-error">person_remove</span>
-                                      <span>Revoke Access</span>
-                                    </button>
+                                    {m.status === 'Inactive' ? (
+                                      <>
+                                        <div className="my-1 h-px bg-slate-100" />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRestoreAccess(m.id, m.name)}
+                                          className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer font-semibold"
+                                        >
+                                          <span className="material-symbols-outlined text-base text-emerald-600">how_to_reg</span>
+                                          <span>Restore Access</span>
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="my-1 h-px bg-slate-100" />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRevokeAccess(m.id, m.name)}
+                                          className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2 cursor-pointer font-semibold"
+                                        >
+                                          <span className="material-symbols-outlined text-base text-error">person_remove</span>
+                                          <span>Revoke Access</span>
+                                        </button>
+                                      </>
+                                    )}
                                   </>
                                 ) : (
                                   <div className="px-3 py-2 text-[11px] text-outline">
