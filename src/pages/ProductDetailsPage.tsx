@@ -80,13 +80,15 @@ export default function ProductDetailsPage({
   const getActiveStockDisplay = () => {
     if (activeVariant) {
       if (activeVariant.stock !== undefined && activeVariant.stock !== null && String(activeVariant.stock).trim() !== '') {
-        return typeof activeVariant.stock === 'number' ? `${activeVariant.stock} units` : activeVariant.stock;
+        return typeof activeVariant.stock === 'string'
+          ? activeVariant.stock.replace(/\s*units/gi, '').trim()
+          : String(activeVariant.stock);
       }
       if (activeVariant.capacity !== undefined && activeVariant.capacity !== null && Number(activeVariant.capacity) > 0) {
-        return `${activeVariant.capacity} ${activeVariant.capacityUnit || 'units'}`;
+        return String(activeVariant.capacity);
       }
     }
-    return product?.stock !== undefined ? `${product.stock} units` : '0 units';
+    return product?.stock !== undefined ? String(product.stock) : '0';
   };
 
   const handleCopySku = () => {

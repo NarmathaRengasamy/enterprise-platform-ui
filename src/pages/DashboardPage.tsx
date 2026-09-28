@@ -220,8 +220,18 @@ export default function DashboardPage({
                       <td className="py-3 px-space-md text-on-surface-variant">
                         {p.category}
                       </td>
+                      {/* `price` is optional on a product: an offering can
+                          exist before anyone has decided what it costs. An
+                          unguarded `p.price.toLocaleString()` throws on the
+                          first unpriced row and takes the whole dashboard down
+                          with it. Absent is rendered quietly — it is missing
+                          information, not an error, and not a price of 0. */}
                       <td className="py-3 px-space-md font-title-sm text-title-sm font-semibold">
-                        ₹{p.price.toLocaleString()}
+                        {typeof p.price === 'number' ? (
+                          `₹${p.price.toLocaleString()}`
+                        ) : (
+                          <span className="text-on-surface-variant font-normal">Not priced</span>
+                        )}
                       </td>
                       <td className="py-3 px-space-md text-right">
                         <StatusBadge status={p.stockStatus} />
