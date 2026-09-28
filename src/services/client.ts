@@ -5,6 +5,22 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   'http://localhost:5050/api/v1';
 
+/**
+ * Where the server itself lives, without the `/api/v1` suffix.
+ *
+ * Uploaded files are served from the server's own root (`/uploads/...`), not
+ * from the API prefix and not from the dev server this app runs on — so a
+ * stored URL has to be resolved against this before it goes in an `img` tag.
+ */
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
+
+/** Makes a server-relative path absolute. Leaves absolute URLs alone. */
+export const assetUrl = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`;
+};
+
 export const TOKEN_KEY = 'perfox_auth_token';
 
 // Supported storage keys for backward compatibility across modules

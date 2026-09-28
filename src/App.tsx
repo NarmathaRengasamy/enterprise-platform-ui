@@ -14,6 +14,18 @@ import SchedulePage from './pages/SchedulePage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
+import CatalogSetupPage from './pages/catalog/CatalogSetupPage';
+import CatalogCategoriesPage from './pages/catalog/CatalogCategoriesPage';
+import CatalogProductsPage from './pages/catalog/CatalogProductsPage';
+import CatalogProductEditPage from './pages/catalog/CatalogProductEditPage';
+import CatalogProductDetailsPage from './pages/catalog/CatalogProductDetailsPage';
+import CatalogChargesPage from './pages/catalog/CatalogChargesPage';
+import CatalogBookingsPage from './pages/catalog/CatalogBookingsPage';
+import CatalogStorefrontPage from './pages/catalog/CatalogStorefrontPage';
+import StoreShell from './pages/store/StoreLayout';
+import StoreLandingPage from './pages/store/StoreLandingPage';
+import StoreProductsPage from './pages/store/StoreProductsPage';
+import StoreProductPage from './pages/store/StoreProductPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import { Product, ScheduleEvent } from './types';
@@ -148,6 +160,16 @@ function AppRoutes(): JSX.Element {
         path="/support"
         element={<SignupPage onSignupSuccess={handleLoginSuccess} onSwitchToLogin={() => navigate('/login')} />}
       />
+
+      {/* Customer-facing shop.
+           Declared before the protected tree and with no auth check at all —
+           a shopper has no account, and these routes must render for someone
+           who has never logged in. */}
+      <Route path="/store" element={<StoreShell />}>
+        <Route index element={<StoreLandingPage />} />
+        <Route path="products" element={<StoreProductsPage />} />
+        <Route path="product/:productId" element={<StoreProductPage />} />
+      </Route>
 
       {/* Protected App Layout Routes */}
       <Route
@@ -334,6 +356,20 @@ function AppRoutes(): JSX.Element {
 
         {/* 8. Developer */}
         <Route path="/developer" element={<DeveloperPage />} />
+
+        {/* 9. Catalogue v2 — the configurable catalogue.
+             Its own routes rather than replacing /products, so the existing
+             v1 screens keep working throughout the cutover. */}
+        <Route path="/catalog" element={<Navigate to="/catalog/products" replace />} />
+        <Route path="/catalog/setup" element={<CatalogSetupPage />} />
+        <Route path="/catalog/categories" element={<CatalogCategoriesPage />} />
+        <Route path="/catalog/products" element={<CatalogProductsPage />} />
+        <Route path="/catalog/products/new" element={<CatalogProductEditPage />} />
+        <Route path="/catalog/products/:productId" element={<CatalogProductDetailsPage />} />
+        <Route path="/catalog/products/:productId/edit" element={<CatalogProductEditPage />} />
+        <Route path="/catalog/charges" element={<CatalogChargesPage />} />
+        <Route path="/catalog/bookings" element={<CatalogBookingsPage />} />
+        <Route path="/catalog/storefront" element={<CatalogStorefrontPage />} />
 
         {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

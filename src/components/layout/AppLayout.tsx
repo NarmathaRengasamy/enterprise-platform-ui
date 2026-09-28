@@ -10,6 +10,15 @@ interface AppLayoutProps {
   onLogout?: () => void;
 }
 
+/**
+ * Whether the Catalogue module appears in the sidebar.
+ *
+ * Off for now — it goes beyond what was asked for, so it is hidden rather than
+ * removed. Nothing is deleted: the pages, the routes and the API are all still
+ * there, and setting this to `true` puts the menu back exactly as it was.
+ */
+const SHOW_CATALOGUE = false;
+
 export default function AppLayout({ activeModule: activeModuleProp, setActiveModule, children, onLogout }: AppLayoutProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -27,6 +36,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     .toUpperCase() || 'SJ';
 
   const getActiveModuleFromPath = (path: string): string => {
+    if (path.startsWith('/catalog')) return 'catalog';
     if (path.startsWith('/conversations')) return 'conversations';
     if (path.startsWith('/categories')) return 'categories';
     if (path.startsWith('/products/new') || path.startsWith('/products/add')) return 'add-product';
@@ -42,6 +52,9 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
 
   const activeModule = activeModuleProp || getActiveModuleFromPath(location.pathname);
 
+  const [catalogSubmenuOpen, setCatalogSubmenuOpen] = useState(
+    location.pathname.startsWith('/catalog')
+  );
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
     activeModule === 'products' ||
     activeModule === 'categories' ||
@@ -333,6 +346,91 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                   </div>
                 )}
               </div>
+
+
+              {/* 3b. Catalogue (v2) — the configurable catalogue. Sits beside
+                   Products rather than replacing it during the cutover.
+
+                   Hidden for now: it is ahead of what was asked for, so it is
+                   kept out of the sidebar rather than deleted. The routes are
+                   still registered, so /catalog/products opens if you type it.
+                   Flip SHOW_CATALOGUE to bring the menu back. */}
+              {SHOW_CATALOGUE && (
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isSidebarOpen) {
+                      handleNav('catalog', '/catalog/products');
+                    } else {
+                      setCatalogSubmenuOpen(!catalogSubmenuOpen);
+                    }
+                  }}
+                  title={!isSidebarOpen ? 'Catalogue' : undefined}
+                  className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                    isSidebarOpen ? 'justify-between px-3 py-2' : 'justify-center p-2.5'
+                  } ${
+                    activeModule === 'catalog'
+                      ? 'text-on-surface font-semibold bg-surface-container-low'
+                      : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                  }`}
+                >
+                  <div className={`flex items-center ${isSidebarOpen ? 'gap-2.5 truncate' : ''}`}>
+                    <span
+                      className={`material-symbols-outlined text-lg shrink-0 ${
+                        activeModule === 'catalog' ? 'text-primary' : ''
+                      }`}
+                    >
+                      storefront
+                    </span>
+                    {isSidebarOpen && <span className="truncate animate-fadeIn">Catalogue</span>}
+                  </div>
+                  {isSidebarOpen && (
+                    <span
+                      className={`material-symbols-outlined text-base text-outline transition-transform duration-200 ${
+                        catalogSubmenuOpen ? 'rotate-180' : ''
+                      }`}
+                    >
+                      expand_more
+                    </span>
+                  )}
+                </button>
+
+                {isSidebarOpen && catalogSubmenuOpen && (
+                  <div className="flex flex-col gap-1 pl-6 ml-2 animate-fadeIn">
+                    {[
+                      { path: '/catalog/products', label: 'Products' },
+                      { path: '/catalog/categories', label: 'Categories' },
+                      { path: '/catalog/charges', label: 'Charges' },
+                      { path: '/catalog/bookings', label: 'Bookings' },
+                      { path: '/catalog/storefront', label: 'Storefront' },
+                      { path: '/catalog/setup', label: 'Setup' },
+                    ].map((entry) => {
+                      const on = location.pathname.startsWith(entry.path);
+                      return (
+                        <button
+                          key={entry.path}
+                          type="button"
+                          onClick={() => handleNav('catalog', entry.path)}
+                          className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                            on
+                              ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
+                              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              on ? 'bg-primary-fixed-dim' : 'bg-outline/40'
+                            }`}
+                          />
+                          <span>{entry.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              )}
 
               {/* 4. Schedule */}
               <button
