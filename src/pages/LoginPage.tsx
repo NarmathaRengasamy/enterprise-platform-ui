@@ -319,7 +319,7 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                     className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
                   />
                   <span className="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">
-                    Remember me
+                    Keep me signed in
                   </span>
                 </label>
                 <a
