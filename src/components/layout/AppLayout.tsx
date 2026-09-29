@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useLabels, useSiteSettings } from '../../context/SiteSettingsContext';
+import { useSystemHealth } from '../../hooks/useSystemHealth';
 import CallPanel from '../call/CallPanel';
 
 interface AppLayoutProps {
@@ -12,6 +14,12 @@ interface AppLayoutProps {
 
 export default function AppLayout({ activeModule: activeModuleProp, setActiveModule, children, onLogout }: AppLayoutProps) {
   const { user, logout } = useAuth();
+  const { settings: siteSettings } = useSiteSettings();
+  const label = useLabels();
+  const health = useSystemHealth();
+  /* The registered name if there is one, otherwise what the workspace is
+     called — never a company name typed into the layout. */
+  const platformName = siteSettings.legalName?.trim() || siteSettings.siteName;
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -37,6 +45,9 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     if (path.startsWith('/teams')) return 'teams';
     if (path.startsWith('/knowledge-base') || path.startsWith('/collections')) return 'knowledge-base';
     if (path.startsWith('/developer')) return 'developer';
+    /* No sidebar entry — it is reached from the profile menu — but it still
+       needs its own module, or /settings would light up Dashboard. */
+    if (path.startsWith('/settings')) return 'settings';
     return 'dashboard';
   };
 
@@ -197,19 +208,44 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
             <div
               className="flex items-center gap-3 cursor-pointer min-w-0 overflow-hidden w-full"
               onClick={() => handleNav('dashboard', '/dashboard')}
-              title="OmniFlow Dashboard"
+              title={`${siteSettings.siteName} Dashboard`}
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
-                <span className="material-symbols-outlined text-xl">all_inclusive</span>
-              </div>
+              {/* The uploaded logo replaces the built-in mark rather than
+                  sitting beside it — two logos is worse than either. */}
+              {siteSettings.logoUrl ? (
+                <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 bg-white border border-slate-200 flex items-center justify-center">
+                  <img
+                    src={siteSettings.logoUrl}
+                    alt=""
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <span className="material-symbols-outlined text-xl">all_inclusive</span>
+                </div>
+              )}
               {isSidebarOpen && (
-                <div className="flex flex-col min-w-0 animate-fadeIn">
-                  <span className="font-headline-sm text-base text-on-surface tracking-tight font-bold leading-tight truncate">
-                    OmniFlow
+                /* `flex-1 min-w-0` is what makes `truncate` work here: without
+                   min-w-0 a flex child refuses to shrink below its content, so
+                   a long name pushes the block wider than the sidebar instead
+                   of being cut. The title attributes keep the full text
+                   reachable once it is shortened. */
+                <div className="flex flex-col flex-1 min-w-0 animate-fadeIn">
+                  <span
+                    className="font-headline-sm text-base text-on-surface tracking-tight font-bold leading-tight truncate"
+                    title={siteSettings.siteName}
+                  >
+                    {siteSettings.siteName}
                   </span>
-                  <span className="text-[10px] text-primary font-semibold tracking-wider uppercase truncate">
-                    Perfox Assistant
-                  </span>
+                  {siteSettings.tagline && (
+                    <span
+                      className="text-[10px] text-primary font-semibold tracking-wider uppercase truncate"
+                      title={siteSettings.tagline}
+                    >
+                      {siteSettings.tagline}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -222,7 +258,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               <button
                 type="button"
                 onClick={() => handleNav('dashboard', '/dashboard')}
-                title={!isSidebarOpen ? 'Dashboard' : undefined}
+                title={!isSidebarOpen ? label.plural('dashboard') : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -232,14 +268,14 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 }`}
               >
                 <span className="material-symbols-outlined text-lg shrink-0">dashboard</span>
-                {isSidebarOpen && <span className="truncate animate-fadeIn">Dashboard</span>}
+                {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('dashboard')}</span>}
               </button>
 
               {/* 2. Conversations */}
               <button
                 type="button"
                 onClick={() => handleNav('conversations', '/conversations')}
-                title={!isSidebarOpen ? 'Conversations' : undefined}
+                title={!isSidebarOpen ? label.plural('conversations') : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer relative ${
                   isSidebarOpen ? 'justify-between px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -250,7 +286,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               >
                 <div className={`flex items-center ${isSidebarOpen ? 'gap-2.5 truncate' : ''}`}>
                   <span className="material-symbols-outlined text-lg shrink-0">chat</span>
-                  {isSidebarOpen && <span className="truncate animate-fadeIn">Conversations</span>}
+                  {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('conversations')}</span>}
                 </div>
               </button>
 
@@ -265,7 +301,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                       setProductsSubmenuOpen(!productsSubmenuOpen);
                     }
                   }}
-                  title={!isSidebarOpen ? 'Products' : undefined}
+                  title={!isSidebarOpen ? label.plural('products') : undefined}
                   className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                     isSidebarOpen ? 'justify-between px-3 py-2' : 'justify-center p-2.5'
                   } ${
@@ -278,7 +314,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                     <span className={`material-symbols-outlined text-lg shrink-0 ${isProductsActive ? 'text-primary' : ''}`}>
                       inventory_2
                     </span>
-                    {isSidebarOpen && <span className="truncate animate-fadeIn">Products</span>}
+                    {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('products')}</span>}
                   </div>
                   {isSidebarOpen && (
                     <span
@@ -310,7 +346,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                             : 'bg-outline/40'
                         }`}
                       />
-                      <span>All Products</span>
+                      <span>{label.plural('allProducts')}</span>
                     </button>
 
                     {/* 3.2 Categories */}
@@ -328,7 +364,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                           activeModule === 'categories' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
                         }`}
                       />
-                      <span>Categories</span>
+                      <span>{label.plural('categories')}</span>
                     </button>
                   </div>
                 )}
@@ -338,7 +374,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
               <button
                 type="button"
                 onClick={() => handleNav('schedule', '/schedule')}
-                title={!isSidebarOpen ? 'Schedule' : undefined}
+                title={!isSidebarOpen ? label.plural('schedule') : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -348,14 +384,14 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 }`}
               >
                 <span className="material-symbols-outlined text-lg shrink-0">calendar_month</span>
-                {isSidebarOpen && <span className="truncate animate-fadeIn">Schedule</span>}
+                {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('schedule')}</span>}
               </button>
 
               {/* 5. Teams */}
               <button
                 type="button"
                 onClick={() => handleNav('teams', '/teams')}
-                title={!isSidebarOpen ? 'Teams' : undefined}
+                title={!isSidebarOpen ? label.plural('teams') : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -365,14 +401,14 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 }`}
               >
                 <span className="material-symbols-outlined text-lg shrink-0">groups</span>
-                {isSidebarOpen && <span className="truncate animate-fadeIn">Teams</span>}
+                {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('teams')}</span>}
               </button>
 
               {/* 6. Knowledge Base */}
               <button
                 type="button"
                 onClick={() => handleNav('knowledge-base', '/knowledge-base')}
-                title={!isSidebarOpen ? 'Knowledge Base' : undefined}
+                title={!isSidebarOpen ? label.plural('knowledgeBase') : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -382,14 +418,14 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 }`}
               >
                 <span className="material-symbols-outlined text-lg shrink-0">menu_book</span>
-                {isSidebarOpen && <span className="truncate animate-fadeIn">Knowledge Base</span>}
+                {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('knowledgeBase')}</span>}
               </button>
 
               {/* 7. Developer */}
               <button
                 type="button"
                 onClick={() => handleNav('developer', '/developer')}
-                title={!isSidebarOpen ? 'Developer' : undefined}
+                title={!isSidebarOpen ? label.plural('developer') : undefined}
                 className={`w-full flex items-center rounded-xl font-body-sm text-body-sm transition-all text-left cursor-pointer ${
                   isSidebarOpen ? 'gap-2.5 px-3 py-2' : 'justify-center p-2.5'
                 } ${
@@ -399,7 +435,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 }`}
               >
                 <span className="material-symbols-outlined text-lg shrink-0">terminal</span>
-                {isSidebarOpen && <span className="truncate animate-fadeIn">Developer</span>}
+                {isSidebarOpen && <span className="truncate animate-fadeIn">{label.plural('developer')}</span>}
               </button>
             </nav>
           </div>
@@ -411,21 +447,61 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
         }`}>
           {isSidebarOpen ? (
             <>
+              {/* Reported, not asserted. This used to read "Systems Active"
+                  and "v2.4.0" as plain text — it said the system was healthy
+                  while the server was down, and showed a version nobody had
+                  updated since it was typed. Both come from /api/health now,
+                  and the names come from the workspace settings. */}
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[11px] font-semibold text-on-surface">Systems Active</span>
+                <div className="flex items-center gap-1.5 min-w-0" title={health.detail}>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      health.checking
+                        ? 'bg-slate-300'
+                        : health.online
+                          ? 'bg-emerald-500 animate-pulse'
+                          : 'bg-error'
+                    }`}
+                  />
+                  <span className="text-[11px] font-semibold text-on-surface truncate">
+                    {health.checking
+                      ? 'Checking\u2026'
+                      : health.online
+                        ? 'Systems Active'
+                        : 'Service Unavailable'}
+                  </span>
                 </div>
-                <span className="text-[10px] font-mono text-outline font-medium bg-surface-container px-1.5 py-0.2 rounded">v2.4.0</span>
+                {health.version && (
+                  <span className="text-[10px] font-mono text-outline font-medium bg-surface-container px-1.5 py-0.2 rounded shrink-0">
+                    v{health.version}
+                  </span>
+                )}
               </div>
               <div className="flex flex-col gap-0.5 text-[10px] text-on-surface-variant">
-                <span className="text-outline font-medium truncate">Skillmine Enterprise Platform</span>
-                <span className="text-outline/80 truncate">&copy; 2026 OmniFlow. All rights reserved.</span>
+                <span className="text-outline font-medium truncate" title={platformName}>
+                  {platformName}
+                </span>
+                <span className="text-outline/80 truncate">
+                  &copy; {new Date().getFullYear()} {siteSettings.siteName}. All rights reserved.
+                </span>
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center gap-1" title="Systems Active (v2.4.0)">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <div
+              className="flex flex-col items-center gap-1"
+              title={`${health.online ? 'Systems Active' : health.detail}${
+                health.version ? ` (v${health.version})` : ''
+              }`}
+            >
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  health.checking
+                    ? 'bg-slate-300'
+                    : health.online
+                      ? 'bg-emerald-500 animate-pulse'
+                      : 'bg-error'
+                }`}
+              />
             </div>
           )}
         </div>
@@ -463,7 +539,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products, messages, KB..."
+                placeholder={`Search ${label.lower('allProducts')}, messages, KB...`}
                 className="bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-outline flex-1 focus:outline-none min-w-0"
               />
               <span className="font-caption text-caption bg-surface-container text-on-surface-variant px-1.5 py-0.5 rounded-md font-semibold select-none text-[10px] shrink-0">
@@ -601,7 +677,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                       className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
                     >
                       <span className="material-symbols-outlined text-base text-outline">groups</span>
-                      <span>Manage Team</span>
+                      <span>Manage {label.plural('teams')}</span>
                     </button>
                     <button
                       onClick={() => {
@@ -611,7 +687,17 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                       className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
                     >
                       <span className="material-symbols-outlined text-base text-outline">terminal</span>
-                      <span>Developer API</span>
+                      <span>{label.plural('developer')} API</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleNav('settings', '/settings');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 font-body-sm text-xs text-on-surface hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base text-outline">settings</span>
+                      <span>Settings</span>
                     </button>
                   </div>
                   <div className="h-px bg-slate-100 my-1" />

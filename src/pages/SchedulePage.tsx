@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_SCHEDULE_EVENTS } from '../data/mockData';
 import { Button } from '../components/common';
+import { useLabels } from '../context/SiteSettingsContext';
 
 // Format Date object to "YYYY-MM-DD"
 const formatDateKey = (d) => {
@@ -141,6 +142,7 @@ export default function SchedulePage({
   selectedEvent: propSelectedEvent,
   setSelectedEvent: propSetSelectedEvent
 }: SchedulePageProps = {}) {
+  const label = useLabels();
   const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
   const [activeView, setActiveView] = useState('Week'); // 'Day' | 'Week' | 'Month'
 
@@ -641,7 +643,7 @@ export default function SchedulePage({
             <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
               <span className="material-symbols-outlined text-lg">calendar_month</span>
             </div>
-            <h1 className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Schedule</h1>
+            <h1 className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{label.plural('schedule')}</h1>
           </div>
         </div>
 
@@ -724,7 +726,7 @@ export default function SchedulePage({
             startIcon="add_circle"
             onClick={handleOpenAddModal}
           >
-            New Schedule
+            New {label.singular('schedule')}
           </Button>
 
           {/* Participant Type Filters (2x2 Grid) */}
@@ -994,7 +996,7 @@ export default function SchedulePage({
               startIcon="add"
               onClick={handleOpenAddModal}
             >
-              New Schedule
+              New {label.singular('schedule')}
             </Button>
           </div>
         </header>
@@ -1475,9 +1477,11 @@ export default function SchedulePage({
                 </div>
                 <div>
                   <h2 className="font-title-md text-title-md text-on-surface font-bold leading-tight">
-                    New Meeting &amp; Schedule
+                    New {label.singular('schedule')}
                   </h2>
-                  <p className="text-[11px] text-on-surface-variant">Custom time &amp; client contact booking</p>
+                  <p className="text-[11px] text-on-surface-variant">
+                    Custom time &amp; client contact {label.lowerSingular('schedule')}
+                  </p>
                 </div>
               </div>
               <Button
@@ -1852,7 +1856,7 @@ export default function SchedulePage({
                     type="submit"
                     startIcon="send"
                   >
-                    Save &amp; Schedule
+                    Save {label.lowerSingular('schedule')}
                   </Button>
                 </div>
               </div>

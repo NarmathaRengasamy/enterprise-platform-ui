@@ -2,3 +2,9 @@ node_modules/
 dist/
 .env
 .env.local
+
+.claude
+# Python bytecode from the test scripts
+__pycache__/
+*.pyc
+tests

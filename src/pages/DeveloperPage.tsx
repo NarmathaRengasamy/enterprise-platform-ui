@@ -447,11 +447,6 @@ export default function DeveloperPage() {
          whitespace. */
       <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 font-caption text-caption text-outline">
-            <span>OmniFlow</span>
-            <span className="material-symbols-outlined text-xs">chevron_right</span>
-            <span className="text-primary font-semibold">Developer Hub</span>
-          </div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
               Connect your Perfox workspace
@@ -614,11 +609,6 @@ export default function DeveloperPage() {
   return (
     <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 font-caption text-caption text-outline">
-          <span>OmniFlow</span>
-          <span className="material-symbols-outlined text-xs">chevron_right</span>
-          <span className="text-primary font-semibold">Developer Hub</span>
-        </div>
         <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
           Platform Connection &amp; Workspace Agents
         </h1>

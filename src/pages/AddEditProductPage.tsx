@@ -5,6 +5,7 @@ import { Button } from '../components/common';
 import { productService, CreateProductInput } from '../services/product.service';
 import { categoryService, CategoryItem } from '../services/category.service';
 import { Product } from '../types';
+import { useLabels } from '../context/SiteSettingsContext';
 
 // Industry-agnostic presets to accelerate setup for any business vertical
 const INDUSTRY_PRESETS = [
@@ -59,6 +60,7 @@ export default function AddEditProductPage({
   selectedProduct?: Product | null;
   isEditing?: boolean;
 }) {
+  const label = useLabels();
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
@@ -230,7 +232,7 @@ export default function AddEditProductPage({
           }
         })
         .catch((err) => {
-          setSaveError(`Could not load product details: ${err.message}`);
+          setSaveError(`Could not load ${label.lowerSingular('allProducts')} details: ${err.message}`);
         })
         .finally(() => {
           setIsLoadingProduct(false);
@@ -627,11 +629,11 @@ export default function AddEditProductPage({
 
   const handleSave = async () => {
     if (!productName.trim()) {
-      setSaveError('Title / Service Name is required.');
+      setSaveError(`A ${label.lowerSingular('allProducts')} name is required.`);
       return;
     }
     if (!category) {
-      setSaveError('Please select a Domain / Category.');
+      setSaveError(`Please select a Domain / ${label.singular('categories')}.`);
       return;
     }
 
@@ -792,11 +794,11 @@ export default function AddEditProductPage({
             <span className="material-symbols-outlined text-base group-hover:-translate-x-0.5 transition-transform">
               arrow_back
             </span>
-            <span>Back to Catalog</span>
+            <span>Back to {label.plural('allProducts')}</span>
           </button>
           <div className="flex items-center gap-space-sm mt-0.5">
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              {isEditing ? 'Edit Offering / Product' : 'Create New Offering'}
+              {isEditing ? `Edit ${label.singular('allProducts')}` : `New ${label.singular('allProducts')}`}
             </h1>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container-high text-on-surface-variant shadow-sm">
               <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
@@ -828,7 +830,7 @@ export default function AddEditProductPage({
             disabled={isSaving}
             onClick={handleSave}
           >
-            {isSaving ? 'Saving...' : savedSuccess ? 'Saved!' : 'Save Offering'}
+            {isSaving ? 'Saving...' : savedSuccess ? 'Saved!' : `Save ${label.singular('allProducts')}`}
           </Button>
         </div>
       </div>
@@ -849,7 +851,9 @@ export default function AddEditProductPage({
               <div className="flex items-center justify-between pb-space-2xs border-b border-surface-container-low">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-xl">inventory_2</span>
-                  <h2 className="font-title-md text-title-md text-on-surface font-semibold">General Information</h2>
+                  <h2 className="font-title-md text-title-md text-on-surface font-semibold">
+                    {label.singular('allProducts')} Details
+                  </h2>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container text-on-surface-variant">
                   Core Details
@@ -862,7 +866,7 @@ export default function AddEditProductPage({
                 {/* Title / Name */}
                 <div className={`flex flex-col gap-1.5 ${hasVariants ? 'sm:col-span-5' : 'sm:col-span-12'}`}>
                 <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="offering-name">
-                  Title / Service Name <span className="text-error">*</span>
+                  {label.singular('allProducts')} Name <span className="text-error">*</span>
                 </label>
                 <input
                   id="offering-name"
@@ -894,7 +898,7 @@ export default function AddEditProductPage({
                 {/* Domain / Category */}
                 <div className={`flex flex-col gap-1.5 ${hasVariants ? 'sm:col-span-4' : 'sm:col-span-6'}`}>
                   <label className="font-label-md text-label-md text-on-surface flex items-center gap-1" htmlFor="offering-category">
-                    Domain / Category <span className="text-error">*</span>
+                    Domain / {label.singular('categories')} <span className="text-error">*</span>
                   </label>
                   <div className="relative flex items-center">
                     <select
@@ -904,7 +908,7 @@ export default function AddEditProductPage({
                       className="w-full h-[42px] pl-space-sm pr-10 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer transition-all"
                       required
                     >
-                      <option value="" disabled>Select category</option>
+                      <option value="" disabled>Select {label.lowerSingular('categories')}</option>
                       {categoriesList.length > 0 ? (
                         categoriesList.map((cat) => (
                           <option key={cat.id || cat.name} value={cat.id || cat.name}>
@@ -1021,7 +1025,7 @@ export default function AddEditProductPage({
                 <div className="flex items-center justify-between">
                   <span className="font-label-md text-label-md text-on-surface font-medium flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-base text-primary">image</span>
-                    Product Images
+                    {label.singular('allProducts')} Images
                   </span>
                   <span className="font-caption text-caption text-on-surface-variant">PNG, JPG up to 10MB</span>
                 </div>
@@ -1087,7 +1091,7 @@ export default function AddEditProductPage({
                 <div className="flex items-center justify-between">
                   <span className="font-label-md text-label-md text-on-surface font-medium flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-base text-primary">videocam</span>
-                    Product Videos
+                    {label.singular('allProducts')} Videos
                   </span>
                   <span className="font-caption text-caption text-on-surface-variant">MP4, MOV up to 60MB</span>
                 </div>
@@ -1232,7 +1236,7 @@ export default function AddEditProductPage({
               id="variants-switch-label"
               className="font-title-sm text-title-sm text-on-surface font-semibold whitespace-nowrap"
             >
-              This offering has variants
+              This {label.lowerSingular('allProducts')} has variants
             </span>
             <button
               type="button"

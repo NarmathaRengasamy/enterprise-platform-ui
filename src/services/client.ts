@@ -5,6 +5,14 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   'http://localhost:5050/api/v1';
 
+/**
+ * Where the server itself lives, without the `/api/v1` suffix.
+ *
+ * The health endpoint and any statically served file sit at the server root,
+ * not under the API prefix, so they cannot be reached from `API_BASE_URL`.
+ */
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
+
 export const TOKEN_KEY = 'perfox_auth_token';
 
 // Supported storage keys for backward compatibility across modules
@@ -140,6 +148,19 @@ export async function request<T = any>(
   const config: RequestInit = {
     ...options,
     headers,
+    /**
+     * Never let the browser's HTTP cache revalidate an API call.
+     *
+     * Express puts an ETag on every JSON response, so a repeat GET goes out
+     * conditional and comes back **304 with an empty body**. `response.ok` is
+     * false for 304, so this function then threw "Request failed with status
+     * 304" for a request that had in fact succeeded — a failure that only
+     * appeared on the second load of a screen, never the first.
+     *
+     * Authenticated API responses have no business sitting in the shared HTTP
+     * cache either, so `no-store` is the right answer rather than a patch.
+     */
+    cache: 'no-store',
   };
 
   if (options.data !== undefined) {

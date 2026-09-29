@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Product } from '../types';
 import { productService } from '../services/product.service';
 import { Button, Icon, StatusBadge } from '../components/common';
+import { useLabels } from '../context/SiteSettingsContext';
 
 interface ProductDetailsPageProps {
   setActiveModule?: (module: string) => void;
@@ -15,6 +16,7 @@ export default function ProductDetailsPage({
   selectedProduct: propProduct,
   setSelectedProduct,
 }: ProductDetailsPageProps) {
+  const label = useLabels();
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
@@ -117,7 +119,7 @@ export default function ProductDetailsPage({
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-        <p className="font-body-md text-body-md text-on-surface-variant">Loading product details...</p>
+        <p className="font-body-md text-body-md text-on-surface-variant">Loading {label.lowerSingular('allProducts')} details...</p>
       </div>
     );
   }
@@ -145,7 +147,7 @@ export default function ProductDetailsPage({
             navigate('/products');
           }}
         >
-          Back to Products Catalog
+          Back to {label.plural('allProducts')}
         </Button>
       </div>
     );
@@ -184,7 +186,7 @@ export default function ProductDetailsPage({
               navigate('/products');
             }}
           >
-            Back to Products
+            Back to {label.plural('allProducts')}
           </Button>
           <span className="text-outline text-xs">/</span>
           <span className="font-caption text-caption uppercase tracking-wider text-outline px-2 py-1 rounded bg-surface-container-high font-semibold">
@@ -211,7 +213,7 @@ export default function ProductDetailsPage({
               navigate(`/products/${product.id || product.sku}/edit`);
             }}
           >
-            Edit Product
+            Edit {label.singular('allProducts')}
           </Button>
         </div>
       </div>
@@ -339,7 +341,7 @@ export default function ProductDetailsPage({
                   ))
                 ) : (
                   <div className="col-span-full py-8 text-center text-on-surface-variant font-caption text-caption">
-                    No videos attached to this product.
+                    No videos attached to this {label.lowerSingular('allProducts')}.
                   </div>
                 )}
               </div>
@@ -417,7 +419,7 @@ export default function ProductDetailsPage({
 
             {/* Category Row */}
             <div className="flex flex-col gap-space-2xs pt-space-xs">
-              <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">Category</span>
+              <span className="font-caption text-caption uppercase tracking-wider text-outline font-semibold">{label.singular('categories')}</span>
               <div className="flex items-center gap-space-2xs flex-wrap">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold">
                   <Icon name="category" size="xs" color="primary" />
@@ -530,7 +532,7 @@ export default function ProductDetailsPage({
               </div>
               <div>
                 <h3 className="font-title-lg text-title-lg text-on-surface font-bold">
-                  Delete Product?
+                  Delete {label.lowerSingular('allProducts')}?
                 </h3>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
                   Are you sure you want to delete <span className="font-semibold">{product.name}</span> ({product.sku})? This will permanently remove it from the catalog.
