@@ -34,8 +34,10 @@ export default function TeamsPage() {
   // Modals & Menu State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMemberItem | null>(null);
+  const [revokeConfirmMember, setRevokeConfirmMember] = useState<TeamMemberItem | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
   // Add Member Form State
@@ -228,21 +230,23 @@ export default function TeamsPage() {
     }
   };
 
-  // Revoke Access Handler
-  const handleRevokeAccess = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to revoke access for ${name}?`)) {
-      return;
-    }
-    setOpenMenuId(null);
+  // Revoke Access Handler (invoked from confirmation modal)
+  const handleConfirmRevokeAccess = async () => {
+    if (!revokeConfirmMember) return;
+    const memberToRevoke = revokeConfirmMember;
+    setIsRevoking(true);
     try {
-      await teamService.revokeTeamMember(id, false);
+      await teamService.revokeTeamMember(memberToRevoke.id, false);
       setTeam((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, status: 'Inactive' as const } : m))
+        prev.map((m) => (m.id === memberToRevoke.id ? { ...m, status: 'Inactive' as const } : m))
       );
-      setSuccessMessage(`Access revoked for ${name}`);
+      setSuccessMessage(`Access revoked for ${memberToRevoke.name}`);
+      setRevokeConfirmMember(null);
       teamService.getTeamStats().then(setStats).catch(() => {});
     } catch (err: any) {
       setError(err.message || 'Could not revoke access');
+    } finally {
+      setIsRevoking(false);
     }
   };
 
@@ -428,9 +432,22 @@ export default function TeamsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search members by name, email..."
-              className="w-full h-10 pl-9 pr-4 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all border border-surface-container/60"
+              placeholder="Search members by name, email, department..."
+              className="w-full h-10 pl-9 pr-10 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all border border-surface-container/60"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-outline hover:text-on-surface transition-colors cursor-pointer"
+                aria-label="Clear search"
+                title="Clear search"
+              >
+                <span className="w-5 h-5 rounded-full hover:bg-surface-container-high flex items-center justify-center text-xs">
+                  <Icon name="close" size="xs" />
+                </span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-space-xs overflow-x-auto">
@@ -616,7 +633,10 @@ export default function TeamsPage() {
                                         <div className="my-1 h-px bg-slate-100" />
                                         <button
                                           type="button"
-                                          onClick={() => handleRevokeAccess(m.id, m.name)}
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            setRevokeConfirmMember(m);
+                                          }}
                                           className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2 cursor-pointer font-semibold"
                                         >
                                           <span className="material-symbols-outlined text-base text-error">person_remove</span>
@@ -815,6 +835,54 @@ export default function TeamsPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Revoke Access Confirmation Modal */}
+      {revokeConfirmMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-surface-container-high p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3 text-error">
+              <div className="w-10 h-10 rounded-xl bg-error-container/50 flex items-center justify-center shrink-0">
+                <Icon name="person_remove" size="lg" color="error" />
+              </div>
+              <div className="flex flex-col">
+                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                  Revoke Access
+                </h3>
+                <span className="text-xs text-on-surface-variant">
+                  Deactivate team member permissions
+                </span>
+              </div>
+            </div>
+
+            <p className="text-sm text-on-surface leading-relaxed">
+              Are you sure you want to revoke access for{' '}
+              <strong className="text-on-surface font-semibold">{revokeConfirmMember.name}</strong> ({revokeConfirmMember.email})?
+              Their account will be marked as inactive and they will no longer be able to sign in or access workspace resources.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-surface-container-low mt-1">
+              <Button
+                variant="ghost"
+                size="md"
+                type="button"
+                onClick={() => setRevokeConfirmMember(null)}
+                disabled={isRevoking}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                type="button"
+                onClick={handleConfirmRevokeAccess}
+                disabled={isRevoking}
+                startIcon={isRevoking ? <Icon name="sync" spin size="sm" /> : 'person_remove'}
+              >
+                {isRevoking ? 'Revoking...' : 'Revoke Access'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
