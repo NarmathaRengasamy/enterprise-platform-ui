@@ -13,6 +13,7 @@ import type {
   OutboundChannelOption
 } from '../types/conversation.types';
 import { clockTime, dayKey, dayLabel, fullTimestamp, relativeLabel } from '../utils/datetime';
+import { useLabels } from '../context/SiteSettingsContext';
 
 interface ConversationsPageProps {
   selectedConversationId?: string | null;
@@ -175,6 +176,7 @@ export default function ConversationsPage({
   selectedConversationId: propSelectedConvoId,
   setSelectedConversationId: propSetSelectedConvoId
 }: ConversationsPageProps = {}) {
+  const label = useLabels();
   /* Sending is Admin or Editor. Mirrored here so a Viewer is not offered a
      button the server is going to refuse. */
   const { user } = useAuth();
@@ -507,7 +509,7 @@ export default function ConversationsPage({
     return `Log phone call notes or trigger call with ${activeConvo.name}...`;
   };
 
-  /* ── Start a new conversation ──────────────────────────────────────────── */
+  /* ── Start a new {label.lowerSingular('conversations')} ──────────────────────────────────────────── */
 
   const [showNewChat, setShowNewChat] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -916,15 +918,15 @@ export default function ConversationsPage({
         <div className="p-space-md pb-space-sm space-y-space-sm">
           <div className="flex items-center justify-between">
             <h1 className="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">
-              Conversations
+              {label.plural('conversations')}
             </h1>
             <Button
               variant="ghost"
               size="icon-sm"
               startIcon="edit_square"
               onClick={() => setShowNewChat(true)}
-              title="New conversation"
-              aria-label="New conversation"
+              title={`New ${label.lowerSingular('conversations')}`}
+              aria-label={`New ${label.lowerSingular('conversations')}`}
             />
           </div>
 
@@ -1032,13 +1034,13 @@ export default function ConversationsPage({
           {loading && (
             <div className="p-6 flex items-center justify-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
               <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
-              Loading conversations...
+              Loading {label.lower('conversations')}...
             </div>
           )}
 
           {!loading && !loadError && conversations.length === 0 && (
             <div className="p-6 text-center text-on-surface-variant font-body-sm text-body-sm">
-              No conversations match this filter.
+              No {label.lower('conversations')} match this filter.
             </div>
           )}
 
@@ -1226,7 +1228,7 @@ export default function ConversationsPage({
                 if (e.key === 'Escape') closeMessageSearch();
                 if (e.key === 'Enter') stepMatch(e.shiftKey ? -1 : 1);
               }}
-              placeholder="Search in this conversation..."
+              placeholder={`Search in this ${label.lowerSingular('conversations')}...`}
               className="flex-1 bg-transparent text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none"
             />
             <span className="font-mono text-[11px] text-on-surface-variant shrink-0 min-w-[4.5rem] text-right">
@@ -1276,7 +1278,7 @@ export default function ConversationsPage({
 
           {!threadLoading && activeConvo.messages.length === 0 && (
             <div className="flex items-center justify-center text-on-surface-variant font-body-sm text-body-sm">
-              No messages in this conversation yet.
+              No messages in this {label.lowerSingular('conversations')} yet.
             </div>
           )}
 
@@ -1558,7 +1560,7 @@ export default function ConversationsPage({
       </div>
     </div>
 
-      {/* Start a new conversation */}
+      {/* Start a new {label.lowerSingular('conversations')} */}
       {showNewChat && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
@@ -1576,7 +1578,7 @@ export default function ConversationsPage({
           >
             <div className="flex items-center justify-between">
               <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                Start a new conversation
+                Start a new {label.lowerSingular('conversations')}
               </h2>
               <Button
                 variant="ghost"
@@ -1715,7 +1717,7 @@ export default function ConversationsPage({
                   rows={3}
                   value={startOpening}
                   onChange={(e) => setStartOpening(e.target.value)}
-                  placeholder="What the workflow opens the conversation with."
+                  placeholder={`What the workflow opens the ${label.lowerSingular('conversations')} with.`}
                   className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
                 />
               </label>

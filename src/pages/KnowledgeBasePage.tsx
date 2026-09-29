@@ -12,6 +12,7 @@ import {
 } from '../services/knowledge.service';
 import { productService } from '../services/product.service';
 import { categoryService } from '../services/category.service';
+import { useLabels } from '../context/SiteSettingsContext';
 
 const renderInline = (str: string): React.ReactNode => {
   const parts = str.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
@@ -44,11 +45,15 @@ const renderInline = (str: string): React.ReactNode => {
   });
 };
 
-const renderSimpleMarkdown = (text: string) => {
+/**
+ * `noun` is passed in rather than read from the label hook: this is a plain
+ * helper, not a component, so it has no hooks available to it.
+ */
+const renderSimpleMarkdown = (text: string, noun = 'article') => {
   if (!text.trim()) {
     return (
       <p className="text-slate-400 italic text-xs">
-        Nothing to preview yet. Start typing your article in the Write tab.
+        Nothing to preview yet. Start typing your {noun} in the Write tab.
       </p>
     );
   }
@@ -202,6 +207,7 @@ const renderSimpleMarkdown = (text: string) => {
 };
 
 export default function KnowledgeBasePage() {
+  const label = useLabels();
   // Data state
   const [files, setFiles] = useState<KbFile[]>([]);
   const [folders, setFolders] = useState<KbFolder[]>([]);
@@ -431,7 +437,7 @@ export default function KnowledgeBasePage() {
   // Option B: Generate .md from Catalog
   const handleGenerateCatalogSubmit = async () => {
     if (!includeProducts && !includeCategories) {
-      setCatalogError('Please select at least products or categories.');
+      setCatalogError(`Please select at least ${label.lower('allProducts')} or ${label.lower('categories')}.`);
       return;
     }
 
@@ -448,7 +454,7 @@ export default function KnowledgeBasePage() {
       });
 
       setToastMessage({
-        text: `Compiled ${result.productCount} product(s) and ${result.categoryCount} category(ies) into "${result.file.name}"!`,
+        text: `Compiled ${result.productCount} ${label.lowerSingular('allProducts')} and ${result.categoryCount} category(ies) into "${result.file.name}"!`,
         type: 'success',
       });
       setIsImportModalOpen(false);
@@ -477,11 +483,11 @@ export default function KnowledgeBasePage() {
     const content = articleContent.trim();
 
     if (!title) {
-      setCreateArticleError('Article title is required.');
+      setCreateArticleError(`${label.singular('knowledgeBase')} title is required.`);
       return;
     }
     if (!content) {
-      setCreateArticleError('Article content is required.');
+      setCreateArticleError(`${label.singular('knowledgeBase')} content is required.`);
       return;
     }
 
@@ -514,7 +520,7 @@ export default function KnowledgeBasePage() {
       });
 
       setToastMessage({
-        text: `Article "${uploaded.name || title}" published successfully!`,
+        text: `${label.singular('knowledgeBase')} "${uploaded.name || title}" published successfully!`,
         type: 'success',
       });
       setArticleTitle('');
@@ -524,7 +530,7 @@ export default function KnowledgeBasePage() {
       setIsCreateArticleOpen(false);
       await loadData(selectedFolderId);
     } catch (err: any) {
-      setCreateArticleError(err.message || 'Failed to publish article.');
+      setCreateArticleError(err.message || `Failed to publish the ${label.lowerSingular('knowledgeBase')}.`);
     } finally {
       setIsPublishingArticle(false);
     }
@@ -685,7 +691,7 @@ export default function KnowledgeBasePage() {
         selectedFileIds.map((id) => knowledgeService.deleteFile(id).catch(() => null))
       );
       setToastMessage({
-        text: `Removed ${selectedFileIds.length} files from knowledge base.`,
+        text: `Removed ${selectedFileIds.length} files from ${label.plural('knowledgeBase')}.`,
         type: 'success',
       });
       setSelectedFileIds([]);
@@ -796,7 +802,7 @@ export default function KnowledgeBasePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold flex items-center gap-2.5">
-            Knowledge Base
+            {label.plural('knowledgeBase')}
           </h1>
           <p className="font-body-md text-body-md text-on-surface-variant mt-1">
             Import reference files or compile live product catalogs into AI-searchable knowledge.
@@ -816,7 +822,7 @@ export default function KnowledgeBasePage() {
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-surface-container bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md font-semibold transition-all shadow-2xs cursor-pointer"
           >
             <Icon name="add" size="sm" />
-            <span>Create Article</span>
+            <span>Create {label.singular('knowledgeBase')}</span>
           </button>
 
           <button
@@ -1297,7 +1303,7 @@ export default function KnowledgeBasePage() {
                         </div>
                         <div className="space-y-0.5">
                           <p className="font-semibold text-slate-800 text-sm">No documents or subfolders</p>
-                          <p className="text-xs text-slate-400">Upload files or create folders to organize your knowledge base.</p>
+                          <p className="text-xs text-slate-400">Upload files or create folders to organize your {label.plural('knowledgeBase')}.</p>
                         </div>
                       </div>
                     </td>
@@ -1336,14 +1342,15 @@ export default function KnowledgeBasePage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-bold text-slate-900">
-                      Import Knowledge Base Articles
+                      Import into {label.plural('knowledgeBase')}
                     </h3>
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 tracking-wide">
                       Importer
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Select your preferred source to bulk import or auto-generate markdown articles
+                    Select your preferred source to bulk import or auto-generate markdown{' '}
+                    {label.lower('knowledgeBase')}
                   </p>
                 </div>
               </div>
@@ -1568,7 +1575,7 @@ export default function KnowledgeBasePage() {
                   {/* Top Badge */}
                   <div className="absolute -top-3 right-4">
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white tracking-wider uppercase shadow-xs">
-                      SMART CATALOG SYNC
+                      SMART {label.plural('allProducts').toUpperCase()} SYNC
                     </span>
                   </div>
 
@@ -1580,10 +1587,11 @@ export default function KnowledgeBasePage() {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900">
-                          Option B: Generate .md from Catalog
+                          Option B: Generate .md from {label.plural('allProducts')}
                         </h4>
                         <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                          Automatically compile dynamic Markdown knowledge articles directly from your existing Products and Categories inventory
+                          Automatically compile Markdown {label.lower('knowledgeBase')} directly
+                          from your existing {label.plural('allProducts')} and {label.plural('categories')}
                         </p>
                       </div>
                     </div>
@@ -1604,7 +1612,9 @@ export default function KnowledgeBasePage() {
                           }}
                           className="rounded text-primary focus:ring-primary h-4 w-4"
                         />
-                        <span>Include all products ({productCount || 11})</span>
+                        <span>
+                          Include all {label.lower('allProducts')} ({productCount || 11})
+                        </span>
                       </label>
 
                       <label className="flex items-center gap-2 text-xs text-slate-800 font-medium cursor-pointer">
@@ -1617,7 +1627,9 @@ export default function KnowledgeBasePage() {
                           }}
                           className="rounded text-primary focus:ring-primary h-4 w-4"
                         />
-                        <span>Include categories ({categoryCount || 7})</span>
+                        <span>
+                          Include {label.lower('categories')} ({categoryCount || 7})
+                        </span>
                       </label>
 
                       <div className="flex items-start gap-1.5 text-[11px] text-slate-400 italic pt-1">
@@ -1640,7 +1652,7 @@ export default function KnowledgeBasePage() {
                         className="text-xs font-medium rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs flex-1 max-w-[220px]"
                       >
                         <option value="qa">Structured Q&A / FAQ Markdown</option>
-                        <option value="reference">Product Catalog Reference</option>
+                        <option value="reference">{label.singular('allProducts')} Catalog Reference</option>
                       </select>
                     </div>
 
@@ -1648,7 +1660,9 @@ export default function KnowledgeBasePage() {
                     <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-2.5 flex items-center gap-2 text-xs text-emerald-800 font-medium">
                       <Icon name="check_circle" size="sm" className="text-emerald-600 shrink-0" />
                       <span>
-                        Generates one markdown file covering {productCount || 11} products and {categoryCount || 7} categories, ready to publish into the knowledge base
+                        Generates one markdown file covering {productCount || 11}{' '}
+                        {label.lower('allProducts')} and {categoryCount || 7} {label.lower('categories')}, ready to publish
+                        into the {label.plural('knowledgeBase')}
                       </span>
                     </div>
 
@@ -1719,9 +1733,11 @@ export default function KnowledgeBasePage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">Create Article</h3>
+                    <h3 className="text-lg font-bold text-slate-900">
+                      Create {label.singular('knowledgeBase')}
+                    </h3>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 uppercase tracking-wider">
-                      Knowledge Base
+                      {label.plural('knowledgeBase')}
                     </span>
                   </div>
                 </div>
@@ -1910,13 +1926,13 @@ export default function KnowledgeBasePage() {
                     rows={6}
                     value={articleContent}
                     onChange={(e) => setArticleContent(e.target.value)}
-                    placeholder="Write article instructions or guidelines..."
+                    placeholder={`Write ${label.lowerSingular('knowledgeBase')} instructions or guidelines...`}
                     required
                     className="w-full text-xs sm:text-sm rounded-xl border border-blue-200/80 bg-blue-50/15 p-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all resize-y shadow-2xs font-mono leading-relaxed"
                   />
                 ) : (
                   <div className="min-h-[150px] max-h-[220px] overflow-y-auto p-4 rounded-xl border border-slate-200 bg-slate-50/70 text-xs sm:text-sm text-slate-800 space-y-2.5">
-                    {renderSimpleMarkdown(articleContent)}
+                    {renderSimpleMarkdown(articleContent, label.lowerSingular('knowledgeBase'))}
                   </div>
                 )}
               </div>
@@ -1949,7 +1965,7 @@ export default function KnowledgeBasePage() {
                         Publishing...
                       </>
                     ) : (
-                      'Publish Article'
+                      `Publish ${label.singular('knowledgeBase')}`
                     )}
                   </Button>
                 </div>
@@ -1970,7 +1986,7 @@ export default function KnowledgeBasePage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Create New Folder</h3>
-                  <p className="text-xs text-slate-500">Group related articles and reference files</p>
+                  <p className="text-xs text-slate-500">Group related {label.lower('knowledgeBase')} and reference files</p>
                 </div>
               </div>
               <button

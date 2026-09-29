@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, Icon, LegalModal, LegalModalTab } from '../components/common';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole } from '../types/auth.types';
+import { useLabels, useSiteSettings } from '../context/SiteSettingsContext';
 
 const REMEMBERED_EMAIL_KEY = 'perfox_remembered_email';
 
@@ -11,6 +12,8 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: LoginPageProps) {
+  const { settings } = useSiteSettings();
+  const label = useLabels();
   const { login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   
@@ -196,17 +199,32 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
         <div className="relative w-full max-w-[480px] bg-surface-container-lowest shadow-xl rounded-2xl p-space-xl flex flex-col min-w-0 transition-all border border-surface-container-high">
           {/* Header & Vector Brand Mark */}
           <div className="flex flex-col items-center text-center mb-space-md">
+            {/* The workspace's own mark, read from the public settings
+                endpoint. A sign-in page that greets you with the shipped
+                product name after you have renamed the workspace is the one
+                place branding most obviously ought to apply. */}
             <div className="mb-space-md flex items-center justify-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-md shrink-0">
-                <span className="material-symbols-outlined text-2xl">all_inclusive</span>
-              </div>
-              <div className="flex flex-col text-left">
-                <span className="font-headline-sm text-xl text-on-surface tracking-tight font-bold leading-tight">
-                  OmniFlow
+              {settings.logoUrl ? (
+                <div className="w-11 h-11 rounded-2xl overflow-hidden bg-white border border-surface-container-high flex items-center justify-center shrink-0">
+                  <img src={settings.logoUrl} alt="" className="w-full h-full object-contain" />
+                </div>
+              ) : (
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-blue-500 text-white flex items-center justify-center shadow-md shrink-0">
+                  <span className="material-symbols-outlined text-2xl">all_inclusive</span>
+                </div>
+              )}
+              <div className="flex flex-col text-left min-w-0">
+                <span
+                  className="font-headline-sm text-xl text-on-surface tracking-tight font-bold leading-tight truncate"
+                  title={settings.siteName}
+                >
+                  {settings.siteName}
                 </span>
-                <span className="text-[11px] text-primary font-bold tracking-wider uppercase">
-                  Perfox Assistant
-                </span>
+                {settings.tagline && (
+                  <span className="text-[11px] text-primary font-bold tracking-wider uppercase truncate">
+                    {settings.tagline}
+                  </span>
+                )}
               </div>
             </div>
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
@@ -214,8 +232,8 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
             </h1>
             <p className="font-body-md text-body-md text-on-surface-variant mt-space-2xs">
               {mode === 'login'
-                ? 'Sign in to manage your Perfox assistant workspace'
-                : 'Start your 14-day free enterprise trial with Perfox AI'}
+                ? `Sign in to manage your ${settings.siteName} workspace`
+                : `Start your 14-day free trial of ${settings.siteName}`}
             </p>
           </div>
 
@@ -419,8 +437,13 @@ export default function LoginPage({ onLoginSuccess, initialMode = 'login' }: Log
                     onChange={(e) => setSignupRole(e.target.value as UserRole)}
                     className="w-full h-10 pl-10 pr-10 bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded-xl border border-surface-container-high appearance-none transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 cursor-pointer"
                   >
-                    <option value="Admin">Admin (Full System &amp; Developer Access)</option>
-                    <option value="Editor">Editor (Manage Products, KB &amp; Schedule)</option>
+                    <option value="Admin">
+                      Admin (Full System &amp; {label.plural('developer')} Access)
+                    </option>
+                    <option value="Editor">
+                      Editor (Manage {label.plural('products')}, {label.plural('knowledgeBase')} &amp;{' '}
+                      {label.plural('schedule')})
+                    </option>
                     <option value="Viewer">Viewer (Read-only Access)</option>
                   </select>
                   <span className="absolute right-3 pointer-events-none text-outline flex items-center">

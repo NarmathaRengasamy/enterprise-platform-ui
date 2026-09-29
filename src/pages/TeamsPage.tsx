@@ -4,8 +4,10 @@ import { TeamMemberItem, TeamStats } from '../types/team.types';
 import { UserRole } from '../types/auth.types';
 import { useAuth } from '../hooks/useAuth';
 import { Button, Icon, Pagination } from '../components/common';
+import { useLabels } from '../context/SiteSettingsContext';
 
 export default function TeamsPage() {
+  const label = useLabels();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
 
@@ -202,7 +204,7 @@ export default function TeamsPage() {
   const handleResendInvite = async (m: TeamMemberItem) => {
     setOpenMenuId(null);
     if (m.status !== 'Pending') {
-      setError('Invitations can only be resent for pending members.');
+      setError(`Invitations can only be resent for pending ${label.lower('teams')}.`);
       return;
     }
     try {
@@ -293,7 +295,7 @@ export default function TeamsPage() {
         <div>
           <div className="flex items-center gap-space-xs">
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              Team Members
+              {label.plural('teams')}
             </h1>
             <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-primary/10 text-primary font-bold">
               {team.length} Total
@@ -316,7 +318,7 @@ export default function TeamsPage() {
               setIsAddMemberOpen(true);
             }}
           >
-            Add Member
+            Add {label.singular('teams')}
           </Button>
         </div>
       </div>
@@ -413,7 +415,7 @@ export default function TeamsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search members by name, email..."
+              placeholder={`Search ${label.lower('teams')} by name, email...`}
               className="w-full h-10 pl-9 pr-4 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all border border-surface-container/60"
             />
           </div>
@@ -448,12 +450,12 @@ export default function TeamsPage() {
           {isLoading ? (
             <div className="p-12 flex flex-col items-center justify-center gap-3 text-on-surface-variant">
               <span className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin"></span>
-              <span className="text-sm font-medium">Loading team members...</span>
+              <span className="text-sm font-medium">Loading {label.lower('teams')}...</span>
             </div>
           ) : team.length === 0 ? (
             <div className="p-12 flex flex-col items-center justify-center text-center gap-2 text-on-surface-variant">
               <span className="material-symbols-outlined text-4xl text-outline">group_off</span>
-              <p className="font-title-sm text-base text-on-surface font-semibold">No team members found</p>
+              <p className="font-title-sm text-base text-on-surface font-semibold">No {label.lower('teams')} found</p>
               <p className="text-xs text-outline">Try adjusting your search or filters.</p>
             </div>
           ) : (
@@ -596,7 +598,7 @@ export default function TeamsPage() {
                                   </>
                                 ) : (
                                   <div className="px-3 py-2 text-[11px] text-outline">
-                                    Admin role required to manage members
+                                    Admin role required to manage {label.lower('teams')}
                                   </div>
                                 )}
                               </div>
@@ -619,7 +621,7 @@ export default function TeamsPage() {
             totalPages={totalPages}
             totalItems={team.length}
             itemsPerPage={itemsPerPage}
-            itemLabel="members"
+            itemLabel={label.lower('teams')}
             onPageChange={(page) => setCurrentPage(page)}
           />
         )}
@@ -630,7 +632,7 @@ export default function TeamsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-6 w-full max-w-md border border-surface-container-high flex flex-col gap-4">
             <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
-              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Add Team Member</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Add {label.singular('teams')}</h2>
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -713,7 +715,7 @@ export default function TeamsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-surface-container-lowest rounded-2xl shadow-2xl p-6 w-full max-w-md border border-surface-container-high flex flex-col gap-4">
             <div className="flex items-center justify-between pb-2 border-b border-surface-container-low">
-              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Edit Member Profile</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">Edit {label.singular('teams')} Profile</h2>
               <Button
                 variant="ghost"
                 size="icon-sm"

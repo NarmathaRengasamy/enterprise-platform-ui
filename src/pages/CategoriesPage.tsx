@@ -20,12 +20,14 @@ import {
   UpdateCategoryInput,
 } from '../services/category.service';
 import { useAuth } from '../hooks/useAuth';
+import { useLabels } from '../context/SiteSettingsContext';
 
 interface CategoriesPageProps {
   setActiveModule: (module: string) => void;
 }
 
 export default function CategoriesPage({ setActiveModule }: CategoriesPageProps) {
+  const label = useLabels();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
   const canEdit = user?.role === 'Admin' || user?.role === 'Editor';
@@ -164,7 +166,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
     setIsExporting(true);
     try {
       await categoryService.exportCategories();
-      setToastMessage({ text: 'Categories exported successfully.', type: 'success' });
+      setToastMessage({ text: `${label.plural('categories')} exported successfully.`, type: 'success' });
     } catch (err: any) {
       setToastMessage({ text: `Export failed: ${err.message || 'Unknown error'}`, type: 'error' });
     } finally {
@@ -199,7 +201,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      setModalError('Category name is required.');
+      setModalError(`${label.singular('categories')} name is required.`);
       return;
     }
 
@@ -216,7 +218,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
           color: 'primary',
         };
         await categoryService.updateCategory(editingCategory.id, payload);
-        setToastMessage({ text: `Category "${formName}" updated successfully.`, type: 'success' });
+        setToastMessage({ text: `${label.singular('categories')} "${formName}" updated successfully.`, type: 'success' });
       } else {
         // Create new category
         const payload: CreateCategoryInput = {
@@ -227,7 +229,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
           color: 'primary',
         };
         await categoryService.createCategory(payload);
-        setToastMessage({ text: `Category "${formName}" created successfully.`, type: 'success' });
+        setToastMessage({ text: `${label.singular('categories')} "${formName}" created successfully.`, type: 'success' });
       }
 
       setIsModalOpen(false);
@@ -247,7 +249,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
     try {
       await categoryService.deleteCategory(deleteConfirmCat.id);
       setToastMessage({
-        text: `Category "${deleteConfirmCat.name}" was deleted successfully.`,
+        text: `${label.singular('categories')} "${deleteConfirmCat.name}" was deleted successfully.`,
         type: 'success',
       });
       setSelectedCategoryIds((prev) => prev.filter((id) => id !== deleteConfirmCat.id));
@@ -351,9 +353,9 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
       {/* Top Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-lg pt-space-xs">
         <div className="flex flex-col">
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Categories</h1>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">{label.plural('categories')}</h1>
           <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-            Organize and classify products across channels
+            Organize and classify {label.lower('allProducts')} across channels
           </p>
         </div>
         <div className="flex items-center gap-space-xs flex-wrap">
@@ -363,7 +365,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
             startIcon="arrow_back"
             onClick={() => setActiveModule('products')}
           >
-            Back to Products
+            Back to {label.plural('allProducts')}
           </Button>
 
           <Button
@@ -383,7 +385,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
               startIcon="add"
               onClick={handleOpenAddModal}
             >
-              Add Category
+              Add {label.singular('categories')}
             </Button>
           )}
         </div>
@@ -392,7 +394,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
       {/* Metric Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg">
         <MetricsCard
-          title="Total Categories"
+          title={`Total ${label.plural('categories')}`}
           value={stats.totalCategories}
           trend="100% active status"
           trendType="positive"
@@ -415,8 +417,8 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
           value={stats.topDistribution ? stats.topDistribution.name : 'None'}
           subtitle={
             stats.topDistribution
-              ? `${stats.topDistribution.percentage}% of catalog inventory`
-              : 'No assigned products'
+              ? `${stats.topDistribution.percentage}% of all ${label.lower('allProducts')}`
+              : `No assigned ${label.lower('allProducts')}`
           }
           icon="devices"
           variant="neutral"
@@ -452,7 +454,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
           <SearchInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search categories..."
+            placeholder={`Search ${label.lower('categories')}...`}
           />
 
           <div className="flex items-center gap-space-xs self-end sm:self-auto relative">
@@ -483,9 +485,9 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                     Filter By Status
                   </div>
                   {[
-                    { id: 'all' as const, label: 'All Categories' },
-                    { id: 'with-products' as const, label: 'With Products (>0)' },
-                    { id: 'empty' as const, label: 'Empty (0 Products)' },
+                    { id: 'all' as const, label: `All ${label.plural('categories')}` },
+                    { id: 'with-products' as const, label: `With ${label.plural('allProducts')} (>0)` },
+                    { id: 'empty' as const, label: `Empty (0 ${label.plural('allProducts')})` },
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -515,7 +517,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                   {[
                     { id: 'default' as const, label: 'Default Order' },
                     { id: 'name-asc' as const, label: 'Name (A to Z)' },
-                    { id: 'products-desc' as const, label: 'Most Products' },
+                    { id: 'products-desc' as const, label: `Most ${label.plural('allProducts')}` },
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -546,8 +548,8 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
               size="icon"
               startIcon={isRefreshing ? <Icon name="refresh" spin color="primary" size="md" /> : 'refresh'}
               onClick={handleRefresh}
-              title="Reload categories"
-              aria-label="Reload categories"
+              title={`Reload ${label.lower('categories')}`}
+              aria-label={`Reload ${label.lower('categories')}`}
             />
           </div>
         </div>
@@ -602,7 +604,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                 </div>
               </TableHeadCell>
               <TableHeadCell>Description</TableHeadCell>
-              <TableHeadCell>Products</TableHeadCell>
+              <TableHeadCell>{label.plural('allProducts')}</TableHeadCell>
               <TableHeadCell className="w-28 text-right">
                 <div className="flex items-center justify-end w-full">Actions</div>
               </TableHeadCell>
@@ -639,7 +641,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
             ) : categories.length === 0 ? (
               <TableEmptyState
                 icon="category"
-                title="No categories found"
+                title={`No ${label.lower('categories')} found`}
                 description={
                   searchQuery
                     ? `No categories matched "${searchQuery}". Try a different keyword.`
@@ -695,8 +697,8 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                             size="icon-sm"
                             startIcon="edit"
                             onClick={() => handleOpenEditModal(cat)}
-                            title="Edit Category"
-                            aria-label="Edit Category"
+                            title={`Edit ${label.singular('categories')}`}
+                            aria-label={`Edit ${label.singular('categories')}`}
                           />
                         )}
                         <div className="relative inline-block text-left">
@@ -726,7 +728,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                                   className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors"
                                 >
                                   <Icon name="visibility" size="sm" color="outline" />
-                                  View Products
+                                  View {label.plural('allProducts')}
                                 </button>
                                 {isAdmin && (
                                   <>
@@ -766,7 +768,9 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
               <div className="flex items-center gap-2">
                 <Icon name="category" size="lg" color="primary" />
                 <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">
-                  {editingCategory ? 'Edit Category' : 'Add New Category'}
+                  {editingCategory
+                    ? `Edit ${label.singular('categories')}`
+                    : `Add New ${label.singular('categories')}`}
                 </h2>
               </div>
               <Button
@@ -787,7 +791,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
 
             <form onSubmit={handleFormSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
-                <label className="font-label-md text-label-md text-on-surface font-medium">Category Name *</label>
+                <label className="font-label-md text-label-md text-on-surface font-medium">{label.singular('categories')} Name *</label>
                 <input
                   type="text"
                   required
@@ -800,7 +804,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="font-label-md text-label-md text-on-surface font-medium">Category Code</label>
+                  <label className="font-label-md text-label-md text-on-surface font-medium">{label.singular('categories')} Code</label>
                   <input
                     type="text"
                     disabled={Boolean(editingCategory)}
@@ -817,7 +821,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                     onChange={(e) => setFormIcon(e.target.value)}
                     className="w-full h-10 px-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-sm"
                   >
-                    <option value="category">Default Category</option>
+                    <option value="category">Default {label.singular('categories')}</option>
                     <option value="devices">Electronics / Devices</option>
                     <option value="headphones">Accessories</option>
                     <option value="chair">Furniture / Home</option>
@@ -834,7 +838,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                   rows={3}
                   value={formDesc}
                   onChange={(e) => setFormDesc(e.target.value)}
-                  placeholder="Brief summary of products categorized under this group..."
+                  placeholder={`Brief summary of ${label.lower('allProducts')} categorized under this group...`}
                   className="w-full p-3 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary resize-none text-sm"
                 />
               </div>
@@ -855,7 +859,11 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                   disabled={isSubmitting}
                   startIcon={isSubmitting ? <Icon name="sync" spin size="sm" /> : undefined}
                 >
-                  {isSubmitting ? 'Saving...' : editingCategory ? 'Update Category' : 'Save Category'}
+                  {isSubmitting
+                    ? 'Saving...'
+                    : editingCategory
+                      ? `Update ${label.singular('categories')}`
+                      : `Save ${label.singular('categories')}`}
                 </Button>
               </div>
             </form>
@@ -872,7 +880,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                 <Icon name="warning" size="lg" color="error" />
               </div>
               <div className="flex flex-col">
-                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Delete Category</h3>
+                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Delete {label.singular('categories')}</h3>
                 <span className="text-xs text-on-surface-variant">This action cannot be undone.</span>
               </div>
             </div>
@@ -906,7 +914,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                 disabled={isDeleting}
                 startIcon={isDeleting ? <Icon name="sync" spin size="sm" /> : 'delete'}
               >
-                {isDeleting ? 'Deleting...' : 'Delete Category'}
+                {isDeleting ? 'Deleting...' : `Delete ${label.singular('categories')}`}
               </Button>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Product } from '../types';
 import { productService, ProductStats } from '../services/product.service';
 import { categoryService, CategoryItem } from '../services/category.service';
+import { useLabels } from '../context/SiteSettingsContext';
 import {
   Button,
   MetricsCard,
@@ -25,6 +26,7 @@ interface ProductsPageProps {
 }
 
 export default function ProductsPage({ setActiveModule, setSelectedProduct }: ProductsPageProps) {
+  const label = useLabels();
   const navigate = useNavigate();
 
   // Data states
@@ -168,8 +170,8 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
       {/* Top Header & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-lg pt-space-xs">
         <div className="flex flex-col">
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Products</h1>
-          <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Manage your product catalog, inventory, and variants</p>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">{label.plural('allProducts')}</h1>
+          <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Manage your {label.lowerSingular('allProducts')} catalog, inventory, and variants</p>
         </div>
         <div className="flex items-center gap-space-xs">
           <Button
@@ -181,7 +183,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
               navigate('/products/add');
             }}
           >
-            Add Product
+            Add {label.singular('allProducts')}
           </Button>
         </div>
       </div>
@@ -189,7 +191,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
       {/* 4 Standard Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg">
         <MetricsCard
-          title="Total Catalog"
+          title={`Total ${label.plural('allProducts')}`}
           value={totalCatalog}
           trend={`${stats?.inStockPercentage ?? 100}% in stock`}
           trendType="positive"
@@ -217,7 +219,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
         />
 
         <MetricsCard
-          title="Categories"
+          title={label.plural('categories')}
           value={`${uniqueCategoriesCount} Active`}
           subtitle="Across all business units"
           icon="category"
@@ -233,7 +235,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
           <SearchInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search products by title, SKU or category..."
+            placeholder={`Search ${label.lower('allProducts')} by title, SKU or ${label.lowerSingular('categories')}...`}
           />
 
           <div className="flex items-center gap-space-xs w-full sm:w-auto justify-end relative flex-wrap">
@@ -248,7 +250,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                   setStatusMenuOpen(false);
                 }}
               >
-                Category: {selectedCategory}
+                {label.singular('categories')}: {selectedCategory}
               </Button>
 
               {filterMenuOpen && (
@@ -267,7 +269,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                           : 'text-on-surface hover:bg-surface-container-low'
                       }`}
                     >
-                      All Categories
+                      All {label.plural('categories')}
                     </button>
                     {categories.map((cat) => (
                       <button
@@ -359,9 +361,9 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
           <TableHead>
             <tr>
               <TableHeadCell className="w-20">Image</TableHeadCell>
-              <TableHeadCell>Product Name</TableHeadCell>
+              <TableHeadCell>{label.singular('allProducts')} Name</TableHeadCell>
               <TableHeadCell>SKU</TableHeadCell>
-              <TableHeadCell>Category</TableHeadCell>
+              <TableHeadCell>{label.singular('categories')}</TableHeadCell>
               <TableHeadCell>Price</TableHeadCell>
               <TableHeadCell>Stock</TableHeadCell>
               <TableHeadCell className="text-right w-24">Actions</TableHeadCell>
@@ -399,11 +401,11 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
             ) : products.length === 0 ? (
               <TableEmptyState
                 icon="inventory_2"
-                title="No products found"
+                title={`No ${label.lower('allProducts')} found`}
                 description={
                   searchQuery || selectedCategory !== 'All' || selectedStatus !== 'All'
-                    ? 'No products matched your search or filters.'
-                    : 'Your catalog is empty. Click "Add Product" to create your first offering.'
+                    ? `No ${label.lower('allProducts')} matched your search or filters.`
+                    : `Your catalog is empty. Click "Add ${label.singular('allProducts')}" to create your first offering.`
                 }
                 colSpan={7}
               />
@@ -467,16 +469,16 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                           if (setActiveModule) setActiveModule('edit-product');
                           navigate(`/products/${p.id || p.sku}/edit`);
                         }}
-                        title="Edit Product"
-                        aria-label="Edit Product"
+                        title={`Edit ${label.singular('allProducts')}`}
+                        aria-label={`Edit ${label.singular('allProducts')}`}
                       />
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         startIcon="delete"
                         onClick={() => setDeleteConfirmId(p.id || p.sku)}
-                        title="Delete Product"
-                        aria-label="Delete Product"
+                        title={`Delete ${label.singular('allProducts')}`}
+                        aria-label={`Delete ${label.singular('allProducts')}`}
                       />
                     </div>
                   </TableCell>
@@ -492,7 +494,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
           totalPages={totalPages}
           totalItems={totalItems}
           itemsPerPage={itemsPerPage}
-          itemLabel="products"
+          itemLabel={label.lower('allProducts')}
           onPageChange={setCurrentPage}
         />
       </div>
@@ -507,7 +509,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
               </div>
               <div>
                 <h3 className="font-title-lg text-title-lg text-on-surface font-bold">
-                  Delete Product?
+                  Delete {label.lowerSingular('allProducts')}?
                 </h3>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
                   Are you sure you want to delete SKU <span className="font-mono font-semibold">{deleteConfirmId}</span>? This action cannot be undone.

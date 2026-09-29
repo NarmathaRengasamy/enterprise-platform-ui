@@ -6,4 +6,6 @@ export * from './Card';
 export * from './Pagination';
 export * from './Table';
 export * from './SearchInput';
+export * from './Combobox';
+export * from './Toast';
 export * from './LegalModal';

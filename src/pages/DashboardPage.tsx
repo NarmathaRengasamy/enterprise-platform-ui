@@ -8,6 +8,7 @@ import { Button, MetricsCard, Icon, StatusBadge } from '../components/common';
 import { productService, ProductStats } from '../services/product.service';
 import { categoryService, CategoryItem, CategoryStats } from '../services/category.service';
 import { Product } from '../types';
+import { useLabels } from '../context/SiteSettingsContext';
 
 interface DashboardPageProps {
   setActiveModule?: (module: string) => void;
@@ -22,6 +23,7 @@ export default function DashboardPage({
   setSelectedScheduleEvent,
   setSelectedConversationId
 }: DashboardPageProps) {
+  const label = useLabels();
   const [recentProducts, setRecentProducts] = useState<Product[]>([]);
   const [productStats, setProductStats] = useState<ProductStats | null>(null);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
@@ -78,7 +80,7 @@ export default function DashboardPage({
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              Dashboard
+              {label.plural('dashboard')}
             </h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
@@ -105,7 +107,7 @@ export default function DashboardPage({
               if (setActiveModule) setActiveModule('add-product');
             }}
           >
-            Add Product
+            Add {label.singular('allProducts')}
           </Button>
         </div>
       </div>
@@ -113,7 +115,7 @@ export default function DashboardPage({
       {/* 4 Standard Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
         <MetricsCard
-          title="Total Products"
+          title={`Total ${label.plural('allProducts')}`}
           value={totalProducts}
           trend={`${inStockProducts} In Stock`}
           trendType="positive"
@@ -123,7 +125,7 @@ export default function DashboardPage({
         />
 
         <MetricsCard
-          title="Total Categories"
+          title={`Total ${label.plural('categories')}`}
           value={totalCategories}
           trend={categoryStats?.assignedSkus !== undefined ? `${categoryStats.assignedSkus} SKUs Assigned` : 'All operational'}
           trendType="positive"
@@ -133,7 +135,7 @@ export default function DashboardPage({
         />
 
         <MetricsCard
-          title="Total Appointments"
+          title={`Total ${label.plural('schedule')}`}
           value={totalAppointments}
           trend={`${confirmedAppointments} confirmed`}
           trendType="warning"
@@ -143,7 +145,7 @@ export default function DashboardPage({
         />
 
         <MetricsCard
-          title="Team Members"
+          title={label.plural('teams')}
           value={totalTeamMembers}
           trend={`${activeTeamMembers} Active`}
           trendType="positive"
@@ -163,7 +165,7 @@ export default function DashboardPage({
               <div className="flex items-center gap-space-xs">
                 <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>
                 <h2 className="font-title-lg text-title-lg text-on-surface font-bold tracking-tight">
-                  Recent Products
+                  Recent {label.plural('allProducts')}
                 </h2>
               </div>
               <Button
@@ -172,7 +174,7 @@ export default function DashboardPage({
                 endIcon="arrow_forward"
                 onClick={() => setActiveModule && setActiveModule('products')}
               >
-                View all products
+                View all {label.lower('allProducts')}
               </Button>
             </div>
 
@@ -181,10 +183,10 @@ export default function DashboardPage({
                 <thead>
                   <tr className="bg-surface-container-low/40 text-on-surface-variant border-b border-surface-container-low">
                     <th className="py-2.5 px-space-md font-caption text-caption uppercase tracking-wider font-semibold" scope="col">
-                      Product
+                      {label.singular('allProducts')}
                     </th>
                     <th className="py-2.5 px-space-md font-caption text-caption uppercase tracking-wider font-semibold" scope="col">
-                      Category
+                      {label.singular('categories')}
                     </th>
                     <th className="py-2.5 px-space-md font-caption text-caption uppercase tracking-wider font-semibold" scope="col">
                       Price
@@ -258,7 +260,7 @@ export default function DashboardPage({
                 endIcon="arrow_forward"
                 onClick={() => setActiveModule && setActiveModule('categories')}
               >
-                Manage categories
+                Manage {label.lower('categories')}
               </Button>
             </div>
 
@@ -268,15 +270,15 @@ export default function DashboardPage({
                   <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
                     <Icon name="category" size="md" />
                   </div>
-                  <span className="text-xs font-semibold text-on-surface">No categories loaded</span>
-                  <span className="text-xs text-on-surface-variant">Organize your catalog by creating product categories.</span>
+                  <span className="text-xs font-semibold text-on-surface">No {label.lower('categories')} loaded</span>
+                  <span className="text-xs text-on-surface-variant">Organize your catalog by creating {label.lowerSingular('allProducts')} {label.lower('categories')}.</span>
                   <Button
                     variant="soft"
                     size="sm"
                     startIcon="add"
                     onClick={() => setActiveModule && setActiveModule('categories')}
                   >
-                    Add Category
+                    Add {label.singular('categories')}
                   </Button>
                 </div>
               ) : (
@@ -317,7 +319,7 @@ export default function DashboardPage({
               <div className="flex items-center gap-space-xs">
                 <div className="w-2.5 h-2.5 rounded-full bg-tertiary"></div>
                 <h2 className="font-title-lg text-title-lg text-on-surface font-bold tracking-tight">
-                  Upcoming Appointments
+                  Upcoming {label.plural('schedule')}
                 </h2>
               </div>
               <Button
@@ -326,7 +328,7 @@ export default function DashboardPage({
                 endIcon="arrow_forward"
                 onClick={() => setActiveModule && setActiveModule('schedule')}
               >
-                View schedule
+                View {label.lower('schedule')}
               </Button>
             </div>
 
@@ -367,7 +369,7 @@ export default function DashboardPage({
               <div className="flex items-center gap-space-xs">
                 <div className="w-2.5 h-2.5 rounded-full bg-purple-600"></div>
                 <h2 className="font-title-lg text-title-lg text-on-surface font-bold tracking-tight">
-                  Active Conversations
+                  Active {label.plural('conversations')}
                 </h2>
               </div>
               <Button

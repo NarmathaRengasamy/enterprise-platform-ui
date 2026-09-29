@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { OperatorSessionProvider } from './context/OperatorContext';
+import { SiteSettingsProvider } from './context/SiteSettingsContext';
 import { useAuth } from './hooks/useAuth';
 import AppLayout from './components/layout/AppLayout';
 import DashboardPage from './pages/DashboardPage';
@@ -14,6 +15,7 @@ import SchedulePage from './pages/SchedulePage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
+import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import { Product, ScheduleEvent } from './types';
@@ -335,6 +337,9 @@ function AppRoutes(): JSX.Element {
         {/* 8. Developer */}
         <Route path="/developer" element={<DeveloperPage />} />
 
+        {/* 9. Settings — workspace-wide, reached from the profile menu */}
+        <Route path="/settings" element={<SettingsPage />} />
+
         {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
@@ -348,9 +353,13 @@ export default function App(): JSX.Element {
       {/* Around the WHOLE app, not one page: an incoming call has to ring
           wherever the operator is, and a live call dies with its provider — so
           unmounting this on navigation would hang up the call. */}
-      <OperatorSessionProvider>
-        <AppRoutes />
-      </OperatorSessionProvider>
+      {/* Inside auth, outside the routes: the sidebar and the browser tab
+          read the workspace branding on every screen. */}
+      <SiteSettingsProvider>
+        <OperatorSessionProvider>
+          <AppRoutes />
+        </OperatorSessionProvider>
+      </SiteSettingsProvider>
     </AuthProvider>
   );
 }
