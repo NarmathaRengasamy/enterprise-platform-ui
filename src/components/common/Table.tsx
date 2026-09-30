@@ -54,6 +54,10 @@ export const TableHeadCell: React.FC<TableHeadCellProps> = ({
   children,
   ...props
 }) => {
+  const isRight = className.includes('text-right');
+  const isCenter = className.includes('text-center');
+  const justifyClass = isRight ? 'justify-end' : isCenter ? 'justify-center' : '';
+
   return (
     <th
       onClick={sortable ? onSort : undefined}
@@ -64,7 +68,7 @@ export const TableHeadCell: React.FC<TableHeadCellProps> = ({
       `.trim()}
       {...props}
     >
-      <div className="flex items-center gap-1">
+      <div className={`flex items-center gap-1 ${justifyClass}`}>
         <span>{children}</span>
         {sortable && (
           <span className="shrink-0 text-outline">
