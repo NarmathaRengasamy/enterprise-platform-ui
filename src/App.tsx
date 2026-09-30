@@ -16,6 +16,7 @@ import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import SettingsPage from './pages/SettingsPage';
+import AttributesPage from './pages/AttributesPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import { Product, ScheduleEvent } from './types';
@@ -339,6 +340,9 @@ function AppRoutes(): JSX.Element {
 
         {/* 9. Settings — workspace-wide, reached from the profile menu */}
         <Route path="/settings" element={<SettingsPage />} />
+
+        {/* 10. Attributes — the product fields from the business category */}
+        <Route path="/attributes" element={<AttributesPage />} />
 
         {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

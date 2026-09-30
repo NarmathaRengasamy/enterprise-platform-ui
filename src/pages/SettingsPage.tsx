@@ -12,6 +12,7 @@ import {
   isDefaultLabel,
 } from '../services/settings.service';
 import { Button, Combobox, Icon, Toast, ToastMessage } from '../components/common';
+import { BusinessSettingsTab } from '../components/settings/BusinessSettingsTab';
 
 /**
  * Workspace settings.
@@ -30,6 +31,7 @@ import { Button, Combobox, Icon, Toast, ToastMessage } from '../components/commo
 const TABS = [
   { key: 'workspace', label: 'Workspace Details', icon: 'apartment' },
   { key: 'navigation', label: 'Navigation Labels', icon: 'list' },
+  { key: 'business', label: 'Business & Products', icon: 'storefront' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -483,7 +485,9 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          {/* The Business tab saves on its own; these buttons belong to the
+              workspace settings on the other two tabs. */}
+          <div className={`flex items-center gap-3 shrink-0 ${tab === 'business' ? 'hidden' : ''}`}>
             {blockedReason && <span className="text-sm text-outline">{blockedReason}</span>}
             <DisabledHint reason={!dirty && !saving ? 'Nothing to discard' : null}>
               <Button
@@ -674,6 +678,10 @@ export default function SettingsPage() {
               : 'Never changed — these are the defaults.'}
           </p>
         </div>
+      )}
+
+      {tab === 'business' && (
+        <BusinessSettingsTab isAdmin={isAdmin} onMessage={(text, type) => setToast({ text, type })} />
       )}
 
       {tab === 'navigation' && (

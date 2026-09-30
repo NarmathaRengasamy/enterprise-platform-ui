@@ -37,6 +37,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   const getActiveModuleFromPath = (path: string): string => {
     if (path.startsWith('/conversations')) return 'conversations';
     if (path.startsWith('/categories')) return 'categories';
+    if (path.startsWith('/attributes')) return 'attributes';
     if (path.startsWith('/products/new') || path.startsWith('/products/add')) return 'add-product';
     if (path.startsWith('/products/edit') || path.includes('/edit')) return 'edit-product';
     if (path.startsWith('/products/details') || (path.startsWith('/products/') && path !== '/products')) return 'product-details';
@@ -56,6 +57,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
     activeModule === 'products' ||
     activeModule === 'categories' ||
+    activeModule === 'attributes' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product'
@@ -163,6 +165,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   const isProductsActive =
     activeModule === 'products' ||
     activeModule === 'categories' ||
+    activeModule === 'attributes' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product';
@@ -365,6 +368,25 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                         }`}
                       />
                       <span>{label.plural('categories')}</span>
+                    </button>
+
+                    {/* 3.3 Attributes — the product fields pre-loaded from the
+                        business category, plus the admin's own. */}
+                    <button
+                      type="button"
+                      onClick={() => handleNav('attributes', '/attributes')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                        activeModule === 'attributes'
+                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
+                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          activeModule === 'attributes' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
+                        }`}
+                      />
+                      <span>Attributes</span>
                     </button>
                   </div>
                 )}
