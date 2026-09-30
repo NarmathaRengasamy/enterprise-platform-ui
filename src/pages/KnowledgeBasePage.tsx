@@ -267,7 +267,10 @@ export default function KnowledgeBasePage() {
 
   // Delete Modals
   const [deleteConfirmFile, setDeleteConfirmFile] = useState<KbFile | null>(null);
+  const [deleteConfirmFolder, setDeleteConfirmFolder] = useState<{ id: string; name: string } | null>(null);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Toast feedback
@@ -574,26 +577,36 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  // Delete Folder
-  const handleDeleteFolder = async (folderId: string, folderName: string, e?: React.MouseEvent) => {
+  // Delete Folder (Open Modal)
+  const handleDeleteFolder = (folderId: string, folderName: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete folder "${folderName}"?`)) return;
+    setDeleteConfirmFolder({ id: folderId, name: folderName });
+  };
+
+  const handleConfirmDeleteFolder = async () => {
+    if (!deleteConfirmFolder) return;
+    setIsDeletingFolder(true);
 
     try {
-      const res = await knowledgeService.deleteFolder(folderId);
+      const res = await knowledgeService.deleteFolder(deleteConfirmFolder.id);
       setToastMessage({
-        text: `Folder "${folderName}" deleted.${res.affectedAgents?.length ? ` Affected agents: ${res.affectedAgents.join(', ')}` : ''}`,
+        text: `Folder "${deleteConfirmFolder.name}" deleted.${res.affectedAgents?.length ? ` Affected agents: ${res.affectedAgents.join(', ')}` : ''}`,
         type: 'success',
       });
-      if (selectedFolderId === folderId) {
+      const targetFolder = selectedFolderId === deleteConfirmFolder.id ? 'ROOT' : selectedFolderId;
+      if (selectedFolderId === deleteConfirmFolder.id) {
         setSelectedFolderId('ROOT');
       }
-      await loadData(selectedFolderId === folderId ? 'ROOT' : selectedFolderId);
+      setDeleteConfirmFolder(null);
+      await loadData(targetFolder);
     } catch (err: any) {
       setToastMessage({
         text: err.message || 'Failed to delete folder.',
         type: 'error',
       });
+      setDeleteConfirmFolder(null);
+    } finally {
+      setIsDeletingFolder(false);
     }
   };
 
@@ -679,12 +692,13 @@ export default function KnowledgeBasePage() {
   };
 
   // Bulk Delete
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedFileIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedFileIds.length} selected files?`)) {
-      return;
-    }
+    setIsBulkDeleteModalOpen(true);
+  };
 
+  const handleConfirmBulkDelete = async () => {
+    if (selectedFileIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
       await Promise.all(
@@ -695,11 +709,13 @@ export default function KnowledgeBasePage() {
         type: 'success',
       });
       setSelectedFileIds([]);
+      setIsBulkDeleteModalOpen(false);
       await loadData(selectedFolderId);
     } catch (err: any) {
       setToastMessage({ text: `Bulk delete error: ${err.message}`, type: 'error' });
     } finally {
       setIsBulkDeleting(false);
+      setIsBulkDeleteModalOpen(false);
     }
   };
 
@@ -1319,9 +1335,19 @@ export default function KnowledgeBasePage() {
               {currentChildFolders.length > 0 ? ` and ${currentChildFolders.length} subfolder${currentChildFolders.length === 1 ? '' : 's'}` : ''}
             </span>
             {selectedFileIds.length > 0 && (
-              <span className="font-semibold text-primary">
-                {selectedFileIds.length} item{selectedFileIds.length === 1 ? '' : 's'} selected
-              </span>
+              <div className="flex items-center gap-2.5">
+                <span className="font-semibold text-primary">
+                  {selectedFileIds.length} item{selectedFileIds.length === 1 ? '' : 's'} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon name="delete" size="xs" />
+                  <span>Delete Selected</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -2071,7 +2097,7 @@ export default function KnowledgeBasePage() {
         </div>
       )}
 
-      {/* MODAL: Delete Confirmation */}
+      {/* MODAL: Delete File Confirmation */}
       {deleteConfirmFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full p-6 space-y-4">
@@ -2102,6 +2128,80 @@ export default function KnowledgeBasePage() {
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white"
               >
                 {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Delete Folder Confirmation */}
+      {deleteConfirmFolder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full p-6 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+              <Icon name="delete_forever" size="lg" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-base font-bold text-slate-900">Delete Folder</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to delete folder <span className="font-semibold text-slate-700">"{deleteConfirmFolder.name}"</span>? Only empty folders can be deleted.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteConfirmFolder(null)}
+                disabled={isDeletingFolder}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmDeleteFolder}
+                disabled={isDeletingFolder}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                {isDeletingFolder ? 'Deleting...' : 'Confirm Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Bulk Delete Files Confirmation */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full p-6 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+              <Icon name="delete_forever" size="lg" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-base font-bold text-slate-900">Delete Selected Files</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to delete <span className="font-semibold text-slate-700">{selectedFileIds.length}</span> selected file{selectedFileIds.length === 1 ? '' : 's'}? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                disabled={isBulkDeleting}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmBulkDelete}
+                disabled={isBulkDeleting}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                {isBulkDeleting ? 'Deleting...' : 'Confirm Delete'}
               </Button>
             </div>
           </div>
