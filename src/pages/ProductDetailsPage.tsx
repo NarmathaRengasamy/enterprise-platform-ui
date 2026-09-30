@@ -161,12 +161,7 @@ export default function ProductDetailsPage({
   const baseGallery = product.gallery && product.gallery.length > 0
     ? product.gallery
     : product.image
-      ? [
-          { id: 0, label: 'Front', src: product.image },
-          { id: 1, label: 'Side', src: product.image },
-          { id: 2, label: 'Angled', src: product.image },
-          { id: 3, label: 'Detail', src: product.image },
-        ]
+      ? [{ id: 0, label: 'Main', src: product.image }]
       : [];
 
   const gallery = variantGallery.length > 0 ? [...variantGallery, ...baseGallery] : baseGallery;
@@ -224,12 +219,14 @@ export default function ProductDetailsPage({
         <div className="lg:col-span-7 flex flex-col gap-space-lg min-w-0">
           {/* Primary Showcase Card */}
           <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm border border-surface-container-low/60 relative group overflow-hidden">
-            <div className="absolute top-space-md left-space-md z-10 flex gap-space-2xs">
-              <span className="px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur text-on-surface font-caption text-caption shadow-sm flex items-center gap-1 font-semibold">
-                <Icon name="verified" size="xs" color="primary" />
-                High Resolution
-              </span>
-            </div>
+            {currentImage && (
+              <div className="absolute top-space-md left-space-md z-10 flex gap-space-2xs">
+                <span className="px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur text-on-surface font-caption text-caption shadow-sm flex items-center gap-1 font-semibold">
+                  <Icon name="verified" size="xs" color="primary" />
+                  High Resolution
+                </span>
+              </div>
+            )}
 
             {/* Featured Display Container */}
             <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-surface-container-low flex items-center justify-center p-4">
@@ -240,9 +237,14 @@ export default function ProductDetailsPage({
                   className="w-full h-full object-contain object-center transition-all duration-300 group-hover:scale-[1.02]"
                 />
               ) : (
-                <span className="material-symbols-outlined text-outline text-6xl">
-                  inventory_2
-                </span>
+                <div className="flex flex-col items-center justify-center gap-2 text-outline py-8">
+                  <span className="material-symbols-outlined text-6xl text-outline/60">
+                    image_not_supported
+                  </span>
+                  <span className="font-caption text-caption text-on-surface-variant font-medium">
+                    No product image available
+                  </span>
+                </div>
               )}
             </div>
 
@@ -310,18 +312,25 @@ export default function ProductDetailsPage({
 
             {/* Media Grid: Images */}
             {mediaTab === 'images' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
-                {gallery.map((img: any, i: number) => (
-                  <div key={i} className="relative group rounded-lg overflow-hidden aspect-square bg-surface-container-low shadow-sm">
-                    <img alt="Gallery item" src={img.src} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    {i === 0 && (
-                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded font-caption text-caption bg-surface-container-lowest/90 text-on-surface text-[10px] font-semibold">
-                        Primary
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
+              gallery.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
+                  {gallery.map((img: any, i: number) => (
+                    <div key={i} className="relative group rounded-lg overflow-hidden aspect-square bg-surface-container-low shadow-sm">
+                      <img alt={img.label || 'Gallery item'} src={img.src} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      {i === 0 && (
+                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded font-caption text-caption bg-surface-container-lowest/90 text-on-surface text-[10px] font-semibold">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="col-span-full py-8 text-center text-on-surface-variant font-caption text-caption flex flex-col items-center justify-center gap-1.5">
+                  <Icon name="image_not_supported" size="md" color="outline" />
+                  <span>No images uploaded for this {label.lowerSingular('allProducts')}.</span>
+                </div>
+              )
             ) : (
               /* Media Grid: Videos */
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
@@ -363,7 +372,7 @@ export default function ProductDetailsPage({
               {/* SKU Meta Tag */}
               <div className="flex items-center gap-space-2xs">
                 <span className="font-body-sm text-body-sm text-outline">SKU:</span>
-                <span className="font-body-sm text-body-sm font-semibold text-on-surface-variant font-mono">
+                <span className="font-body-sm text-body-sm font-semibold text-on-surface-variant">
                   {activeSku}
                 </span>
                 <button
