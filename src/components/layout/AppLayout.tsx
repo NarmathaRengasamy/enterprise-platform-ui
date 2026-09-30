@@ -62,7 +62,6 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   );
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Automatically open products submenu for product/category modules
   useEffect(() => {
@@ -519,9 +518,8 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
             isSidebarOpen ? 'left-0 md:left-64' : 'left-0 md:left-[72px]'
           }`}
         >
-          {/* Universal Search Bar with Sidebar Toggle */}
-          <div className="flex items-center gap-2.5 flex-1 max-w-lg">
-            {/* Sidebar Toggle Button in Header */}
+          {/* Left Header: Sidebar Toggle */}
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={toggleSidebar}
@@ -532,20 +530,6 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                 {isSidebarOpen ? 'menu_open' : 'menu'}
               </span>
             </button>
-
-            <div className="w-full flex items-center bg-surface-container-low px-3.5 py-1.5 rounded-xl text-on-surface-variant shadow-inner border border-surface-container/60">
-              <span className="material-symbols-outlined text-lg mr-2 text-outline">search</span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search ${label.lower('allProducts')}, messages, KB...`}
-                className="bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-outline flex-1 focus:outline-none min-w-0"
-              />
-              <span className="font-caption text-caption bg-surface-container text-on-surface-variant px-1.5 py-0.5 rounded-md font-semibold select-none text-[10px] shrink-0">
-                ⌘K
-              </span>
-            </div>
           </div>
 
           {/* Right Header Utilities: Notifications & Profile */}
