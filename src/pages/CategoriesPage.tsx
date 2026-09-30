@@ -605,9 +605,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
               </TableHeadCell>
               <TableHeadCell>Description</TableHeadCell>
               <TableHeadCell>{label.plural('allProducts')}</TableHeadCell>
-              <TableHeadCell className="w-28 text-right">
-                <div className="flex items-center justify-end w-full">Actions</div>
-              </TableHeadCell>
+              <TableHeadCell className="w-24 text-right">Actions</TableHeadCell>
             </tr>
           </TableHead>
           <TableBody>
@@ -631,7 +629,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                   <TableCell>
                     <div className="w-12 h-6 rounded-full bg-surface-container-high animate-pulse" />
                   </TableCell>
-                  <TableCell className="w-28 text-right whitespace-nowrap">
+                  <TableCell className="w-24 text-right whitespace-nowrap">
                     <div className="flex justify-end">
                       <div className="w-16 h-8 rounded bg-surface-container-high animate-pulse" />
                     </div>
@@ -689,8 +687,8 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                         <span>{cat.productsCount ?? 0}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="w-28 text-right whitespace-nowrap relative">
-                      <div className="inline-flex items-center justify-end gap-1.5">
+                    <TableCell className="w-24 text-right whitespace-nowrap relative" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
                         {canEdit && (
                           <Button
                             variant="ghost"
@@ -701,7 +699,7 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
                             aria-label={`Edit ${label.singular('categories')}`}
                           />
                         )}
-                        <div className="relative inline-block text-left">
+                        <div className="relative flex items-center">
                           <Button
                             variant="ghost"
                             size="icon-sm"
