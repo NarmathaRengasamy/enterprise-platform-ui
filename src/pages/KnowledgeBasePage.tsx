@@ -3,6 +3,7 @@ import {
   MetricsCard,
   Icon,
   Button,
+  Pagination,
 } from '../components/common';
 import {
   knowledgeService,
@@ -225,6 +226,10 @@ export default function KnowledgeBasePage() {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'processing' | 'pending' | 'error'>('ALL');
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+
   // Import Modal State (Matching Screenshot)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [modalDestinationFolder, setModalDestinationFolder] = useState<string>('');
@@ -356,8 +361,13 @@ export default function KnowledgeBasePage() {
     setSearchQuery('');
     setDebouncedSearch('');
     setSelectedFileIds([]);
+    setCurrentPage(1);
     loadData(selectedFolderId);
   }, [selectedFolderId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, statusFilter]);
 
   // Filtered Files
   const filteredFiles = useMemo(() => {
@@ -385,6 +395,14 @@ export default function KnowledgeBasePage() {
       return true;
     });
   }, [files, selectedFolderId, statusFilter, debouncedSearch]);
+
+  // Paginated Files
+  const totalPages = Math.ceil(filteredFiles.length / itemsPerPage) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startFileIndex = (safeCurrentPage - 1) * itemsPerPage;
+  const paginatedFiles = useMemo(() => {
+    return filteredFiles.slice(startFileIndex, startFileIndex + itemsPerPage);
+  }, [filteredFiles, startFileIndex, itemsPerPage]);
 
   // Checkbox helpers
   const isAllSelected =
@@ -1219,7 +1237,7 @@ export default function KnowledgeBasePage() {
 
                 {/* 2. Render Files */}
                 {!isLoading &&
-                  filteredFiles.map((file) => {
+                  paginatedFiles.map((file) => {
                     const isSelected = selectedFileIds.includes(file.id);
                     const { icon, color } = getFileIcon(file.name, file.mimeType);
 
@@ -1305,25 +1323,53 @@ export default function KnowledgeBasePage() {
             </table>
           </div>
 
-          <div className="text-[11px] text-slate-400 pt-1 flex items-center justify-between">
-            <span>
-              Showing {filteredFiles.length} file{filteredFiles.length === 1 ? '' : 's'}
-              {currentChildFolders.length > 0 ? ` and ${currentChildFolders.length} subfolder${currentChildFolders.length === 1 ? '' : 's'}` : ''}
-            </span>
-            {selectedFileIds.length > 0 && (
-              <div className="flex items-center gap-2.5">
-                <span className="font-semibold text-primary">
-                  {selectedFileIds.length} item{selectedFileIds.length === 1 ? '' : 's'} selected
-                </span>
-                <button
-                  type="button"
-                  onClick={handleBulkDelete}
-                  className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer"
-                >
-                  <Icon name="delete" size="xs" />
-                  <span>Delete Selected</span>
-                </button>
-              </div>
+          {/* Bottom Explorer Bar: Showing Info, Bulk Actions & Pagination */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-3">
+              {selectedFileIds.length > 0 ? (
+                <div className="flex items-center gap-2.5">
+                  <span className="font-semibold text-primary text-xs">
+                    {selectedFileIds.length} item{selectedFileIds.length === 1 ? '' : 's'} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <Icon name="delete" size="xs" />
+                    <span>Delete Selected</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>Show:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-8 px-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value={10}>10 per page</option>
+                    <option value={25}>25 per page</option>
+                    <option value={50}>50 per page</option>
+                    <option value={100}>100 per page</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {filteredFiles.length > 0 && (
+              <Pagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                totalItems={filteredFiles.length}
+                itemsPerPage={itemsPerPage}
+                itemLabel="files"
+                onPageChange={setCurrentPage}
+                className="w-full sm:w-auto p-0 border-t-0 bg-transparent"
+              />
             )}
           </div>
         </div>
