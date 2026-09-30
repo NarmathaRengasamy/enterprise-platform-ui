@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DESCRIPTION_ACCEPT, extractTextFromFile } from '../utils/documentText';
-import { Button } from '../components/common';
+import { Button, Icon } from '../components/common';
 import { productService, CreateProductInput } from '../services/product.service';
 import { categoryService, CategoryItem } from '../services/category.service';
 import { Product } from '../types';
@@ -139,6 +139,7 @@ export default function AddEditProductPage({
   // Bulk selection and common pricing
   const [selectedVariantIndices, setSelectedVariantIndices] = useState<number[]>([]);
   const [commonPriceInput, setCommonPriceInput] = useState<string>('');
+  const [openStatusDropdownIndex, setOpenStatusDropdownIndex] = useState<number | null>(null);
 
   // Helper to generate the next sequential SKU starting from PROD001
   const generateNextSku = async (): Promise<string> => {
@@ -361,16 +362,22 @@ export default function AddEditProductPage({
     );
   };
 
+  const VARIANT_STATUS_OPTIONS = [
+    { value: 'Available', label: 'Available', dot: 'bg-emerald-500', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100/70', textClass: 'text-emerald-700' },
+    { value: 'Limited', label: 'Limited', dot: 'bg-amber-500', tone: 'bg-amber-50 text-amber-700 border-amber-200/80 hover:bg-amber-100/70', textClass: 'text-amber-700' },
+    { value: 'Unavailable', label: 'Unavailable', dot: 'bg-rose-500', tone: 'bg-rose-50 text-rose-700 border-rose-200/80 hover:bg-rose-100/70', textClass: 'text-rose-700' },
+  ];
+
   const getVariantState = (v: any) => {
-    const s = String(v.status || 'Available').toLowerCase();
+    const s = String(v?.status || 'Available').toLowerCase();
 
     if (s.includes('out') || s.includes('unavail') || s.includes('sold')) {
-      return { key: 'unavailable', label: 'Unavailable', tone: 'bg-rose-500/15 text-rose-600', dot: 'bg-rose-500' };
+      return { key: 'unavailable', value: 'Unavailable', label: 'Unavailable', tone: 'bg-rose-50 text-rose-700 border-rose-200/80', dot: 'bg-rose-500', textClass: 'text-rose-700' };
     }
     if (s.includes('limit') || s.includes('low')) {
-      return { key: 'limited', label: 'Limited', tone: 'bg-amber-500/15 text-amber-600', dot: 'bg-amber-500' };
+      return { key: 'limited', value: 'Limited', label: 'Limited', tone: 'bg-amber-50 text-amber-700 border-amber-200/80', dot: 'bg-amber-500', textClass: 'text-amber-700' };
     }
-    return { key: 'available', label: 'Available', tone: 'bg-emerald-500/15 text-emerald-600', dot: 'bg-emerald-500' };
+    return { key: 'available', value: 'Available', label: 'Available', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200/80', dot: 'bg-emerald-500', textClass: 'text-emerald-700' };
   };
 
   // Open Single Option Modal in Edit Mode
@@ -474,7 +481,13 @@ export default function AddEditProductPage({
   const handleAddTag = (dimIndex) => {
     const dim = builderDimensions[dimIndex];
     const val = (dim.tagInput || '').trim();
-    if (!val || dim.values.includes(val)) return;
+    if (!val) return;
+    if (dim.values.includes(val)) {
+      const updated = [...builderDimensions];
+      updated[dimIndex] = { ...dim, tagInput: '' };
+      setBuilderDimensions(updated);
+      return;
+    }
 
     const updated = [...builderDimensions];
     updated[dimIndex] = {
@@ -495,14 +508,35 @@ export default function AddEditProductPage({
     setBuilderDimensions(updated);
   };
 
-  // Cartesian Product Calculation for Combinations
-  const totalCombinationsCount = builderDimensions.reduce(
+  // Cartesian Product Calculation for Combinations (including any currently typed pending input)
+  const getProcessedDimensions = () => {
+    return builderDimensions.map((d) => {
+      const pending = (d.tagInput || '').trim();
+      if (pending && !d.values.includes(pending)) {
+        return { ...d, values: [...d.values, pending] };
+      }
+      return d;
+    });
+  };
+
+  const processedDims = getProcessedDimensions();
+  const totalCombinationsCount = processedDims.reduce(
     (acc, dim) => acc * Math.max(dim.values.length, 1),
-    builderDimensions.every((d) => d.values.length > 0) ? 1 : 0
+    processedDims.every((d) => d.values.length > 0) && processedDims.length > 0 ? 1 : 0
   );
 
   const handleGenerateMatrix = () => {
-    const validDims = builderDimensions.filter((d) => d.values.length > 0);
+    // Commit any pending tagInput text across all dimensions
+    const updatedDims = builderDimensions.map((d) => {
+      const pending = (d.tagInput || '').trim();
+      if (pending && !d.values.includes(pending)) {
+        return { ...d, values: [...d.values, pending], tagInput: '' };
+      }
+      return { ...d, tagInput: '' };
+    });
+    setBuilderDimensions(updatedDims);
+
+    const validDims = updatedDims.filter((d) => d.values.length > 0);
     if (validDims.length === 0) return;
 
     // Helper: Cartesian product of arrays
@@ -1574,7 +1608,7 @@ export default function AddEditProductPage({
                             ₹ {Number(v.price).toLocaleString()}.00
                           </span>
                         ) : (
-                          <span className="font-body-sm text-body-sm text-on-surface-variant font-mono">
+                          <span className="font-body-sm text-body-sm text-on-surface-variant">
                             ₹ 0.00
                           </span>
                         )}
@@ -1588,24 +1622,59 @@ export default function AddEditProductPage({
                       </td>
 
                       {/* Status Selector in Table Row */}
-                      <td className="py-3.5 px-space-sm">
-                        <select
-                          value={
-                            String(v.status || '').toLowerCase().includes('out') || String(v.status || '').toLowerCase().includes('unavail') || String(v.status || '').toLowerCase().includes('sold')
-                              ? 'Unavailable'
-                              : String(v.status || '').toLowerCase().includes('low') || String(v.status || '').toLowerCase().includes('limit')
-                              ? 'Limited'
-                              : 'Available'
-                          }
-                          onChange={(e) => handleVariantField(i, 'status', e.target.value)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
-                            getVariantState(v).tone
-                          }`}
-                        >
-                          <option value="Available">Available</option>
-                          <option value="Limited">Limited</option>
-                          <option value="Unavailable">Unavailable</option>
-                        </select>
+                      <td className="py-3.5 px-space-sm relative">
+                        <div className="relative inline-block text-left">
+                          <button
+                            type="button"
+                            onClick={() => setOpenStatusDropdownIndex(openStatusDropdownIndex === i ? null : i)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-xs font-semibold border transition-all cursor-pointer shadow-2xs ${
+                              getVariantState(v).tone
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${getVariantState(v).dot}`} />
+                            <span>{getVariantState(v).label}</span>
+                            <Icon name="expand_more" size="xs" className="opacity-70" />
+                          </button>
+
+                          {openStatusDropdownIndex === i && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-30 cursor-default"
+                                onClick={() => setOpenStatusDropdownIndex(null)}
+                              />
+                              <div
+                                className={`absolute left-0 ${
+                                  i >= variants.length - 2 && variants.length > 2
+                                    ? 'bottom-full mb-1 origin-bottom-left'
+                                    : 'top-full mt-1 origin-top-left'
+                                } w-36 bg-white rounded-xl shadow-xl z-40 py-1 border border-slate-200 animate-in fade-in zoom-in-95`}
+                              >
+                                {VARIANT_STATUS_OPTIONS.map((opt) => {
+                                  const isSelected = getVariantState(v).value === opt.value;
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={() => {
+                                        handleVariantField(i, 'status', opt.value);
+                                        setOpenStatusDropdownIndex(null);
+                                      }}
+                                      className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors cursor-pointer hover:bg-slate-50 ${
+                                        isSelected ? 'bg-slate-50/90 font-bold' : 'font-medium'
+                                      }`}
+                                    >
+                                      <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dot}`} />
+                                      <span className={`flex-1 ${opt.textClass}`}>{opt.label}</span>
+                                      {isSelected && (
+                                        <Icon name="check" size="xs" className="text-primary shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </td>
 
                       {/* Action Buttons */}
@@ -1748,18 +1817,23 @@ export default function AddEditProductPage({
 
             {/* Dynamic Dimensions Builder */}
             <div className="flex flex-col gap-3.5">
-              <div className="flex items-center justify-between">
-                <span className="font-title-sm text-title-sm text-on-surface font-semibold">
-                  Custom Dimensions
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddDimension}
-                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-primary hover:bg-primary/10 font-label-sm text-label-sm font-semibold transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-base">add</span>
-                  <span>Add Dimension</span>
-                </button>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-title-sm text-title-sm text-on-surface font-semibold">
+                    Custom Dimensions
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddDimension}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-primary hover:bg-primary/10 font-label-sm text-label-sm font-semibold transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base">add</span>
+                    <span>Add Dimension</span>
+                  </button>
+                </div>
+                <p className="font-body-sm text-body-sm text-outline">
+                  Type each option value and press <kbd className="px-1.5 py-0.5 text-xs font-mono bg-surface-container text-on-surface rounded border border-outline-variant">Enter</kbd> or click <strong>+ Add</strong>.
+                </p>
               </div>
 
               {builderDimensions.map((dim, dimIdx) => (
@@ -1810,7 +1884,7 @@ export default function AddEditProductPage({
                     ))}
 
                     {/* Tag input */}
-                    <div className="inline-flex items-center gap-1">
+                    <div className="inline-flex items-center gap-1.5">
                       <input
                         type="text"
                         placeholder="Type value & press Enter"
@@ -1826,12 +1900,13 @@ export default function AddEditProductPage({
                             handleAddTag(dimIdx);
                           }
                         }}
-                        className="h-8 px-2.5 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container text-xs focus:outline-none focus:border-primary"
+                        onBlur={() => handleAddTag(dimIdx)}
+                        className="h-8 w-56 min-w-[210px] px-3 rounded-lg bg-surface-container-lowest text-on-surface border border-surface-container text-xs placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
                       />
                       <button
                         type="button"
                         onClick={() => handleAddTag(dimIdx)}
-                        className="h-8 px-2 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high text-xs font-semibold"
+                        className="h-8 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold cursor-pointer transition-colors"
                       >
                         + Add
                       </button>
