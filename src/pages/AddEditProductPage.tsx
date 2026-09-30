@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DESCRIPTION_ACCEPT, extractTextFromFile } from '../utils/documentText';
-import { Button, Icon } from '../components/common';
+import { Button, Icon, Pagination } from '../components/common';
 import { productService, CreateProductInput } from '../services/product.service';
 import { categoryService, CategoryItem } from '../services/category.service';
 import { Product } from '../types';
@@ -140,6 +140,15 @@ export default function AddEditProductPage({
   const [selectedVariantIndices, setSelectedVariantIndices] = useState<number[]>([]);
   const [commonPriceInput, setCommonPriceInput] = useState<string>('');
   const [openStatusDropdownIndex, setOpenStatusDropdownIndex] = useState<number | null>(null);
+
+  // Variants Table Pagination State
+  const [variantsCurrentPage, setVariantsCurrentPage] = useState(1);
+  const [variantsPerPage, setVariantsPerPage] = useState(10);
+
+  const totalVariantsPages = Math.ceil(variants.length / variantsPerPage) || 1;
+  const safeVariantsPage = Math.min(Math.max(1, variantsCurrentPage), totalVariantsPages);
+  const startVariantIndex = (safeVariantsPage - 1) * variantsPerPage;
+  const paginatedVariants = variants.slice(startVariantIndex, startVariantIndex + variantsPerPage);
 
   // Helper to generate the next sequential SKU starting from PROD001
   const generateNextSku = async (): Promise<string> => {
@@ -429,6 +438,7 @@ export default function AddEditProductPage({
       setVariants(variants.map((v, idx) => (idx === editingVariantIndex ? updatedItem : v)));
     } else {
       setVariants([...variants, updatedItem]);
+      setVariantsCurrentPage(Math.ceil((variants.length + 1) / variantsPerPage));
     }
 
     handleCloseSingleModal();
@@ -1464,7 +1474,9 @@ export default function AddEditProductPage({
                     </td>
                   </tr>
                 ) : (
-                  variants.map((v, i) => (
+                  paginatedVariants.map((v, localIdx) => {
+                    const i = startVariantIndex + localIdx;
+                    return (
                     <tr
                       key={v.id || i}
                       className={`transition-colors align-top ${
@@ -1699,11 +1711,44 @@ export default function AddEditProductPage({
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Variants Pagination Footer */}
+          {variants.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                <span>Show:</span>
+                <select
+                  value={variantsPerPage}
+                  onChange={(e) => {
+                    setVariantsPerPage(Number(e.target.value));
+                    setVariantsCurrentPage(1);
+                  }}
+                  className="h-8 px-2 rounded-lg bg-surface-container-low border border-surface-container text-xs font-semibold text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                </select>
+              </div>
+
+              <Pagination
+                currentPage={safeVariantsPage}
+                totalPages={totalVariantsPages}
+                totalItems={variants.length}
+                itemsPerPage={variantsPerPage}
+                itemLabel="combinations"
+                onPageChange={setVariantsCurrentPage}
+                className="w-full sm:w-auto p-0 border-t-0 bg-transparent"
+              />
+            </div>
+          )}
         </div>
         )}
       </form>
