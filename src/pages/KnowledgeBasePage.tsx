@@ -260,7 +260,7 @@ export default function KnowledgeBasePage() {
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
 
   // Tree & Search state matching Studio
-  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set(['ROOT']));
   const [testQuery, setTestQuery] = useState('');
   const [testResults, setTestResults] = useState<{ query: string; matches: KbFile[] } | null>(null);
   const [isTestingSearch, setIsTestingSearch] = useState(false);
@@ -353,6 +353,9 @@ export default function KnowledgeBasePage() {
   };
 
   useEffect(() => {
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setSelectedFileIds([]);
     loadData(selectedFolderId);
   }, [selectedFolderId]);
 
@@ -565,6 +568,9 @@ export default function KnowledgeBasePage() {
         text: `Folder "${created.name}" created successfully.`,
         type: 'success',
       });
+      if (newFolderParentId) {
+        setExpandedFolderIds((prev) => new Set([...prev, newFolderParentId, 'ROOT']));
+      }
       setNewFolderName('');
       setNewFolderParentId('');
       setIsCreateFolderOpen(false);
@@ -622,6 +628,65 @@ export default function KnowledgeBasePage() {
       }
       return next;
     });
+  };
+
+  // Recursive Folder Tree Item renderer
+  const renderFolderItem = (folder: KbFolder): React.ReactNode => {
+    const childFolders = folders.filter((child) => child.parentId === folder.id);
+    const hasKids = childFolders.length > 0;
+    const isExpanded = expandedFolderIds.has(folder.id);
+    const isSelected = selectedFolderId === folder.id;
+
+    return (
+      <div key={folder.id} className="space-y-0.5 group/folder">
+        <div
+          onClick={() => setSelectedFolderId(folder.id)}
+          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
+            isSelected
+              ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs'
+              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
+          title={folder.summary || folder.name}
+        >
+          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+            {hasKids ? (
+              <button
+                type="button"
+                onClick={(e) => toggleFolderExpanded(folder.id, e)}
+                className="p-0.5 text-slate-400 hover:text-slate-600 rounded shrink-0 cursor-pointer"
+              >
+                <Icon name={isExpanded ? 'expand_more' : 'chevron_right'} size="xs" />
+              </button>
+            ) : (
+              <span className="w-3 inline-block text-center text-slate-300 text-[10px] shrink-0">•</span>
+            )}
+            <Icon
+              name="folder"
+              size="xs"
+              className={isSelected ? 'text-primary shrink-0' : 'text-amber-500 shrink-0'}
+            />
+            <span className="truncate text-xs">{folder.name}</span>
+          </div>
+
+          {/* Hover Delete Action for Folder */}
+          <button
+            type="button"
+            onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+            className="opacity-0 group-hover/folder:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1 cursor-pointer"
+            title={`Delete folder "${folder.name}"`}
+          >
+            <Icon name="delete" size="xs" />
+          </button>
+        </div>
+
+        {/* Nested child folders if expanded */}
+        {hasKids && isExpanded && (
+          <div className="pl-3.5 space-y-0.5 border-l border-slate-200/60 ml-2.5 my-0.5">
+            {childFolders.map((child) => renderFolderItem(child))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Breadcrumbs
@@ -835,25 +900,10 @@ export default function KnowledgeBasePage() {
               setCreateArticleError(null);
               setIsCreateArticleOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-surface-container bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md font-semibold transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-label-md text-label-md font-semibold transition-all shadow-xs cursor-pointer"
           >
             <Icon name="add" size="sm" />
             <span>Create {label.singular('knowledgeBase')}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setModalDestinationFolder(selectedFolderId === 'ALL' || selectedFolderId === 'ROOT' ? '' : selectedFolderId);
-              setSelectedUploadFile(null);
-              setUploadError(null);
-              setCatalogError(null);
-              setIsImportModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-label-md text-label-md font-semibold transition-all shadow-xs cursor-pointer"
-          >
-            <Icon name="upload_file" size="sm" />
-            <span>Import</span>
           </button>
         </div>
       </div>
@@ -949,10 +999,10 @@ export default function KnowledgeBasePage() {
                   <button
                     type="button"
                     onClick={(e) => toggleFolderExpanded('ROOT', e)}
-                    className="p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                    className="p-0.5 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
                   >
                     <Icon
-                      name={expandedFolderIds.has('ROOT') || expandedFolderIds.size === 0 ? 'expand_more' : 'chevron_right'}
+                      name={expandedFolderIds.has('ROOT') ? 'expand_more' : 'chevron_right'}
                       size="xs"
                     />
                   </button>
@@ -962,100 +1012,13 @@ export default function KnowledgeBasePage() {
               </div>
 
               {/* Top-level and nested folder hierarchy */}
-              <div className="pl-3.5 space-y-0.5 mt-1 border-l border-slate-100 ml-3">
-                {folders
-                  .filter((f) => !f.parentId)
-                  .map((folder) => {
-                    const hasKids = folders.some((child) => child.parentId === folder.id);
-                    const isExpanded = expandedFolderIds.has(folder.id);
-                    const isSelected = selectedFolderId === folder.id;
-
-                    return (
-                      <div key={folder.id} className="space-y-0.5 group/folder">
-                        <div
-                          onClick={() => setSelectedFolderId(folder.id)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
-                            isSelected
-                              ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs'
-                              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                          }`}
-                          title={folder.summary || folder.name}
-                        >
-                          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
-                            {hasKids ? (
-                              <button
-                                type="button"
-                                onClick={(e) => toggleFolderExpanded(folder.id, e)}
-                                className="p-0.5 text-slate-400 hover:text-slate-600 rounded shrink-0"
-                              >
-                                <Icon name={isExpanded ? 'expand_more' : 'chevron_right'} size="xs" />
-                              </button>
-                            ) : (
-                              <span className="w-3 inline-block text-center text-slate-300 text-[10px] shrink-0">•</span>
-                            )}
-                            <Icon
-                              name="folder"
-                              size="xs"
-                              className={isSelected ? 'text-primary shrink-0' : 'text-amber-500 shrink-0'}
-                            />
-                            <span className="truncate text-xs">{folder.name}</span>
-                          </div>
-
-                          {/* Hover Delete Action for Folder */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
-                            className="opacity-0 group-hover/folder:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1"
-                            title={`Delete folder "${folder.name}"`}
-                          >
-                            <Icon name="delete" size="xs" />
-                          </button>
-                        </div>
-
-                        {/* Children if expanded */}
-                        {hasKids && (isExpanded || isSelected) && (
-                          <div className="pl-3.5 space-y-0.5 border-l border-slate-200/60 ml-2.5 my-0.5">
-                            {folders
-                              .filter((c) => c.parentId === folder.id)
-                              .map((child) => {
-                                const isChildSelected = selectedFolderId === child.id;
-                                return (
-                                  <div
-                                    key={child.id}
-                                    className="group/child"
-                                  >
-                                    <div
-                                      onClick={() => setSelectedFolderId(child.id)}
-                                      className={`w-full text-left px-2.5 py-1 rounded-lg flex items-center justify-between cursor-pointer transition-all text-xs ${
-                                        isChildSelected
-                                          ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-2xs'
-                                          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
-                                        <Icon name="folder" size="xs" className="text-amber-400 shrink-0" />
-                                        <span className="truncate">{child.name}</span>
-                                      </div>
-
-                                      {/* Child Folder Delete */}
-                                      <button
-                                        type="button"
-                                        onClick={(e) => handleDeleteFolder(child.id, child.name, e)}
-                                        className="opacity-0 group-hover/child:opacity-100 p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1"
-                                        title={`Delete folder "${child.name}"`}
-                                      >
-                                        <Icon name="delete" size="xs" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
+              {expandedFolderIds.has('ROOT') && (
+                <div className="pl-3.5 space-y-0.5 mt-1 border-l border-slate-100 ml-3">
+                  {folders
+                    .filter((f) => !f.parentId)
+                    .map((folder) => renderFolderItem(folder))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1066,15 +1029,28 @@ export default function KnowledgeBasePage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             {/* Left: Filter files + Refresh */}
             <div className="flex items-center gap-2">
-              <div className="relative">
+              <div className="relative flex items-center">
+                <Icon name="search" size="xs" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Filter files..."
-                  className="w-52 sm:w-64 text-xs rounded-xl border border-slate-200 bg-slate-50/70 pl-8 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="w-52 sm:w-64 text-xs rounded-xl border border-slate-200 bg-slate-50/70 pl-8 pr-8 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all"
                 />
-                <Icon name="search" size="xs" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setDebouncedSearch('');
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-md transition-colors cursor-pointer"
+                    title="Clear search"
+                  >
+                    <Icon name="close" size="xs" />
+                  </button>
+                )}
               </div>
 
               <button
@@ -1474,7 +1450,7 @@ export default function KnowledgeBasePage() {
                           Option A: Files & Cloud Storage
                         </h4>
                         <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                          Upload local documents or sync from cloud storage providers (PDF, Word, TXT, MD, CSV)
+                          Upload local documents or sync from cloud storage providers (PDF, Word, TXT, MD, CSV, JSON)
                         </p>
                       </div>
                     </div>
@@ -1575,7 +1551,7 @@ export default function KnowledgeBasePage() {
                             Drag & drop files here
                           </span>
                           <span className="text-[11px] text-slate-400">
-                            Supports .md, .pdf, .docx, .json up to 25.0 MB
+                            Supports PDF, Word (.docx), TXT, MD, CSV, JSON up to 25.0 MB
                           </span>
                         </div>
                       )}
