@@ -31,7 +31,15 @@ export const businessService = {
 
   async save(
     input: BusinessSettingsInput
-  ): Promise<WithNotice<{ settings: BusinessSettings; product_type: ProductType; outcome: string }>> {
+  ): Promise<
+    WithNotice<{
+      settings: BusinessSettings;
+      product_type: ProductType;
+      outcome: string;
+      /** Only when starter categories were asked for. */
+      starter_categories?: { created: string[]; skipped: string[] };
+    }>
+  > {
     const res = await client.put<any>('/settings/business', input);
     const data = need(res.data, 'business settings');
     return { data, notice: data.notice };

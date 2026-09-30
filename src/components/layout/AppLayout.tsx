@@ -38,6 +38,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     if (path.startsWith('/conversations')) return 'conversations';
     if (path.startsWith('/categories')) return 'categories';
     if (path.startsWith('/attributes')) return 'attributes';
+    if (path.startsWith('/category-tree')) return 'category-tree';
     if (path.startsWith('/products/new') || path.startsWith('/products/add')) return 'add-product';
     if (path.startsWith('/products/edit') || path.includes('/edit')) return 'edit-product';
     if (path.startsWith('/products/details') || (path.startsWith('/products/') && path !== '/products')) return 'product-details';
@@ -58,6 +59,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     activeModule === 'products' ||
     activeModule === 'categories' ||
     activeModule === 'attributes' ||
+    activeModule === 'category-tree' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product'
@@ -70,6 +72,8 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     const isProductRelated =
       activeModule === 'products' ||
       activeModule === 'categories' ||
+      activeModule === 'attributes' ||
+      activeModule === 'category-tree' ||
       activeModule === 'add-product' ||
       activeModule === 'product-details' ||
       activeModule === 'edit-product';
@@ -165,6 +169,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     activeModule === 'products' ||
     activeModule === 'categories' ||
     activeModule === 'attributes' ||
+    activeModule === 'category-tree' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product';
@@ -386,6 +391,26 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                         }`}
                       />
                       <span>Attributes</span>
+                    </button>
+
+                    {/* 3.4 The new categories (flat list, or a tree once switched
+                        on). "(new)" tells it apart from 3.2 until the Phase 5
+                        cut-over, when only one labelled entry remains. */}
+                    <button
+                      type="button"
+                      onClick={() => handleNav('category-tree', '/category-tree')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                        activeModule === 'category-tree'
+                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
+                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          activeModule === 'category-tree' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
+                        }`}
+                      />
+                      <span>{label.plural('categories')} (new)</span>
                     </button>
                   </div>
                 )}

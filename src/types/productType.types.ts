@@ -60,6 +60,8 @@ export interface BusinessTemplateSummary {
 
 export interface BusinessSettings {
   business_category: string | null;
+  /** Flat by default; "tree" switches the category tree on (Phase 2). */
+  category_mode: 'flat' | 'tree';
   active_product_type_id: string | null;
   timezone: string;
   default_currency: string;
@@ -72,6 +74,7 @@ export interface BusinessSettingsInput {
   default_currency?: string;
   languages?: Language[];
   create_starter_categories?: boolean;
+  category_mode?: 'flat' | 'tree';
 }
 
 export interface OptionInput {

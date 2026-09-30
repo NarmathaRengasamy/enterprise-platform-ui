@@ -17,6 +17,7 @@ import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import SettingsPage from './pages/SettingsPage';
 import AttributesPage from './pages/AttributesPage';
+import CategoryTreePage from './pages/CategoryTreePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import { Product, ScheduleEvent } from './types';
@@ -343,6 +344,10 @@ function AppRoutes(): JSX.Element {
 
         {/* 10. Attributes — the product fields from the business category */}
         <Route path="/attributes" element={<AttributesPage />} />
+
+        {/* 11. Category Tree — the new categories (flat list or tree), beside
+            the current Categories screen until the Phase 5 cut-over */}
+        <Route path="/category-tree" element={<CategoryTreePage />} />
 
         {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

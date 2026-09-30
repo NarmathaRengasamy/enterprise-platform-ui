@@ -10,6 +10,7 @@ import {
   LANGUAGE_LABELS,
   ProductType,
 } from '../../types/productType.types';
+import type { CategoryMode } from '../../types/catalogCategory.types';
 
 /**
  * Settings → Business & Products (Phase 1).
@@ -18,6 +19,10 @@ import {
  * choosing one pre-loads the product type; the admin then only adds extra
  * attributes (design §1). Saved on its own — the page's Save button belongs to
  * the workspace settings.
+ *
+ * Phase 2 adds "Use category tree": categories are a flat list by default; the
+ * tree can be switched on at any time, but the server refuses switching it off
+ * while any category still has a parent.
  */
 
 const TIME_ZONES = ['Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Europe/London', 'America/New_York', 'UTC'];
@@ -46,6 +51,9 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
   const [currency, setCurrency] = useState('INR');
   const [languages, setLanguages] = useState<Language[]>(['en']);
   const [starterCategories, setStarterCategories] = useState(true);
+  const [categoryMode, setCategoryMode] = useState<CategoryMode>('flat');
+  /* The server's refusal to switch the tree off, shown beside the toggle. */
+  const [modeError, setModeError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -61,6 +69,7 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
       setTimezone(s.timezone);
       setCurrency(s.default_currency);
       setLanguages(s.languages);
+      setCategoryMode(s.category_mode ?? 'flat');
     } catch (e: any) {
       setLoadError(e.message || 'Could not load the business settings');
     }
@@ -70,12 +79,15 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
     void load();
   }, []);
 
+  const savedMode: CategoryMode = saved?.category_mode ?? 'flat';
+
   const dirty =
     !!saved &&
     (category !== (saved.business_category ?? '') ||
       timezone !== saved.timezone ||
       currency !== saved.default_currency ||
-      languages.join() !== saved.languages.join());
+      languages.join() !== saved.languages.join() ||
+      categoryMode !== savedMode);
 
   const changingCategory = !!saved?.business_category && category !== saved.business_category;
 
@@ -104,25 +116,40 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
     setConfirming(false);
     setSaving(true);
     setResult(null);
+    setModeError(null);
+    const modeChanged = categoryMode !== savedMode;
     try {
       const { data, notice } = await businessService.save({
         business_category: category,
         timezone,
         default_currency: currency,
         languages,
-        create_starter_categories: starterCategories,
+        /* Only with the first choice, where the checkbox is shown: sent on every
+           save it would bring back starter categories the admin deleted. */
+        ...(!saved?.business_category ? { create_starter_categories: starterCategories } : {}),
+        ...(modeChanged ? { category_mode: categoryMode } : {}),
       });
       setSaved(data.settings);
       setProductType(data.product_type);
+      setCategoryMode(data.settings.category_mode ?? 'flat');
+      const created = data.starter_categories?.created.length ?? 0;
       const text =
-        notice ??
-        (data.outcome === 'created' || data.outcome === 'replaced'
-          ? `Your product fields are ready — ${data.product_type.fields.length} attributes loaded.`
-          : 'Business settings saved.');
+        (notice ??
+          (data.outcome === 'created' || data.outcome === 'replaced'
+            ? `Your product fields are ready — ${data.product_type.fields.length} attributes loaded.`
+            : 'Business settings saved.')) +
+        (created ? ` ${created} starter categor${created === 1 ? 'y' : 'ies'} created.` : '');
       setResult(text);
       onMessage(text, 'success');
     } catch (e: any) {
-      onMessage(e.message || 'Could not save the business settings', 'error');
+      const message = e.message || 'Could not save the business settings';
+      /* Tree → flat refused (sub-categories exist): nothing was saved, so the
+         toggle goes back to what the server has and the reason stays visible. */
+      if (modeChanged && e.status === 409) {
+        setCategoryMode(savedMode);
+        setModeError(message);
+      }
+      onMessage(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -262,9 +289,60 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
               disabled={!isAdmin}
               onChange={(e) => setStarterCategories(e.target.checked)}
             />
-            Create the starter categories for this business (set up with Categories)
+            Create the starter categories for this business (shown on the Category Tree)
           </label>
         )}
+      </section>
+
+      <section className="bg-white rounded-xl border border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-on-surface">Categories</h2>
+            <p className="text-sm text-outline mt-0.5">
+              A flat list by default. Switch the tree on to nest sub-categories, up to 5 levels deep.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => navigate('/category-tree')}>
+            Open Category Tree
+          </Button>
+        </div>
+        <div className="px-6 py-5">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={categoryMode === 'tree'}
+              aria-label="Use category tree"
+              disabled={!isAdmin}
+              onClick={() => {
+                setCategoryMode((m) => (m === 'tree' ? 'flat' : 'tree'));
+                setModeError(null);
+              }}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                categoryMode === 'tree' ? 'bg-primary' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  categoryMode === 'tree' ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            <span className="text-sm font-medium text-on-surface">Use category tree</span>
+          </div>
+          <p className="text-xs text-outline mt-2">
+            {categoryMode === 'tree'
+              ? 'Categories can have sub-categories, which inherit their visible fields.'
+              : 'Every category is at the top level.'}
+            {categoryMode !== savedMode && ' Save to apply.'}
+          </p>
+          {modeError && (
+            <div className="mt-3 flex items-start gap-3 px-4 py-3 rounded-lg bg-red-50 border border-red-200" role="alert">
+              <Icon name="block" size="sm" color="error" className="mt-0.5 shrink-0" />
+              <p className="flex-1 text-sm text-error">{modeError}</p>
+            </div>
+          )}
+        </div>
       </section>
 
       {confirming && (

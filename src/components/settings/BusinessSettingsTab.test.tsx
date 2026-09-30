@@ -108,6 +108,82 @@ describe('BusinessSettingsTab', () => {
     await waitFor(() => expect(onMessage).toHaveBeenCalledWith('Unknown business category', 'error'));
   });
 
+  it('has the category tree off by default and switches it on with the save (Phase 2)', async () => {
+    business.get.mockResolvedValue({ ...EMPTY, business_category: 'ecommerce', category_mode: 'flat' });
+    business.save.mockResolvedValue({
+      data: {
+        settings: { ...EMPTY, business_category: 'ecommerce', category_mode: 'tree' },
+        product_type: { fields: [] },
+        outcome: 'unchanged',
+      },
+    });
+    renderTab();
+    const toggle = await screen.findByRole('switch', { name: 'Use category tree' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/Save to apply/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save business settings' }));
+
+    await waitFor(() =>
+      expect(business.save).toHaveBeenCalledWith(expect.objectContaining({ business_category: 'ecommerce', category_mode: 'tree' }))
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Business settings saved.');
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('does not send the mode when it did not change', async () => {
+    business.get.mockResolvedValue({ ...EMPTY, business_category: 'ecommerce', category_mode: 'tree', timezone: 'UTC' });
+    business.save.mockResolvedValue({
+      data: { settings: { ...EMPTY, business_category: 'ecommerce', category_mode: 'tree' }, product_type: { fields: [] }, outcome: 'unchanged' },
+    });
+    renderTab();
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Time zone' }), 'Asia/Kolkata');
+    await userEvent.click(screen.getByRole('button', { name: 'Save business settings' }));
+    await waitFor(() => expect(business.save).toHaveBeenCalled());
+    expect(business.save.mock.calls[0][0]).not.toHaveProperty('category_mode');
+    /* Starter categories belong to the first choice only — resending them would
+       bring back any the admin has deleted. */
+    expect(business.save.mock.calls[0][0]).not.toHaveProperty('create_starter_categories');
+  });
+
+  it('shows the server refusal and puts the toggle back when switching the tree off is blocked', async () => {
+    business.get.mockResolvedValue({ ...EMPTY, business_category: 'ecommerce', category_mode: 'tree' });
+    const refusal = 'One category still has a parent — move them to the top level before switching the category tree off';
+    business.save.mockRejectedValue(Object.assign(new Error(refusal), { status: 409 }));
+    const onMessage = vi.fn();
+    renderTab(true, onMessage);
+    const toggle = await screen.findByRole('switch', { name: 'Use category tree' });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole('button', { name: 'Save business settings' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(refusal);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(business.save).toHaveBeenCalledWith(expect.objectContaining({ category_mode: 'flat' }));
+    expect(onMessage).toHaveBeenCalledWith(refusal, 'error');
+  });
+
+  it('reports the starter categories created with the first save', async () => {
+    business.save.mockResolvedValue({
+      data: {
+        settings: { ...EMPTY, business_category: 'ecommerce', category_mode: 'flat' },
+        product_type: { fields: [{}, {}, {}] },
+        outcome: 'created',
+        starter_categories: { created: ['men', 'women', 'kids'], skipped: [] },
+      },
+    });
+    renderTab();
+    await userEvent.click(await screen.findByRole('radio', { name: /E-commerce/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save business settings' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('3 attributes loaded. 3 starter categories created.');
+  });
+
+  it('keeps the toggle read-only for a non-Admin', async () => {
+    renderTab(false);
+    expect(await screen.findByRole('switch', { name: 'Use category tree' })).toBeDisabled();
+  });
+
   it('shows a retry when loading fails', async () => {
     business.get.mockRejectedValue(new Error('Server unavailable'));
     renderTab();
