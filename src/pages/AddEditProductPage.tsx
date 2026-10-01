@@ -72,8 +72,9 @@ export default function AddEditProductPage({
   const [sku, setSku] = useState(selectedProduct?.sku || '');
   const [category, setCategory] = useState(selectedProduct?.categoryId || selectedProduct?.categoryCode || selectedProduct?.category || '');
   const [description, setDescription] = useState(selectedProduct?.description || '');
-  const [basePrice, setBasePrice] = useState<string | number>(selectedProduct?.price ?? '');
-  const [flatStock, setFlatStock] = useState<number | string>(selectedProduct?.stock ?? '');
+  const initialHasVariants = Boolean(selectedProductProp?.variants && selectedProductProp.variants.length > 0);
+  const [basePrice, setBasePrice] = useState<string | number>(initialHasVariants ? '' : (selectedProduct?.price ?? ''));
+  const [flatStock, setFlatStock] = useState<number | string>(initialHasVariants ? '' : (selectedProduct?.stock ?? ''));
   const [flatStockStatus, setFlatStockStatus] = useState(selectedProduct?.stockStatus || 'In Stock');
   const [reorderPoint, setReorderPoint] = useState<number | string>(selectedProduct?.reorderPoint ?? 10);
   const [margin, setMargin] = useState(selectedProduct?.margin || '50.0%');
@@ -114,7 +115,7 @@ export default function AddEditProductPage({
 
   // Variant mode: when off, the offering carries one flat price instead of a matrix
   const [hasVariants, setHasVariants] = useState(
-    Boolean(selectedProduct?.variants && selectedProduct.variants.length > 0)
+    initialHasVariants || Boolean(selectedProduct?.variants && selectedProduct.variants.length > 0)
   );
 
   // Single Item Modal State (Edit Single Item)
@@ -207,8 +208,9 @@ export default function AddEditProductPage({
           setSku(prod.sku || '');
           setCategory(prod.categoryId || prod.categoryCode || prod.category || '');
           setDescription(prod.description || '');
-          setBasePrice(prod.price ?? '');
-          setFlatStock(prod.stock !== undefined && prod.stock !== null ? prod.stock : '');
+          const hasProductVariants = Boolean(prod.variants && prod.variants.length > 0);
+          setBasePrice(hasProductVariants ? '' : (prod.price ?? ''));
+          setFlatStock(hasProductVariants ? '' : (prod.stock !== undefined && prod.stock !== null ? prod.stock : ''));
           setFlatStockStatus(prod.stockStatus || 'In Stock');
           setReorderPoint(prod.reorderPoint ?? 10);
           setMargin(prod.margin || '50.0%');
@@ -257,7 +259,12 @@ export default function AddEditProductPage({
       return;
     }
     setHasVariants(checked);
-    if (checked) setIsMatrixModalOpen(true);
+    if (checked) {
+      setIsMatrixModalOpen(true);
+    } else {
+      setBasePrice('');
+      setFlatStock('');
+    }
   };
 
   const handleConfirmDiscardVariants = () => {
@@ -265,6 +272,8 @@ export default function AddEditProductPage({
     setVariants([]);
     setSelectedVariantIndices([]);
     setHasVariants(false);
+    setBasePrice('');
+    setFlatStock('');
     setSaveError('');
     setIsDiscardVariantsOpen(false);
   };
