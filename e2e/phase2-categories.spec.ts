@@ -83,10 +83,12 @@ test('flat by default: the starter categories are all top level, and Admin adds 
   await page.goto('/category-tree');
   await expect(page.getByRole('heading', { level: 1, name: 'Categories' })).toBeVisible();
   await expect(page.getByTestId('category-summary')).toContainText('Flat list');
-  /* KPI cards like the Categories page; the product-based ones wait for Phase 3. */
+  /* KPI cards like the Categories page, counted from the new products (none yet in this run). */
   const kpis = page.getByTestId('category-kpis');
   await expect(kpis).toContainText('Total Categories');
-  await expect(kpis.getByText('available once products use the new categories')).toHaveCount(3);
+  await expect(kpis).toContainText('Assigned SKUs');
+  await expect(kpis).toContainText('0 avg/cat');
+  await expect(kpis).toContainText('None'); // no top category yet
 
   await page.getByRole('button', { name: 'Add Category' }).click();
   await addCategory(page, 'shirts', 'Shirts');

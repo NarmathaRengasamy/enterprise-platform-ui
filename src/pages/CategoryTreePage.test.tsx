@@ -37,6 +37,7 @@ const api = vi.hoisted(() => ({
   remove: vi.fn(),
   restore: vi.fn(),
   exportCsv: vi.fn(),
+  stats: vi.fn(),
 }));
 vi.mock('../services/catalogCategory.service', () => ({ catalogCategoryService: api }));
 
@@ -65,7 +66,7 @@ const node = (code: string, over: Partial<CategoryNode> = {}): CategoryNode => (
 const FLAT: CategoryList = {
   mode: 'flat',
   categories: [
-    node('shirts', { created_at: '2026-09-01' }),
+    node('shirts', { created_at: '2026-09-01', product_count: 3 }),
     node('jeans', { sort_order: 2, created_at: '2026-09-03', status: 'hidden', description: { en: 'Denim' } }),
     node('anoraks', { sort_order: 3, created_at: '2026-09-02' }),
   ],
@@ -142,6 +143,13 @@ beforeEach(() => {
   types.get.mockResolvedValue(TYPE);
   api.list.mockResolvedValue(FLAT);
   api.exportCsv.mockResolvedValue(undefined);
+  api.stats.mockResolvedValue({
+    total_categories: 3,
+    assigned_skus: 7,
+    categorised_products: 4,
+    top_distribution: { id: 'id-shirts', code: 'shirts', name: { en: 'Shirts' }, count: 3, percentage: 75 },
+    average_per_category: 1.3,
+  });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
@@ -165,21 +173,31 @@ describe('CategoryTreePage — layout like the Categories page (2b.4a)', () => {
     expect(within(dialog).getByRole('button', { name: 'Save Car Type' })).toBeInTheDocument();
   });
 
-  it('shows the four KPI cards — Total now, the product-based three as "—"', async () => {
+  it('shows the four KPI cards, counted from the new products (Phase 3)', async () => {
     renderPage();
     await screen.findByTestId('cat-shirts');
     const kpis = screen.getByTestId('category-kpis');
     expect(kpis).toHaveTextContent('Total Categories');
     expect(kpis).toHaveTextContent('2 active · 1 hidden');
-    for (const title of ['Assigned SKUs', 'Top Distribution', 'Inventory Density']) {
-      expect(within(kpis).getByText(title)).toBeInTheDocument();
-    }
     expect(within(kpis).getByText('3')).toBeInTheDocument();
-    expect(within(kpis).getAllByText('—')).toHaveLength(3);
-    expect(within(kpis).getAllByText('available once products use the new categories')).toHaveLength(3);
+    expect(within(kpis).getByText('7')).toBeInTheDocument(); // assigned SKUs
+    expect(kpis).toHaveTextContent('4 All Products in categories');
+    expect(within(kpis).getByText('Shirts')).toBeInTheDocument(); // top distribution
+    expect(kpis).toHaveTextContent('75% of All Products in categories');
+    expect(within(kpis).getByText('1.3 avg/cat')).toBeInTheDocument();
+    expect(within(kpis).queryByText('—')).not.toBeInTheDocument();
   });
 
-  it('shows the table columns, with products as "—" until Phase 3', async () => {
+  it('still shows the list when the figures cannot be loaded', async () => {
+    api.stats.mockRejectedValue(new Error('down'));
+    renderPage();
+    await screen.findByTestId('cat-shirts');
+    const kpis = screen.getByTestId('category-kpis');
+    expect(within(kpis).getAllByText('—')).toHaveLength(3);
+    expect(kpis).toHaveTextContent('Figures unavailable');
+  });
+
+  it('shows the table columns, with live product counts', async () => {
     renderPage();
     const row = await screen.findByTestId('cat-jeans');
     expect(screen.getByRole('columnheader', { name: /Name$/ })).toBeInTheDocument(); // with the select-all box
@@ -189,7 +207,8 @@ describe('CategoryTreePage — layout like the Categories page (2b.4a)', () => {
     expect(row).toHaveTextContent('Denim');
     expect(row).toHaveTextContent('Hidden');
     expect(within(screen.getByTestId('cat-shirts')).getByText('Active')).toBeInTheDocument();
-    expect(within(row).getByTitle('available once products use the new categories')).toHaveTextContent('—');
+    expect(screen.getByTestId('product-count-jeans')).toHaveTextContent('0');
+    expect(screen.getByTestId('product-count-shirts')).toHaveTextContent('3');
   });
 
   it('shows loading rows first, then the categories', async () => {

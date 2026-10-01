@@ -4,6 +4,7 @@ import {
   CategoryInput,
   CategoryList,
   CategoryPatch,
+  CategoryStats,
 } from '../types/catalogCategory.types';
 
 /**
@@ -23,6 +24,11 @@ export const catalogCategoryService = {
   async list(includeDeleted = false): Promise<CategoryList> {
     const query = includeDeleted ? '?include_deleted=true' : '';
     return need((await client.get<CategoryList>(`/catalog-categories${query}`)).data, 'categories');
+  },
+
+  /** Figures for the KPI cards, from products_v2. */
+  async stats(): Promise<CategoryStats> {
+    return need((await client.get<CategoryStats>('/catalog-categories/stats')).data, 'category figures');
   },
 
   async get(id: string): Promise<CategoryDetail> {

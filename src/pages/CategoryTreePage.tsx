@@ -26,6 +26,7 @@ import {
   CategoryList,
   CategoryNode,
   CategoryPatch,
+  CategoryStats,
   CategoryStatus,
   MAX_CATEGORY_DEPTH,
 } from '../types/catalogCategory.types';
@@ -39,8 +40,8 @@ import {
  * Business & Products) categories nest up to five levels as indented rows, and
  * a sub-category inherits its parent's visible fields unless it sets its own
  * (design §3.2, R11–R15b). Visible fields sit under a collapsed "Advanced"
- * section (R12); categories set no fulfilment or tracking (R13). Products use
- * these categories from Phase 3, so product counts show "—" until then. The
+ * section (R12); categories set no fulfilment or tracking (R13). Product
+ * counts and the KPI cards come from the new products (products_v2). The
  * server decides every rule; its 409 / 422 messages are shown as they come.
  */
 
@@ -50,7 +51,6 @@ const inputClass =
 const labelClass = 'font-label-md text-label-md text-on-surface font-medium';
 const menuItemClass =
   'w-full text-left flex items-center gap-2 px-3 py-1.5 text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors cursor-pointer';
-const NO_PRODUCTS_YET = 'available once products use the new categories';
 
 type StatusFilter = 'all' | 'active' | 'hidden';
 type SortBy = 'order' | 'name' | 'newest';
@@ -524,6 +524,8 @@ export default function CategoryTreePage() {
 
   const [list, setList] = useState<CategoryList | null>(null);
   const [type, setType] = useState<ProductType | null>(null);
+  /* The product-based KPI cards (Phase 3: counted from the new products). */
+  const [stats, setStats] = useState<CategoryStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -579,9 +581,15 @@ export default function CategoryTreePage() {
   const load = useCallback(async (withDeleted: boolean) => {
     setLoadError(null);
     try {
-      const [l, t] = await Promise.all([catalogCategoryService.list(withDeleted), productTypeService.get()]);
+      const [l, t, st] = await Promise.all([
+        catalogCategoryService.list(withDeleted),
+        productTypeService.get(),
+        /* The figures are a nicety: the list still shows if they fail. */
+        catalogCategoryService.stats().catch(() => null),
+      ]);
       setList(l);
       setType(t);
+      setStats(st);
     } catch (e: any) {
       setLoadError(e.message || `Could not load the ${label.lower('categories')}`);
     } finally {
@@ -934,9 +942,14 @@ export default function CategoryTreePage() {
           <span className="truncate block">{node.description?.en || '—'}</span>
         </TableCell>
         <TableCell>
-          <span className="text-on-surface-variant" title={NO_PRODUCTS_YET}>
-            —
-          </span>
+          <div
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-primary-fixed/30 text-on-primary-fixed font-semibold"
+            title={`${label.plural('allProducts')} filed in this ${label.lowerSingular('categories')}`}
+            data-testid={`product-count-${node.code}`}
+          >
+            <Icon name="inventory" size="xs" />
+            <span>{node.product_count ?? 0}</span>
+          </div>
         </TableCell>
         <TableCell>
           {deleted ? (
@@ -1070,7 +1083,7 @@ export default function CategoryTreePage() {
         </div>
       </div>
 
-      {/* KPI cards — the product-based three wait for Phase 3 */}
+      {/* KPI cards, like the Categories page — counted from the new products */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg" data-testid="category-kpis">
         <MetricsCard
           title={`Total ${plural}`}
@@ -1079,9 +1092,31 @@ export default function CategoryTreePage() {
           icon="category"
           variant="primary"
         />
-        <MetricsCard title="Assigned SKUs" value="—" subtitle={NO_PRODUCTS_YET} icon="inventory_2" variant="secondary" />
-        <MetricsCard title="Top Distribution" value="—" subtitle={NO_PRODUCTS_YET} icon="devices" variant="neutral" />
-        <MetricsCard title="Inventory Density" value="—" subtitle={NO_PRODUCTS_YET} icon="analytics" variant="tertiary" />
+        <MetricsCard
+          title="Assigned SKUs"
+          value={stats?.assigned_skus ?? '—'}
+          subtitle={stats ? `${stats.categorised_products} ${label.lower('allProducts')} in ${label.lower('categories')}` : 'Figures unavailable'}
+          icon="inventory_2"
+          variant="secondary"
+        />
+        <MetricsCard
+          title="Top Distribution"
+          value={stats?.top_distribution ? stats.top_distribution.name.en : stats ? 'None' : '—'}
+          subtitle={
+            stats?.top_distribution
+              ? `${stats.top_distribution.percentage}% of ${label.lower('allProducts')} in ${label.lower('categories')}`
+              : `No ${label.lower('allProducts')} in ${label.lower('categories')} yet`
+          }
+          icon="devices"
+          variant="neutral"
+        />
+        <MetricsCard
+          title="Inventory Density"
+          value={stats ? `${stats.average_per_category} avg/cat` : '—'}
+          subtitle={`${label.plural('allProducts')} per ${label.lowerSingular('categories')}`}
+          icon="analytics"
+          variant="tertiary"
+        />
       </div>
 
       {loadError && (

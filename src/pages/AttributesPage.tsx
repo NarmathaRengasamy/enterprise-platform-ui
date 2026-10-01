@@ -11,6 +11,9 @@ import {
   FieldType,
   OptionInput,
   ProductType,
+  UNIT_FAMILY_LABELS,
+  UNITS_BY_FAMILY,
+  UnitFamily,
 } from '../types/productType.types';
 
 /**
@@ -38,6 +41,8 @@ interface EditorState {
   hi: string;
   type: FieldType;
   unit: string;
+  /** Number fields: '' = none; set = usable as a measured size for variants (R45). */
+  unit_family: UnitFamily | '';
   min: string;
   max: string;
   /** Existing options (edit): shown with a retire toggle, never removable when locked. */
@@ -57,6 +62,7 @@ const blankEditor = (): EditorState => ({
   hi: '',
   type: 'text',
   unit: '',
+  unit_family: '',
   min: '',
   max: '',
   existing: [],
@@ -75,6 +81,7 @@ const editorFor = (f: FieldDefinition): EditorState => ({
   hi: f.label.hi ?? '',
   type: f.type,
   unit: f.unit ?? '',
+  unit_family: f.unit_family ?? '',
   min: f.min !== undefined ? String(f.min) : '',
   max: f.max !== undefined ? String(f.max) : '',
   existing: f.options.map((o) => ({ value: o.value, label: o.label.en, deprecated: o.deprecated })),
@@ -100,7 +107,31 @@ const FieldEditor: React.FC<{
      so if it is.) */
   const locked = state.mode === 'edit' && state.field?.source === 'template';
   const isEnum = state.type === 'enum';
+
+  /* New options are added one at a time (input + Add / Enter) and kept as lines in
+     `newOptions`, so saving works as before — all of them in one Save. */
+  const [draft, setDraft] = useState('');
+  const [optionNote, setOptionNote] = useState<string | null>(null);
+  const newList = state.newOptions.split('\n').map((x) => x.trim()).filter(Boolean);
+  const addDraft = () => {
+    const v = draft.trim();
+    if (!v) return;
+    const taken = [...state.existing.map((o) => o.label), ...newList].some((x) => x.toLowerCase() === v.toLowerCase());
+    if (taken) {
+      setOptionNote(`${v} is already in the list`);
+      return;
+    }
+    set({ newOptions: [...newList, v].join('\n') });
+    setDraft('');
+    setOptionNote(null);
+  };
+  const removeNew = (v: string) => set({ newOptions: newList.filter((x) => x !== v).join('\n') });
   const isNumber = state.type === 'number';
+  /* A number with a unit family is a measured size: it can form variants, even on
+     a template field (the server refuses a change once products use it — 409). */
+  const measured = isNumber && state.unit_family !== '';
+  const familyUnits = state.unit_family ? UNITS_BY_FAMILY[state.unit_family] : [];
+  const canVary = (isEnum && !locked) || measured;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true" aria-label={state.mode === 'add' ? 'Add attribute' : 'Edit attribute'}>
@@ -134,7 +165,7 @@ const FieldEditor: React.FC<{
               onChange={(e) => {
                 const type = e.target.value as FieldType;
                 /* Any choice list can be used for variants by default (R43). */
-                set({ type, variant_forming: type === 'enum' });
+                set({ type, variant_forming: type === 'enum', ...(type !== 'number' ? { unit_family: '' as const } : {}) });
               }}
             >
               {FIELD_TYPES.map((t) => (
@@ -148,8 +179,46 @@ const FieldEditor: React.FC<{
           {isNumber && (
             <>
               <label>
+                <span className="block font-medium mb-1">Unit family</span>
+                <select
+                  aria-label="Unit family"
+                  className={inputClass}
+                  value={state.unit_family}
+                  onChange={(e) => {
+                    const family = e.target.value as UnitFamily | '';
+                    if (!family) {
+                      /* Without a family a number cannot form variants. */
+                      set({ unit_family: '', variant_forming: false });
+                      return;
+                    }
+                    const units = UNITS_BY_FAMILY[family];
+                    /* Keep the unit if it belongs; otherwise use the family's base unit (unless the unit is fixed). */
+                    const unit = units.includes(state.unit.trim().toLowerCase()) ? state.unit.trim().toLowerCase() : locked ? state.unit : units[0];
+                    set({ unit_family: family, unit });
+                  }}
+                >
+                  <option value="">None</option>
+                  {(Object.keys(UNITS_BY_FAMILY) as UnitFamily[]).map((fam) => (
+                    <option key={fam} value={fam}>
+                      {UNIT_FAMILY_LABELS[fam]} ({UNITS_BY_FAMILY[fam].join(', ')})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 <span className="block font-medium mb-1">Unit</span>
-                <input aria-label="Unit" className={inputClass} disabled={locked} placeholder="kg, GB, inch" value={state.unit} maxLength={20} onChange={(e) => set({ unit: e.target.value })} />
+                {measured ? (
+                  <select aria-label="Unit" className={inputClass} disabled={locked} value={state.unit} onChange={(e) => set({ unit: e.target.value })}>
+                    {!familyUnits.includes(state.unit) && <option value={state.unit}>{state.unit || '—'}</option>}
+                    {familyUnits.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input aria-label="Unit" className={inputClass} disabled={locked} placeholder="kg, GB, inch" value={state.unit} maxLength={20} onChange={(e) => set({ unit: e.target.value })} />
+                )}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <label>
@@ -164,7 +233,13 @@ const FieldEditor: React.FC<{
             </>
           )}
 
-          <label className={isNumber ? 'sm:col-span-3' : 'sm:col-span-2'}>
+          {measured && (
+            <p className="sm:col-span-3 text-xs text-outline -mt-2">
+              A measured size: products can sell it in several sizes (e.g. 500 ml, 1 l), each with its own price and stock, and show the price per unit.
+            </p>
+          )}
+
+          <label className={isNumber ? 'sm:col-span-2' : 'sm:col-span-2'}>
             <span className="block font-medium mb-1">Group (form section)</span>
             <input aria-label="Group" className={inputClass} placeholder="e.g. specs" value={state.group} maxLength={60} onChange={(e) => set({ group: e.target.value })} />
           </label>
@@ -192,13 +267,46 @@ const FieldEditor: React.FC<{
                   ))}
                 </ul>
               )}
-              <textarea
-                aria-label="New options"
-                className={`${inputClass} h-20`}
-                placeholder="Add options — one per line"
-                value={state.newOptions}
-                onChange={(e) => set({ newOptions: e.target.value })}
-              />
+              {newList.length > 0 && (
+                <ul className="mb-2 flex flex-wrap gap-2" aria-label="New options">
+                  {newList.map((v) => (
+                    <li key={v} className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-full border border-primary/40 bg-primary/5 text-xs text-primary">
+                      {v}
+                      <span className="text-[10px] uppercase font-semibold opacity-70">new</span>
+                      <button type="button" aria-label={`Remove ${v}`} onClick={() => removeNew(v)} className="px-1 leading-none">
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2">
+                <input
+                  aria-label="New option"
+                  className={inputClass}
+                  placeholder="Type an option, then Add (or press Enter)"
+                  value={draft}
+                  maxLength={120}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    setOptionNote(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addDraft();
+                    }
+                  }}
+                />
+                <Button variant="outline" onClick={addDraft} disabled={!draft.trim()}>
+                  Add
+                </Button>
+              </div>
+              {optionNote && (
+                <p className="text-xs text-error mt-1" role="alert">
+                  {optionNote}
+                </p>
+              )}
               <p className="text-xs text-outline mt-1">Existing options can be retired (click) but not removed or renamed.</p>
             </div>
           )}
@@ -206,9 +314,17 @@ const FieldEditor: React.FC<{
           <div className="sm:col-span-3 flex flex-wrap gap-5">
             <label
               className="flex items-center gap-2"
-              title={!isEnum ? 'Only choice lists can be used for variants' : 'Products can build their variants from this list (chosen on each product)'}
+              title={
+                measured
+                  ? 'Products can be sold in several sizes of this (chosen on each product)'
+                  : isNumber
+                    ? 'Set a unit family first — then this number can be used for variants'
+                    : !isEnum
+                      ? 'Only choice lists, or numbers with a unit family, can be used for variants'
+                      : 'Products can build their variants from this list (chosen on each product)'
+              }
             >
-              <input type="checkbox" aria-label="Can be used for variants" disabled={!isEnum || locked} checked={state.variant_forming} onChange={(e) => set({ variant_forming: e.target.checked })} />
+              <input type="checkbox" aria-label="Can be used for variants" disabled={!canVary} checked={state.variant_forming} onChange={(e) => set({ variant_forming: e.target.checked })} />
               Can be used for variants
             </label>
             <label className="flex items-center gap-2">
@@ -290,6 +406,7 @@ export default function AttributesPage() {
           label,
           type: editor.type,
           ...(isNumber && editor.unit.trim() ? { unit: editor.unit.trim() } : {}),
+          ...(isNumber && editor.unit_family ? { unit_family: editor.unit_family } : {}),
           ...(isNumber && num(editor.min) !== undefined ? { min: num(editor.min) } : {}),
           ...(isNumber && num(editor.max) !== undefined ? { max: num(editor.max) } : {}),
           ...(editor.type === 'enum' ? { options: added } : {}),
@@ -317,6 +434,9 @@ export default function AttributesPage() {
             patch.max = num(editor.max) ?? null;
           }
         }
+        /* The unit family (and, with it, variants) may be set on a template number too (R45). */
+        if (isNumber && (editor.unit_family || null) !== (f.unit_family ?? null)) patch.unit_family = editor.unit_family || null;
+        if (isNumber && f.source === 'template' && editor.variant_forming !== f.variant_forming) patch.variant_forming = editor.variant_forming;
         if (editor.type === 'enum') {
           patch.options = [
             ...editor.existing.map((o) => ({ value: o.value, label: { en: o.label }, deprecated: o.deprecated })),
@@ -466,6 +586,7 @@ export default function AttributesPage() {
                   <td className="px-4 py-2 whitespace-nowrap">
                     {FIELD_TYPE_LABELS[f.type]}
                     {f.unit ? ` (${f.unit})` : ''}
+                    {f.unit_family && <span className="block text-[11px] text-outline">Measured · {UNIT_FAMILY_LABELS[f.unit_family]}</span>}
                   </td>
                   <td className="px-4 py-2 text-xs text-outline max-w-[16rem] truncate" title={f.options.map((o) => o.label.en).join(', ')}>
                     {f.type === 'enum' ? (f.options.length ? f.options.map((o) => o.label.en).join(', ') : 'No options yet') : '—'}

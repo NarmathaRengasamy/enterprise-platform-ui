@@ -1,6 +1,23 @@
 /** Business Category → Product Type (design §5, §6.2). Mirrors the API; snake_case. */
 
 export type FieldType = 'enum' | 'number' | 'boolean' | 'date' | 'text' | 'translated_text';
+/** Number fields only: makes the field usable as a measured-size variant option (R45). */
+export type UnitFamily = 'weight' | 'volume' | 'length' | 'count';
+
+/** Same units as the server (utils/units.util.ts); the first is the base unit. */
+export const UNITS_BY_FAMILY: Record<UnitFamily, string[]> = {
+  weight: ['g', 'kg'],
+  volume: ['ml', 'l'],
+  length: ['cm', 'm'],
+  count: ['piece'],
+};
+
+export const UNIT_FAMILY_LABELS: Record<UnitFamily, string> = {
+  weight: 'Weight',
+  volume: 'Volume',
+  length: 'Length',
+  count: 'Count',
+};
 export type Language = 'en' | 'ta' | 'hi';
 
 export interface Translated {
@@ -20,6 +37,7 @@ export interface FieldDefinition {
   label: Translated;
   type: FieldType;
   unit?: string;
+  unit_family?: UnitFamily;
   min?: number;
   max?: number;
   options: FieldOption[];
@@ -87,6 +105,8 @@ export interface FieldInput {
   label: Translated;
   type: FieldType;
   unit?: string;
+  /** The unit, when set, must belong to it (422 otherwise). */
+  unit_family?: UnitFamily;
   min?: number;
   max?: number;
   options?: OptionInput[];
@@ -96,8 +116,10 @@ export interface FieldInput {
   group?: string;
 }
 
-export type FieldPatch = Partial<Omit<FieldInput, 'unit' | 'min' | 'max' | 'group'>> & {
+export type FieldPatch = Partial<Omit<FieldInput, 'unit' | 'unit_family' | 'min' | 'max' | 'group'>> & {
   unit?: string | null;
+  /** null clears it; 409 while a product builds its variants from the field. */
+  unit_family?: UnitFamily | null;
   min?: number | null;
   max?: number | null;
   group?: string | null;

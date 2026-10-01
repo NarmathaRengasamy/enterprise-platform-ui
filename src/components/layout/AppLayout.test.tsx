@@ -10,6 +10,7 @@ vi.mock('../call/CallPanel', () => ({ default: () => null }));
 /* The workspace renamed "Categories" to "Car Types". */
 const LABELS: Record<string, { plural: string; singular: string }> = {
   categories: { plural: 'Car Types', singular: 'Car Type' },
+  allProducts: { plural: 'My Cars', singular: 'My Car' },
 };
 vi.mock('../../context/SiteSettingsContext', () => ({
   useSiteSettings: () => ({ settings: { siteName: 'Test', labels: {} } }),
@@ -26,6 +27,21 @@ vi.mock('../../context/SiteSettingsContext', () => ({
 }));
 
 import AppLayout from './AppLayout';
+
+describe('AppLayout — the new products entry (Phase 3)', () => {
+  it('reads "{All Products} (new)" from the label and is the active entry on /v2/products/…/edit', () => {
+    render(
+      <MemoryRouter initialEntries={['/v2/products/p1/edit']}>
+        <AppLayout>
+          <div />
+        </AppLayout>
+      </MemoryRouter>
+    );
+    const entry = screen.getByRole('button', { name: 'My Cars (new)' });
+    expect(entry.className).toMatch(/bg-primary-container/);
+    expect(screen.getByRole('button', { name: 'My Cars' }).className).not.toMatch(/bg-primary-container/); // the old list, unchanged
+  });
+});
 
 describe('AppLayout — the new categories entry (2b.4a)', () => {
   it('reads "{Categories} (new)" from the renamable label, beside the old entry', () => {

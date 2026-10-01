@@ -24,6 +24,8 @@ export interface CatalogCategory {
   is_deleted?: boolean;
   /** The fields actually in force after inheritance. */
   resolved_visible_field_keys: string[];
+  /** Live products (products_v2) filed in this category. */
+  product_count?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -59,6 +61,15 @@ export interface CategoryInput {
   icon?: string;
   color?: string;
   status?: CategoryStatus;
+}
+
+/** The KPI cards on the category screen, counted from the new products. */
+export interface CategoryStats {
+  total_categories: number;
+  assigned_skus: number;
+  categorised_products: number;
+  top_distribution: { id: string; code: string; name: Translated; count: number; percentage: number } | null;
+  average_per_category: number;
 }
 
 /** The code cannot change after creation, so it is not part of a patch. */

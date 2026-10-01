@@ -35,6 +35,8 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     .toUpperCase() || 'SJ';
 
   const getActiveModuleFromPath = (path: string): string => {
+    /* First: "/v2/products/:id/edit" would otherwise read as the old edit screen. */
+    if (path.startsWith('/v2/products')) return 'products-v2';
     if (path.startsWith('/conversations')) return 'conversations';
     if (path.startsWith('/categories')) return 'categories';
     if (path.startsWith('/attributes')) return 'attributes';
@@ -60,6 +62,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     activeModule === 'categories' ||
     activeModule === 'attributes' ||
     activeModule === 'category-tree' ||
+    activeModule === 'products-v2' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product'
@@ -74,6 +77,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
       activeModule === 'categories' ||
       activeModule === 'attributes' ||
       activeModule === 'category-tree' ||
+      activeModule === 'products-v2' ||
       activeModule === 'add-product' ||
       activeModule === 'product-details' ||
       activeModule === 'edit-product';
@@ -170,6 +174,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     activeModule === 'categories' ||
     activeModule === 'attributes' ||
     activeModule === 'category-tree' ||
+    activeModule === 'products-v2' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product';
@@ -354,6 +359,25 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                         }`}
                       />
                       <span>{label.plural('allProducts')}</span>
+                    </button>
+
+                    {/* 3.1b The new products (Phase 3): "(new)" tells them apart
+                        from 3.1 until the Phase 5 cut-over. */}
+                    <button
+                      type="button"
+                      onClick={() => handleNav('products-v2', '/v2/products')}
+                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
+                        activeModule === 'products-v2'
+                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
+                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          activeModule === 'products-v2' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
+                        }`}
+                      />
+                      <span>{label.plural('allProducts')} (new)</span>
                     </button>
 
                     {/* 3.2 Categories */}
