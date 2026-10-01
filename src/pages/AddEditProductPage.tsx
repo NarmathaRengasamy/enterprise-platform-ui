@@ -329,7 +329,21 @@ export default function AddEditProductPage({
   // Inline row editing straight from the combinations table
   const handleVariantField = (index, field, value) => {
     setSaveError('');
-    setVariants(variants.map((v, idx) => (idx === index ? { ...v, [field]: value } : v)));
+    let val = value;
+    if (field === 'stock' || field === 'capacity') {
+      if (val !== '' && val !== null && val !== undefined) {
+        const n = Number(val);
+        if (isNaN(n) || n < 0) return;
+        val = Math.max(0, Math.floor(n));
+      }
+    } else if (field === 'price') {
+      if (val !== '' && val !== null && val !== undefined) {
+        const n = Number(val);
+        if (isNaN(n) || n < 0) return;
+        val = Math.max(0, n);
+      }
+    }
+    setVariants(variants.map((v, idx) => (idx === index ? { ...v, [field]: val } : v)));
   };
 
   const handleVariantImages = (index: number, files: FileList | File[] | null) => {
@@ -423,8 +437,8 @@ export default function AddEditProductPage({
     if (!singleTitle) return;
 
     const variantIndex = editingVariantIndex !== null ? editingVariantIndex : variants.length;
-    const numPrice = singlePrice !== '' && !isNaN(Number(singlePrice)) ? Number(singlePrice) : undefined;
-    const numStock = singleStock !== '' && !isNaN(Number(singleStock)) ? Number(singleStock) : undefined;
+    const numPrice = singlePrice !== '' && !isNaN(Number(singlePrice)) && Number(singlePrice) >= 0 ? Number(singlePrice) : undefined;
+    const numStock = singleStock !== '' && !isNaN(Number(singleStock)) && Number(singleStock) >= 0 ? Math.floor(Number(singleStock)) : undefined;
     const updatedItem: any = {
       id: editingVariantIndex !== null ? variants[editingVariantIndex].id : `var-${Date.now()}`,
       images: editingVariantIndex !== null ? variants[editingVariantIndex].images ?? [] : [],
@@ -1242,7 +1256,17 @@ export default function AddEditProductPage({
                       type="number"
                       min="0"
                       value={basePrice}
-                      onChange={(e) => setBasePrice(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || (Number(val) >= 0 && !isNaN(Number(val)))) {
+                          setBasePrice(val);
+                        }
+                      }}
                       placeholder="e.g. 3499"
                       className="w-36 h-[42px] pl-8 pr-space-sm rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                     />
@@ -1269,7 +1293,17 @@ export default function AddEditProductPage({
                     type="number"
                     min="0"
                     value={flatStock}
-                    onChange={(e) => setFlatStock(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || (Number(val) >= 0 && !isNaN(Number(val)))) {
+                        setFlatStock(val);
+                      }
+                    }}
                     placeholder="e.g. 40"
                     className="w-32 h-[42px] px-3.5 rounded-xl font-body-md text-body-md text-on-surface bg-surface-container-low/40 border border-surface-container-high placeholder:text-outline focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                   />
@@ -1358,7 +1392,17 @@ export default function AddEditProductPage({
                       placeholder="e.g. 500"
                       disabled={selectedVariantIndices.length === 0}
                       value={commonPriceInput}
-                      onChange={(e) => setCommonPriceInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || (Number(val) >= 0 && !isNaN(Number(val)))) {
+                          setCommonPriceInput(val);
+                        }
+                      }}
                       className="w-24 h-7 pl-5 pr-2 rounded-lg bg-surface-container-lowest text-on-surface text-xs font-semibold border border-surface-container-high focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
@@ -2196,7 +2240,17 @@ export default function AddEditProductPage({
                     min="0"
                     placeholder="e.g. 4999 (0 if unpriced)"
                     value={singlePrice}
-                    onChange={(e) => setSinglePrice(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || (Number(val) >= 0 && !isNaN(Number(val)))) {
+                        setSinglePrice(val);
+                      }
+                    }}
                     className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md"
                   />
                 </div>
@@ -2212,7 +2266,17 @@ export default function AddEditProductPage({
                     min="0"
                     placeholder="e.g. 25"
                     value={singleStock}
-                    onChange={(e) => setSingleStock(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || (Number(val) >= 0 && !isNaN(Number(val)))) {
+                        setSingleStock(val);
+                      }
+                    }}
                     className="w-full h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface border border-surface-container-high focus:outline-none focus:border-primary text-body-md"
                   />
                 </div>
