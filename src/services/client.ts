@@ -13,6 +13,9 @@ const API_BASE_URL =
  */
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
 
+/** The new product module's API (`/api/v2/products`), beside v1 until the Phase 5 cut-over. */
+export const API_V2_BASE_URL = `${API_ORIGIN}/api/v2`;
+
 export const TOKEN_KEY = 'perfox_auth_token';
 
 // Supported storage keys for backward compatibility across modules
@@ -71,6 +74,8 @@ export interface RequestOptions extends RequestInit {
   data?: any;
   params?: Record<string, any>;
   skipAuth?: boolean;
+  /** The API prefix to call; defaults to v1. Pass `API_V2_BASE_URL` for /api/v2. */
+  base?: string;
 }
 
 /**
@@ -110,7 +115,7 @@ export async function request<T = any>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<ApiResponse<T>> {
-  let url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  let url = `${options.base ?? API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   // Append query params if provided
   if (options.params) {

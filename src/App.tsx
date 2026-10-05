@@ -16,6 +16,11 @@ import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import TeamsPage from './pages/TeamsPage';
 import DeveloperPage from './pages/DeveloperPage';
 import SettingsPage from './pages/SettingsPage';
+import AttributesPage from './pages/AttributesPage';
+import CategoryTreePage from './pages/CategoryTreePage';
+import ProductsV2Page from './pages/ProductsV2Page';
+import AddEditProductV2Page from './pages/AddEditProductV2Page';
+import ProductV2DetailsPage from './pages/ProductV2DetailsPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import { Product, ScheduleEvent } from './types';
@@ -339,6 +344,20 @@ function AppRoutes(): JSX.Element {
 
         {/* 9. Settings — workspace-wide, reached from the profile menu */}
         <Route path="/settings" element={<SettingsPage />} />
+
+        {/* 10. Attributes — the product fields from the business category */}
+        <Route path="/attributes" element={<AttributesPage />} />
+
+        {/* 11. Category Tree — the new categories (flat list or tree), beside
+            the current Categories screen until the Phase 5 cut-over */}
+        <Route path="/category-tree" element={<CategoryTreePage />} />
+
+        {/* 12. The new products (Phase 3), beside the current product screens
+            until the Phase 5 cut-over */}
+        <Route path="/v2/products" element={<ProductsV2Page />} />
+        <Route path="/v2/products/add" element={<AddEditProductV2Page />} />
+        <Route path="/v2/products/:id/edit" element={<AddEditProductV2Page />} />
+        <Route path="/v2/products/:id" element={<ProductV2DetailsPage />} />
 
         {/* Catch-all fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

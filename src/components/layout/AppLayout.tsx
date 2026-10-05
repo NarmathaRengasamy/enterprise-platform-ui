@@ -35,8 +35,13 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     .toUpperCase() || 'SJ';
 
   const getActiveModuleFromPath = (path: string): string => {
+    /* First: "/v2/products/:id/edit" would otherwise read as the old edit screen. */
+    if (path.startsWith('/v2/products')) return 'products-v2';
     if (path.startsWith('/conversations')) return 'conversations';
     if (path.startsWith('/categories')) return 'categories';
+    /* No sidebar entry (temporary clean-up): reached from Settings → Business & Products. */
+    if (path.startsWith('/attributes')) return 'settings';
+    if (path.startsWith('/category-tree')) return 'category-tree';
     if (path.startsWith('/products/new') || path.startsWith('/products/add')) return 'add-product';
     if (path.startsWith('/products/edit') || path.includes('/edit')) return 'edit-product';
     if (path.startsWith('/products/details') || (path.startsWith('/products/') && path !== '/products')) return 'product-details';
@@ -56,6 +61,9 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   const [productsSubmenuOpen, setProductsSubmenuOpen] = useState(
     activeModule === 'products' ||
     activeModule === 'categories' ||
+    activeModule === 'attributes' ||
+    activeModule === 'category-tree' ||
+    activeModule === 'products-v2' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product'
@@ -68,6 +76,9 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     const isProductRelated =
       activeModule === 'products' ||
       activeModule === 'categories' ||
+      activeModule === 'attributes' ||
+      activeModule === 'category-tree' ||
+      activeModule === 'products-v2' ||
       activeModule === 'add-product' ||
       activeModule === 'product-details' ||
       activeModule === 'edit-product';
@@ -162,6 +173,9 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
   const isProductsActive =
     activeModule === 'products' ||
     activeModule === 'categories' ||
+    activeModule === 'attributes' ||
+    activeModule === 'category-tree' ||
+    activeModule === 'products-v2' ||
     activeModule === 'add-product' ||
     activeModule === 'product-details' ||
     activeModule === 'edit-product';
@@ -295,7 +309,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                   type="button"
                   onClick={() => {
                     if (!isSidebarOpen) {
-                      handleNav('products', '/products');
+                      handleNav('products-v2', '/v2/products');
                     } else {
                       setProductsSubmenuOpen(!productsSubmenuOpen);
                     }
@@ -328,39 +342,40 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
 
                 {isSidebarOpen && productsSubmenuOpen && (
                   <div className="flex flex-col gap-1 pl-6 ml-2 animate-fadeIn">
-                    {/* 3.1 All Products */}
+                    {/* All Products — the new products (Phase 3). The old list (/products)
+                        is hidden from the sidebar (temporary clean-up); its URLs still work. */}
                     <button
                       type="button"
-                      onClick={() => handleNav('products', '/products')}
+                      onClick={() => handleNav('products-v2', '/v2/products')}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
-                        activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
+                        activeModule === 'products-v2'
                           ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                           : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                       }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
-                          activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
-                            ? 'bg-primary-fixed-dim'
-                            : 'bg-outline/40'
+                          activeModule === 'products-v2' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
                         }`}
                       />
                       <span>{label.plural('allProducts')}</span>
                     </button>
 
-                    {/* 3.2 Categories */}
+                    {/* Categories — the new categories (flat list, or a tree once switched on).
+                        The old screen (/categories) is hidden from the sidebar; its URL still works.
+                        Attributes are reached from Settings → Business & Products. */}
                     <button
                       type="button"
-                      onClick={() => handleNav('categories', '/categories')}
+                      onClick={() => handleNav('category-tree', '/category-tree')}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
-                        activeModule === 'categories'
+                        activeModule === 'category-tree'
                           ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
                           : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                       }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
-                          activeModule === 'categories' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
+                          activeModule === 'category-tree' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
                         }`}
                       />
                       <span>{label.plural('categories')}</span>
