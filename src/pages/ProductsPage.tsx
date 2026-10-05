@@ -77,7 +77,10 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
         return `₹${min.toLocaleString()}`;
       }
     }
-    return `₹${(p.price || 0).toLocaleString()}`;
+    if (p.price !== undefined && p.price !== null && !isNaN(Number(p.price)) && Number(p.price) > 0) {
+      return `₹${Number(p.price).toLocaleString()}`;
+    }
+    return '—';
   };
 
   // Load stats and categories on mount
