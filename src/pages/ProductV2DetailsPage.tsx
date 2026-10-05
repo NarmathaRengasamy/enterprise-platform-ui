@@ -35,6 +35,10 @@ import {
   TRACKING_LABELS,
 } from '../types/productV2.types';
 import { formatMoney } from '../utils/money';
+import { StockHistory, StockInfoCard, useItemStock } from '../components/products/StockPanel';
+import { checkMediaFile, mediaService } from '../services/media.service';
+import { SerialUnitsPanel } from '../components/products/SerialUnitsPanel';
+import { BundleComponentsEditor } from '../components/products/BundleComponentsEditor';
 import { resolveAssetUrl } from '../utils/assetUrl';
 
 /**
@@ -66,8 +70,6 @@ export const showValue = (f: FieldDefinition | undefined, v: AttributeValue['val
 };
 
 const ITEMS_VIEW_KEY = 'v2_details_items_view';
-
-const when = (iso?: string) => (iso ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
 const flatCategories = (nodes: CategoryNode[]): CategoryNode[] => nodes.flatMap((n) => [n, ...flatCategories(n.children)]);
 
@@ -206,8 +208,9 @@ export default function ProductV2DetailsPage() {
   const from = p.items
     .filter((i) => i.status === 'active' && i.resolved_price)
     .sort((a, b) => a.resolved_price!.amount_minor - b.resolved_price!.amount_minor)[0]?.resolved_price;
-  const primary = p.primary_category_id ? categoryById.get(p.primary_category_id) : undefined;
   const taxCode = p.hsn_code ? `HSN ${p.hsn_code}` : p.sac_code ? `SAC ${p.sac_code}` : 'No HSN / SAC';
+  /* Tax is optional (Option B): with none set — on the product or any item — no tax detail is shown. */
+  const hasTax = Boolean(p.hsn_code || p.sac_code || p.gst_rate !== null || p.items.some((i) => i.gst_rate !== null || i.hsn_code));
   /* The measured-size variant option (R45), if any: its values are amounts with a unit. */
   const sizeKey = p ? (p.variant_axes as AnyVariantAxis[]).find(isMeasuredAxis)?.key : undefined;
   const valueOf = (item: ProductV2['items'][number], key: string) =>
@@ -257,6 +260,13 @@ export default function ProductV2DetailsPage() {
     }`;
   const perUnit = (item: ProductV2['items'][number]) =>
     item.price_per_unit ? `${formatMoney(item.price_per_unit.amount_minor, item.price_per_unit.currency)} / ${item.price_per_unit.per}` : null;
+  /** Phase 4: available at or below the reorder point. */
+  const lowStock = (item: ProductV2['items'][number]) =>
+    item.availability.status === 'tracked' && item.availability.low_stock ? (
+      <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700" data-testid={`low-stock-${item.sku}`}>
+        Low stock
+      </span>
+    ) : null;
   const statusPill = (item: ProductV2['items'][number]) => (
     <span
       className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
@@ -335,8 +345,22 @@ export default function ProductV2DetailsPage() {
 
       {/* The product settings (R13a–R13c) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg" data-testid="product-settings">
-        <MetricsCard title="Price" value={formatMoney(from?.amount_minor ?? null, from?.currency ?? p.currency)} subtitle={from ? (from.tax_inclusive ? 'incl. GST' : 'excl. GST') : 'No active priced item'} icon="payments" variant="primary" />
-        <MetricsCard title="Fulfilment" value={FULFILMENT_LABELS[eff.fulfilment]} subtitle={p.fulfilment ? 'Set on this product' : 'From the business default'} icon="local_shipping" variant="secondary" />
+        <MetricsCard title="Price" value={formatMoney(from?.amount_minor ?? null, from?.currency ?? p.currency)} subtitle={from ? (hasTax ? (from.tax_inclusive ? 'incl. GST' : 'excl. GST') : 'Lowest active price') : 'No active priced item'} icon="payments" variant="primary" />
+        {/* Variants: how many, how many active, how many packs (normal items and packs alike). */}
+        {(() => {
+          const packs = p.items.filter((i) => i.pack_of).length;
+          const variants = p.items.length - packs;
+          const active = p.items.filter((i) => !i.pack_of && i.status === 'active').length;
+          return (
+            <MetricsCard
+              title="Variants"
+              value={`${variants} ${variants === 1 ? 'variant' : 'variants'}`}
+              subtitle={[`${active} active`, packs ? `${packs} ${packs === 1 ? 'pack' : 'packs'}` : null].filter(Boolean).join(' · ')}
+              icon="style"
+              variant="secondary"
+            />
+          );
+        })()}
         <MetricsCard
           title="Track inventory"
           value={eff.track_inventory ? 'On' : 'Off'}
@@ -344,16 +368,16 @@ export default function ProductV2DetailsPage() {
           icon="inventory"
           variant="tertiary"
         />
-        <MetricsCard title="Availability" value={availabilityLabel(p.availability)} subtitle={`${taxCode} · GST ${p.gst_rate ?? '—'}%`} icon="warehouse" variant="neutral" />
+        <MetricsCard title="Availability" value={availabilityLabel(p.availability)} subtitle={hasTax ? `${taxCode} · GST ${p.gst_rate ?? '—'}%` : p.availability.status === 'tracked' ? 'Across active items' : undefined} icon="warehouse" variant="neutral" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-md mb-space-lg">
+      <div className="grid grid-cols-1 gap-space-md mb-space-lg">
         {/* Attributes */}
-        <section className="lg:col-span-2 bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 p-space-md">
+        <section className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 p-space-md">
           <h2 className="font-title-md text-title-md font-semibold text-on-surface mb-2">Details</h2>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm" data-testid="product-attributes">
             <div className="flex justify-between gap-3 border-b border-surface-container-low py-1">
-              <dt className="text-on-surface-variant">{label.plural('categories')}</dt>
+              <dt className="font-semibold text-on-surface">{label.plural('categories')}</dt>
               <dd className="text-on-surface text-right">
                 {p.category_ids.length
                   ? p.category_ids.map((c) => `${categoryById.get(c)?.name.en ?? c}${c === p.primary_category_id && p.category_ids.length > 1 ? ' (primary)' : ''}`).join(', ')
@@ -364,7 +388,7 @@ export default function ProductV2DetailsPage() {
               const f = fields.get(a.key);
               return (
                 <div key={a.key} className="flex justify-between gap-3 border-b border-surface-container-low py-1">
-                  <dt className="text-on-surface-variant">
+                  <dt className="font-semibold text-on-surface">
                     {f?.label.en ?? a.key}
                     {f?.deprecated && <span className="ml-1 text-[10px] font-semibold uppercase text-outline">Retired · read-only</span>}
                   </dt>
@@ -374,26 +398,18 @@ export default function ProductV2DetailsPage() {
             })}
             {p.variant_axes.map((axis) => (
               <div key={axis.key} className="flex justify-between gap-3 border-b border-surface-container-low py-1">
-                <dt className="text-on-surface-variant">{fields.get(axis.key)?.label.en ?? axis.key} (variants)</dt>
+                <dt className="font-semibold text-on-surface">{fields.get(axis.key)?.label.en ?? axis.key} (variants)</dt>
                 <dd className="text-on-surface text-right">{axis.values.map((v) => axisValueText(axis.key, v)).join(', ')}</dd>
               </div>
             ))}
             <div className="flex justify-between gap-3 border-b border-surface-container-low py-1" data-testid="product-limits">
-              <dt className="text-on-surface-variant">Purchase limits</dt>
+              <dt className="font-semibold text-on-surface">Purchase limits</dt>
               <dd className="text-on-surface text-right">{limitsSummaryText(p.purchase_limits) || 'None'}</dd>
             </div>
           </dl>
           {p.description?.en && <p className="text-sm text-on-surface-variant mt-3 whitespace-pre-line">{p.description.en}</p>}
         </section>
 
-        {/* Audit */}
-        <section className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 p-space-md text-sm" data-testid="product-audit">
-          <h2 className="font-title-md text-title-md font-semibold text-on-surface mb-2">History</h2>
-          <p className="text-on-surface-variant">Created {when(p.created_at)} by {p.created_by ?? '—'}</p>
-          <p className="text-on-surface-variant">Updated {when(p.updated_at)} by {p.updated_by ?? '—'}</p>
-          <p className="text-on-surface-variant">Primary {label.lowerSingular('categories')}: {primary?.name.en ?? '—'}</p>
-          <p className="text-on-surface-variant">Attribute set version {p.type_version}</p>
-        </section>
       </div>
 
       {/* Items — Grid (photo cards) or Table; a click opens the variant in a popup */}
@@ -440,7 +456,10 @@ export default function ProductV2DetailsPage() {
                   <span className="text-sm font-semibold text-on-surface">{priceText(item)}</span>
                   {perUnit(item) && <span className="text-[11px] text-on-surface-variant -mt-1">{perUnit(item)}</span>}
                   <span className="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
-                    {availabilityLabel(item.availability)}
+                    <span className="flex items-center gap-1">
+                      {availabilityLabel(item.availability)}
+                      {lowStock(item)}
+                    </span>
                     {statusPill(item)}
                   </span>
                 </button>
@@ -460,7 +479,7 @@ export default function ProductV2DetailsPage() {
                 ))}
                 <TableHeadCell>Price</TableHeadCell>
                 <TableHeadCell>MRP</TableHeadCell>
-                <TableHeadCell>Tax</TableHeadCell>
+                {hasTax && <TableHeadCell>Tax</TableHeadCell>}
                 <TableHeadCell>Availability</TableHeadCell>
                 <TableHeadCell>Limits</TableHeadCell>
                 <TableHeadCell>Status</TableHeadCell>
@@ -481,7 +500,7 @@ export default function ProductV2DetailsPage() {
                   ))}
                   <TableCell>
                     {priceText(item)}
-                    {item.resolved_price?.tax_inclusive && <span className="ml-1 text-[10px] uppercase text-outline">incl. GST</span>}
+                    {hasTax && item.resolved_price?.tax_inclusive && <span className="ml-1 text-[10px] uppercase text-outline">incl. GST</span>}
                     {/* Worked out by the server, never stored (R46). */}
                     {perUnit(item) && (
                       <span className="block text-[11px] text-outline" data-testid={`per-unit-${item.sku}`}>
@@ -490,10 +509,14 @@ export default function ProductV2DetailsPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-on-surface-variant">{item.compare_at_minor !== null ? formatMoney(item.compare_at_minor, p.currency) : '—'}</TableCell>
-                  <TableCell className="text-on-surface-variant text-xs">
-                    GST {item.effective.gst_rate ?? '—'}%{item.effective.hsn_code ? ` · HSN ${item.effective.hsn_code}` : ''}
+                  {hasTax && (
+                    <TableCell className="text-on-surface-variant text-xs">
+                      GST {item.effective.gst_rate ?? '—'}%{item.effective.hsn_code ? ` · HSN ${item.effective.hsn_code}` : ''}
+                    </TableCell>
+                  )}
+                  <TableCell className="text-on-surface-variant whitespace-nowrap">
+                    {availabilityLabel(item.availability)} {lowStock(item)}
                   </TableCell>
-                  <TableCell className="text-on-surface-variant whitespace-nowrap">{availabilityLabel(item.availability)}</TableCell>
                   <TableCell className="text-on-surface-variant text-xs" data-testid={`limits-${item.sku}`}>
                     {item.limits_summary || '—'}
                   </TableCell>
@@ -530,129 +553,33 @@ export default function ProductV2DetailsPage() {
         </section>
       )}
 
-      {/* One variant: its pictures and details (read-only). */}
+      {/* One variant in a popup: pictures and stock on the left, its details in tabs on the right. */}
       {openItem &&
         (() => {
           const at = p.items.findIndex((i) => i.id === openItem);
           if (at < 0) return null;
           const item = p.items[at];
-          const prev = p.items[at - 1];
-          const next = p.items[at + 1];
-          const pics = itemPhotos(item);
-          const shown = pics.list[Math.min(shownImage, Math.max(pics.list.length - 1, 0))];
-          const src = shown ? resolveAssetUrl(shown.url) : null;
-          const rows: [string, React.ReactNode][] = [
-            ['SKU', item.sku],
-            ...p.variant_axes.map((a): [string, React.ReactNode] => [fields.get(a.key)?.label.en ?? a.key, valueOf(item, a.key)]),
-            [
-              'Price',
-              <>
-                {priceText(item)}
-                {item.resolved_price && <span className="ml-1 text-[10px] uppercase text-outline">{item.resolved_price.tax_inclusive ? 'incl. GST' : '+ GST'}</span>}
-                {perUnit(item) && <span className="block text-xs text-on-surface-variant">{perUnit(item)}</span>}
-              </>,
-            ],
-            ['MRP', item.compare_at_minor !== null ? formatMoney(item.compare_at_minor, p.currency) : '—'],
-            ['Tax', `GST ${item.effective.gst_rate ?? '—'}%${item.effective.hsn_code ? ` · HSN ${item.effective.hsn_code}` : ''}`],
-            ['Track inventory', item.effective.track_inventory ? `On · ${TRACKING_LABELS[item.effective.tracking]}` : 'Off'],
-            ['Availability', availabilityLabel(item.availability)],
-            [
-              'Purchase limits',
-              <>
-                {item.limits_summary || 'None'}
-                {item.purchase_limits && <span className="block text-xs text-on-surface-variant">This item has its own limits</span>}
-              </>,
-            ],
-          ];
           return (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm"
-              role="dialog"
-              aria-modal="true"
-              aria-label={itemTitle(item)}
-              data-testid="item-view"
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setOpenItem(null);
-              }}
-            >
-              <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-surface-container-high flex flex-col">
-                <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-surface-container-low">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold truncate">{itemTitle(item)}</h2>
-                    {statusPill(item)}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-on-surface-variant mr-1">
-                      {at + 1} of {p.items.length}
-                    </span>
-                    <Button variant="ghost" size="icon-sm" startIcon="chevron_left" disabled={!prev} onClick={() => prev && setOpenItem(prev.id)} aria-label="Previous variant" title="Previous" />
-                    <Button variant="ghost" size="icon-sm" startIcon="chevron_right" disabled={!next} onClick={() => next && setOpenItem(next.id)} aria-label="Next variant" title="Next" />
-                    <Button variant="ghost" size="icon-sm" startIcon="close" onClick={() => setOpenItem(null)} aria-label="Close" />
-                  </div>
-                </div>
-
-                <div className="px-6 py-5 flex flex-col md:flex-row gap-6">
-                  {/* Pictures: the big one, then every one as a thumbnail */}
-                  <div className="md:w-80 shrink-0 flex flex-col gap-2">
-                    <div className="w-full aspect-[4/3] rounded-xl overflow-hidden border border-surface-container-high bg-surface-container-low flex items-center justify-center">
-                      {src && shown?.kind === 'video' ? (
-                        <video src={src} className="w-full h-full object-cover" controls />
-                      ) : src ? (
-                        <img src={src} alt={itemTitle(item)} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="flex flex-col items-center gap-1 text-on-surface-variant text-sm">
-                          <span className="material-symbols-outlined text-3xl" aria-hidden="true">
-                            image
-                          </span>
-                          No photos
-                        </span>
-                      )}
-                    </div>
-                    {pics.from && <p className="text-xs text-on-surface-variant">No photos of its own — {pics.from}.</p>}
-                    {pics.list.length > 1 && (
-                      <div className="flex flex-wrap gap-2">
-                        {pics.list.map((m, i) => (
-                          <button
-                            key={`${m.url}-${i}`}
-                            type="button"
-                            onClick={() => setShownImage(i)}
-                            aria-label={`Show image ${i + 1}`}
-                            className={`w-14 h-14 rounded-lg overflow-hidden border-2 ${i === Math.min(shownImage, pics.list.length - 1) ? 'border-primary' : 'border-transparent'}`}
-                          >
-                            {m.kind === 'video' ? (
-                              <video src={resolveAssetUrl(m.url) ?? undefined} className="w-full h-full object-cover" muted />
-                            ) : (
-                              <img src={resolveAssetUrl(m.url) ?? undefined} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Details */}
-                  <dl className="flex-1 grid grid-cols-1 gap-y-1 text-sm self-start" data-testid="item-view-details">
-                    {rows.map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-4 border-b border-surface-container-low py-1.5">
-                        <dt className="text-on-surface-variant">{k}</dt>
-                        <dd className="text-on-surface text-right">{v}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-
-                <div className="flex justify-end items-center gap-2 px-6 py-4 border-t border-surface-container-low">
-                  {canEdit && (
-                    <Button variant="outline" size="md" startIcon="edit" onClick={() => navigate(`/v2/products/${p.id}/edit`)}>
-                      Edit
-                    </Button>
-                  )}
-                  <Button variant="primary" size="md" onClick={() => setOpenItem(null)} autoFocus>
-                    Close
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <VariantPopup
+              product={p}
+              item={item}
+              index={at}
+              total={p.items.length}
+              onPrev={at > 0 ? () => setOpenItem(p.items[at - 1].id) : undefined}
+              onNext={at < p.items.length - 1 ? () => setOpenItem(p.items[at + 1].id) : undefined}
+              onClose={() => setOpenItem(null)}
+              onEdit={canEdit ? () => navigate(`/v2/products/${p.id}/edit`) : undefined}
+              onReload={() => void load()}
+              canEdit={canEdit}
+              hasTax={hasTax}
+              title={itemTitle(item)}
+              subtitle={[p.primary_category_id ? categoryById.get(p.primary_category_id)?.name.en : null, p.brand, itemTitle(item)].filter(Boolean).join(' · ')}
+              photos={itemPhotos(item)}
+              optionRows={p.variant_axes.map((a): [string, string] => [fields.get(a.key)?.label.en ?? a.key, valueOf(item, a.key)])}
+              priceText={priceText(item)}
+              perUnit={perUnit(item)}
+              baseSku={item.pack_of ? p.items.find((x) => x.id === item.pack_of!.base_item_id)?.sku ?? null : null}
+            />
           );
         })()}
 
@@ -677,6 +604,469 @@ export default function ProductV2DetailsPage() {
     </div>
   );
 }
+
+
+/* ====================================================== the variant popup */
+
+type Item = ProductV2['items'][number];
+type Tab = 'overview' | 'inventory' | 'more';
+
+const Row: React.FC<{ k: string; children: React.ReactNode }> = ({ k, children }) => (
+  <div className="grid grid-cols-[minmax(7rem,40%)_1fr] gap-4 border-b border-surface-container-low py-3 last:border-0">
+    <dt className="font-semibold text-on-surface">{k}</dt>
+    <dd className="text-on-surface">{children}</dd>
+  </div>
+);
+
+const CardHead: React.FC<{ icon: string; title: string; right?: React.ReactNode }> = ({ icon, title, right }) => (
+  <div className="flex items-center justify-between gap-2 mb-1">
+    <div className="flex items-center gap-3">
+      <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+        <Icon name={icon} size="md" />
+      </div>
+      <h3 className="text-base font-semibold text-on-surface">{title}</h3>
+    </div>
+    {right}
+  </div>
+);
+
+/** Green in stock · amber low · red none · grey not tracked. */
+const availabilityDot = (a: Item['availability']) =>
+  a.status !== 'tracked' ? 'bg-outline' : a.available <= 0 ? 'bg-error' : a.low_stock ? 'bg-amber-500' : 'bg-green-600';
+
+/**
+ * One variant (design mock, Oct 2026): pictures (arrows, full screen, + Add
+ * image for Admins / Editors — saved on the variant straight away) and Stock
+ * Information on the left; Overview · Inventory · Additional Info on the right.
+ * "View all" in the history opens the Inventory tab. The tab stays as it is
+ * when moving with ‹ / ›.
+ */
+const VariantPopup: React.FC<{
+  product: ProductV2;
+  item: Item;
+  index: number;
+  total: number;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onClose: () => void;
+  onEdit?: () => void;
+  onReload: () => void;
+  canEdit: boolean;
+  hasTax: boolean;
+  title: string;
+  subtitle: string;
+  photos: { list: Media[]; from: string | null };
+  optionRows: [string, string][];
+  priceText: string;
+  perUnit: string | null;
+  baseSku: string | null;
+}> = ({ product: p, item, index, total, onPrev, onNext, onClose, onEdit, onReload, canEdit, hasTax, title, subtitle, photos, optionRows, priceText, perUnit, baseSku }) => {
+  const [tab, setTab] = useState<Tab>('overview');
+  const [shown, setShown] = useState(0);
+  const [fullScreen, setFullScreen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const stock = useItemStock(item.id, { canEdit, onChanged: onReload, historySize: 10 });
+
+  useEffect(() => {
+    setShown(0);
+    setPhotoError(null);
+    setCopied(false);
+  }, [item.id]);
+
+  /* Viewers have no Inventory tab (history, units and bundles are for Admins / Editors). */
+  const tabs: [Tab, string][] = canEdit ? [['overview', 'Overview'], ['inventory', 'Inventory'], ['more', 'Additional Info']] : [['overview', 'Overview'], ['more', 'Additional Info']];
+  const current = tabs.some(([t]) => t === tab) ? tab : 'overview';
+
+  const list = photos.list;
+  const at = Math.min(shown, Math.max(list.length - 1, 0));
+  const pic = list[at];
+  const src = pic ? resolveAssetUrl(pic.url) : undefined;
+  const own = !photos.from && Boolean(item.media?.length);
+
+  const tracked = item.effective.track_inventory;
+  const unitsTracking = canEdit && !item.pack_of && !p.is_bundle && tracked && (item.effective.tracking === 'serial' || item.effective.tracking === 'batch') ? item.effective.tracking : null;
+
+  /** + Add image: uploaded, then saved as this variant's own photos. */
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setPhotoError(null);
+    setUploading(true);
+    try {
+      const added: Media[] = [];
+      for (const file of Array.from(files)) {
+        const problem = checkMediaFile(file, ['image', 'video']);
+        if (problem) throw new Error(`${file.name}: ${problem}`);
+        const stored = await mediaService.upload(file);
+        added.push({ url: stored.url, kind: stored.kind });
+      }
+      const next = [...(item.media ?? []), ...added].map((m, i) => ({ ...m, sort_order: i }));
+      await productV2Service.updateItem(p.id, item.id, { media: next });
+      onReload();
+    } catch (e: any) {
+      setPhotoError(e?.message || 'Could not add the image');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const removePhoto = async (i: number) => {
+    setPhotoError(null);
+    try {
+      const next = (item.media ?? []).filter((_, x) => x !== i).map((m, x) => ({ ...m, sort_order: x }));
+      await productV2Service.updateItem(p.id, item.id, { media: next });
+      setShown(0);
+      onReload();
+    } catch (e: any) {
+      setPhotoError(e?.message || 'Could not remove the image');
+    }
+  };
+
+  const copySku = async () => {
+    try {
+      await navigator.clipboard?.writeText(item.sku);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable: nothing to do */
+    }
+  };
+
+  const media = (m: Media, cls: string, alt: string) =>
+    m.kind === 'video' ? <video src={resolveAssetUrl(m.url)} className={cls} controls={cls.includes('contain')} muted /> : <img src={resolveAssetUrl(m.url)} alt={alt} className={cls} />;
+
+  const additional: [string, React.ReactNode][] = [
+    ...(hasTax ? [['Tax', `GST ${item.effective.gst_rate ?? '—'}%${item.effective.hsn_code ? ` · HSN ${item.effective.hsn_code}` : ''}`] as [string, React.ReactNode]] : []),
+    ...(perUnit ? [['Price per unit', perUnit] as [string, React.ReactNode]] : []),
+    ...(item.pack_of
+      ? [['Pack', `${item.pack_of.quantity} × ${baseSku ?? 'base item'}${item.pack_saving && item.pack_saving.percent > 0 ? ` · saves ${item.pack_saving.percent} %` : ''}`] as [string, React.ReactNode]]
+      : []),
+    ['Photos', own ? 'Its own photos' : photos.from ? `No photos of its own — ${photos.from}` : 'No photos'],
+    ...(item.resolved_price && item.resolved_price.price_unit !== 'each' ? [['Priced per', item.resolved_price.price_unit] as [string, React.ReactNode]] : []),
+    ...(item.digital_delivery ? [['Digital delivery', item.digital_delivery] as [string, React.ReactNode]] : []),
+    ['Status', item.status === 'active' ? 'Active' : 'Inactive'],
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      data-testid="item-view"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') (fullScreen ? setFullScreen(false) : onClose());
+      }}
+    >
+      <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto border border-surface-container-high flex flex-col">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold truncate">{title}</h2>
+              <span
+                className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase px-2.5 py-1 rounded-full ${
+                  item.status === 'active' ? 'bg-secondary-fixed/30 text-secondary' : 'bg-surface-container-high text-on-surface-variant'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${item.status === 'active' ? 'bg-green-600' : 'bg-outline'}`} />
+                {item.status === 'active' ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <p className="text-sm text-on-surface-variant mt-0.5 truncate" data-testid="item-view-subtitle">
+              {subtitle}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-sm text-on-surface-variant mr-2">
+              {index + 1} of {total}
+            </span>
+            <Button variant="outline" size="icon-sm" startIcon="chevron_left" disabled={!onPrev} onClick={onPrev} aria-label="Previous variant" title="Previous" />
+            <Button variant="outline" size="icon-sm" startIcon="chevron_right" disabled={!onNext} onClick={onNext} aria-label="Next variant" title="Next" />
+            <Button variant="ghost" size="icon-sm" startIcon="close" onClick={onClose} aria-label="Close" />
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: pictures and stock (the same on every tab) */}
+          <div className="flex flex-col gap-4 min-w-0">
+            <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden border border-surface-container-high bg-surface-container-low flex items-center justify-center">
+              {pic ? (
+                media(pic, 'w-full h-full object-cover', title)
+              ) : (
+                <span className="flex flex-col items-center gap-1 text-on-surface-variant text-sm">
+                  <span className="material-symbols-outlined text-4xl" aria-hidden="true">
+                    image
+                  </span>
+                  No photos
+                </span>
+              )}
+              {pic && (
+                <button
+                  type="button"
+                  aria-label="Full screen"
+                  onClick={() => setFullScreen(true)}
+                  className="absolute top-3 right-3 w-9 h-9 rounded-lg bg-surface-container-lowest/90 shadow flex items-center justify-center"
+                >
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                    fullscreen
+                  </span>
+                </button>
+              )}
+              {list.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Previous image"
+                    onClick={() => setShown((at - 1 + list.length) % list.length)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-on-surface/40 text-white flex items-center justify-center"
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      chevron_left
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next image"
+                    onClick={() => setShown((at + 1) % list.length)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-on-surface/40 text-white flex items-center justify-center"
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      chevron_right
+                    </span>
+                  </button>
+                </>
+              )}
+            </div>
+            {photos.from && <p className="text-xs text-on-surface-variant -mt-2">No photos of its own — {photos.from}.</p>}
+
+            <div className="flex flex-wrap gap-3">
+              {list.map((m, i) => (
+                <div key={`${m.url}-${i}`} className={`relative w-24 h-20 rounded-xl overflow-hidden border-2 ${i === at ? 'border-primary' : 'border-transparent'}`}>
+                  <button type="button" onClick={() => setShown(i)} aria-label={`Show image ${i + 1}`} className="w-full h-full">
+                    {media(m, 'w-full h-full object-cover', `Image ${i + 1}`)}
+                  </button>
+                  {canEdit && own && (
+                    <button
+                      type="button"
+                      aria-label={`Remove image ${i + 1}`}
+                      onClick={() => void removePhoto(i)}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] leading-5"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              {canEdit && (
+                <button
+                  type="button"
+                  aria-label="Add image"
+                  disabled={uploading}
+                  onClick={() => fileRef.current?.click()}
+                  className="w-24 h-20 rounded-xl border-2 border-dashed border-surface-container-high text-on-surface-variant flex flex-col items-center justify-center text-xs gap-0.5 hover:border-primary/50 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    add
+                  </span>
+                  {uploading ? 'Uploading…' : 'Add image'}
+                </button>
+              )}
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => void addPhotos(e.target.files)} />
+            </div>
+            {canEdit && !own && photos.from && <p className="text-[11px] text-on-surface-variant -mt-2">Adding an image gives this variant its own photos.</p>}
+            {photoError && (
+              <p className="text-xs text-error" role="alert">
+                {photoError}
+              </p>
+            )}
+
+            <div className="rounded-xl border border-surface-container-high p-4">
+              <StockInfoCard itemId={item.id} title={title} canEdit={canEdit} state={stock} onOpenInventory={() => setTab('inventory')} />
+            </div>
+          </div>
+
+          {/* Right: tabs */}
+          <div className="flex flex-col gap-4 min-w-0">
+            <div className="flex gap-6 border-b border-surface-container-high" role="tablist" aria-label="Variant">
+              {tabs.map(([t, text]) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={current === t}
+                  onClick={() => setTab(t)}
+                  className={`pb-2.5 -mb-px text-sm font-semibold border-b-2 transition-colors ${current === t ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+
+            {current === 'overview' && (
+              <>
+                <section className="rounded-xl border border-surface-container-high p-4" aria-label="Product Details">
+                  <CardHead icon="description" title="Product Details" />
+                  <dl className="text-sm" data-testid="item-view-details">
+                    <Row k="SKU">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="break-all">{item.sku}</span>
+                        <button type="button" aria-label="Copy SKU" title="Copy" onClick={() => void copySku()} className="text-on-surface-variant hover:text-primary shrink-0">
+                          <span className="material-symbols-outlined text-base" aria-hidden="true">
+                            {copied ? 'check' : 'content_copy'}
+                          </span>
+                        </button>
+                      </span>
+                    </Row>
+                    {optionRows.map(([k, v]) => (
+                      <Row key={k} k={k}>
+                        {v}
+                      </Row>
+                    ))}
+                    {item.pack_of && (
+                      <Row k="Pack">
+                        {item.pack_of.quantity} × {baseSku ?? 'base item'}
+                        {item.pack_saving && item.pack_saving.percent > 0 && <span className="block text-xs text-secondary">Saves {item.pack_saving.percent} %</span>}
+                      </Row>
+                    )}
+                    <Row k="Price">
+                      {priceText}
+                      {hasTax && item.resolved_price && <span className="ml-1 text-[10px] uppercase text-outline">{item.resolved_price.tax_inclusive ? 'incl. GST' : '+ GST'}</span>}
+                      {perUnit && <span className="block text-xs text-on-surface-variant">{perUnit}</span>}
+                    </Row>
+                    <Row k="MRP">{item.compare_at_minor !== null ? formatMoney(item.compare_at_minor, p.currency) : '—'}</Row>
+                    <Row k="Track inventory">
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${tracked ? 'bg-secondary-fixed/30 text-secondary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                          {tracked ? 'On' : 'Off'}
+                        </span>
+                        {/* "No units (quantity only)" is left out; serial / batch tracking is still named. */}
+                        {tracked && item.effective.tracking !== 'none' && <span className="text-on-surface-variant">· {TRACKING_LABELS[item.effective.tracking]}</span>}
+                      </span>
+                    </Row>
+                    <Row k="Availability">
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${availabilityDot(item.availability)}`} />
+                        {availabilityLabel(item.availability)}
+                      </span>
+                    </Row>
+                    <Row k="Purchase limits">
+                      {item.limits_summary || 'None'}
+                      {item.purchase_limits && <span className="block text-xs text-on-surface-variant">This item has its own limits</span>}
+                    </Row>
+                  </dl>
+                </section>
+                {canEdit && (
+                  <section className="rounded-xl border border-surface-container-high p-4">
+                    <StockHistory state={stock} mode="preview" onViewAll={() => setTab('inventory')} />
+                  </section>
+                )}
+              </>
+            )}
+
+            {current === 'inventory' && (
+              <>
+                <section className="rounded-xl border border-surface-container-high p-4">
+                  {stock.stock && stock.stock.kind === 'item' && stock.stock.availability.status === 'tracked' ? (
+                    <StockHistory state={stock} mode="full" />
+                  ) : (
+                    <p className="text-sm text-on-surface-variant">
+                      {item.pack_of
+                        ? `A pack has no stock history of its own — see the base item${baseSku ? ` (${baseSku})` : ''}.`
+                        : p.is_bundle
+                          ? 'A bundle has no stock history of its own — see its components.'
+                          : 'Not tracked — no stock history.'}
+                    </p>
+                  )}
+                </section>
+                {unitsTracking && (
+                  <section className="rounded-xl border border-surface-container-high p-4">
+                    <SerialUnitsPanel key={`units-${item.id}`} itemId={item.id} tracking={unitsTracking} canEdit={canEdit} onChanged={() => stock.changed()} />
+                  </section>
+                )}
+                {p.is_bundle && !item.pack_of && (
+                  <section className="rounded-xl border border-surface-container-high p-4">
+                    <BundleComponentsEditor key={`bundle-${item.id}`} bundleItemId={item.id} canEdit={canEdit} onChanged={() => stock.changed()} />
+                  </section>
+                )}
+              </>
+            )}
+
+            {current === 'more' && (
+              <section className="rounded-xl border border-surface-container-high p-4" aria-label="Additional Info">
+                <CardHead icon="info" title="Additional Info" />
+                <dl className="text-sm" data-testid="item-view-more">
+                  {additional.map(([k, v]) => (
+                    <Row key={k} k={k}>
+                      {v}
+                    </Row>
+                  ))}
+                </dl>
+              </section>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end items-center gap-3 px-6 py-4 border-t border-surface-container-low">
+          <Button variant="outline" size="md" onClick={onClose} autoFocus>
+            Close
+          </Button>
+          {onEdit && (
+            <Button variant="primary" size="md" startIcon="edit" onClick={onEdit}>
+              Edit Product
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Full screen picture */}
+      {fullScreen && pic && (
+        <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-6" role="dialog" aria-label="Picture, full screen" onClick={() => setFullScreen(false)}>
+          {media(pic, 'max-w-full max-h-full object-contain', title)}
+          <button type="button" aria-label="Close full screen" className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center">
+            <span className="material-symbols-outlined" aria-hidden="true">
+              close
+            </span>
+          </button>
+          {list.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label="Previous image"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShown((at - 1 + list.length) % list.length);
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chevron_left
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label="Next image"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShown((at + 1) % list.length);
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chevron_right
+                </span>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MediaThumb: React.FC<{ url: string; kind: 'image' | 'video'; alt: string }> = ({ url, kind, alt }) => {
   const src = resolveAssetUrl(url);

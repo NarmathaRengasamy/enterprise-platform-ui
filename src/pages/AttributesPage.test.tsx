@@ -128,6 +128,44 @@ describe('AttributesPage', () => {
     expect(box()).not.toBeChecked();
   });
 
+  it('a number with a unit family is a measured size: units from the family, usable for variants (Phase 3b)', async () => {
+    api.addField.mockResolvedValue({ data: TYPE });
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add attribute' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add attribute' });
+    await userEvent.type(within(dialog).getByLabelText('Name (English)'), 'Net quantity');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Type'), 'number');
+    const box = () => within(dialog).getByLabelText('Can be used for variants');
+    expect(box()).toBeDisabled(); // a number needs a unit family first
+    await userEvent.selectOptions(within(dialog).getByLabelText('Unit family'), 'volume');
+    expect(within(within(dialog).getByLabelText('Unit') as HTMLElement).getAllByRole('option').map((o) => o.textContent)).toEqual(['ml', 'l']);
+    expect(within(dialog).getByText(/A measured size/)).toBeInTheDocument();
+    expect(box()).toBeEnabled();
+    await userEvent.click(box());
+    await userEvent.selectOptions(within(dialog).getByLabelText('Unit'), 'l');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add attribute' }));
+    await waitFor(() =>
+      expect(api.addField).toHaveBeenCalledWith(expect.objectContaining({ type: 'number', unit: 'l', unit_family: 'volume', variant_forming: true }))
+    );
+  });
+
+  it('clearing the unit family turns variant use off; the family can be set on a template number', async () => {
+    api.get.mockResolvedValue({
+      ...TYPE,
+      fields: [...TYPE.fields, field({ key: 'net_qty', label: { en: 'Net qty' }, type: 'number', unit: 'ml', unit_family: 'volume', options: [], source: 'template', sort_order: 3 })],
+    });
+    api.updateField.mockResolvedValue({ data: TYPE });
+    renderPage();
+    expect(await screen.findByTestId('attr-net_qty')).toHaveTextContent('Measured · Volume');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Net qty' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Can be used for variants')).toBeChecked();
+    await userEvent.selectOptions(within(dialog).getByLabelText('Unit family'), '');
+    expect(within(dialog).getByLabelText('Can be used for variants')).not.toBeChecked();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.updateField).toHaveBeenCalledWith('net_qty', expect.objectContaining({ unit_family: null, variant_forming: false })));
+  });
+
   it('locks the type of a template attribute when editing', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit Fuel' }));
@@ -139,7 +177,16 @@ describe('AttributesPage', () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit Fuel' }));
     const dialog = screen.getByRole('dialog');
-    await userEvent.type(within(dialog).getByLabelText('New options'), 'Hydrogen');
+    /* One at a time: type + Add (or Enter), shown as chips; a repeat is held back. */
+    await userEvent.type(within(dialog).getByLabelText('New option'), 'Hydrogen');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    await userEvent.type(within(dialog).getByLabelText('New option'), 'Electric{Enter}');
+    await userEvent.type(within(dialog).getByLabelText('New option'), 'petrol');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('petrol is already in the list');
+    const chips = within(dialog).getByRole('list', { name: 'New options' });
+    expect(within(chips).getAllByRole('listitem').map((li) => li.textContent?.replace('new', '').replace('✕', '').trim())).toEqual(['Hydrogen', 'Electric']);
+    await userEvent.click(within(chips).getByRole('button', { name: 'Remove Electric' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.updateField).toHaveBeenCalled());
     const [, patch] = api.updateField.mock.calls[0];

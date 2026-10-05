@@ -186,7 +186,11 @@ const limitsProblems = (t: LimitsText, who: string): string[] =>
     (f) => `${who}purchase limit “${f.label}” must be a whole number of 1 or more`
   );
 
-/** Min / max per order, then per customer over 24 h · 7 d · 30 d · 1 y · ever. */
+/**
+ * Min / max per order. Per-customer windows (24 h · 7 d · 30 d · 1 y · ever)
+ * are not edited on the form (Oct 2026); values already stored stay in
+ * `value` untouched and are sent back as they were.
+ */
 const LimitsFields: React.FC<{
   value: LimitsText;
   onChange: (next: LimitsText) => void;
@@ -215,10 +219,6 @@ const LimitsFields: React.FC<{
         <p className="text-[10.5px] font-bold text-outline uppercase tracking-wider mb-1">Per order</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{LIMIT_FIELDS.slice(0, 2).map(box)}</div>
       </div>
-      <div>
-        <p className="text-[10.5px] font-bold text-outline uppercase tracking-wider mb-1">Per customer, in the last</p>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">{LIMIT_FIELDS.slice(2).map(box)}</div>
-      </div>
     </div>
   );
 };
@@ -243,6 +243,8 @@ interface ItemRow {
   media: Media[];
   /** This item's own purchase limits; '' = the product's value. */
   limits: LimitsText;
+  /** A pack (R47): quantity × a base item of this product — by id once saved, by row before. */
+  pack?: { baseItemId?: string; baseRowId?: string; quantity: number };
   limitsOpen?: boolean;
   /** Existing item marked for deletion (Admin) or a deleted item offered for restore. */
   remove?: boolean;
@@ -285,6 +287,7 @@ const rowFromItem = (i: ProductItem, deleted = false): ItemRow =>
     media: i.media ?? [],
     limits: limitsText(i.purchase_limits),
     limitsOpen: Boolean(limitsInput(limitsText(i.purchase_limits))),
+    pack: i.pack_of ? { baseItemId: i.pack_of.base_item_id, quantity: i.pack_of.quantity } : undefined,
     deleted,
     original: i,
   });
@@ -375,6 +378,7 @@ const ImageGallery: React.FC<{ label: string; value: Media[]; onChange: (next: M
   const [busy, setBusy] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
   const current = value[Math.min(shown, value.length - 1)];
 
   const upload = async (files: FileList | null) => {
@@ -423,6 +427,16 @@ const ImageGallery: React.FC<{ label: string; value: Media[]; onChange: (next: M
       {current ? (
         <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden border border-surface-container-high bg-surface-container-low">
           {preview(current, 'w-full h-full object-cover', `${label} — shown`)}
+          <button
+            type="button"
+            aria-label="Full screen"
+            onClick={() => setFullScreen(true)}
+            className="absolute top-2 right-2 w-8 h-8 rounded-lg bg-surface-container-lowest/90 shadow flex items-center justify-center"
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              fullscreen
+            </span>
+          </button>
           {shown === 0 ? (
             <span className="absolute top-2 left-2 text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-on-surface/70 text-white">Main</span>
           ) : (
@@ -490,6 +504,31 @@ const ImageGallery: React.FC<{ label: string; value: Media[]; onChange: (next: M
       )}
 
       <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime" multiple className="hidden" onChange={(e) => void upload(e.target.files)} />
+      {fullScreen && current && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-6"
+          role="dialog"
+          aria-label="Picture, full screen"
+          onClick={() => setFullScreen(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setFullScreen(false);
+            }
+          }}
+        >
+          {current.kind === 'video' ? (
+            <video src={resolveAssetUrl(current.url)} className="max-w-full max-h-full object-contain" controls />
+          ) : (
+            <img src={resolveAssetUrl(current.url)} alt={label} className="max-w-full max-h-full object-contain" />
+          )}
+          <button type="button" aria-label="Close full screen" autoFocus className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center">
+            <span className="material-symbols-outlined" aria-hidden="true">
+              close
+            </span>
+          </button>
+        </div>
+      )}
       {busy > 0 && (
         <span className="text-xs text-on-surface-variant" role="status">
           Uploading…
@@ -581,6 +620,14 @@ export default function AddEditProductV2Page() {
   const [sac, setSac] = useState('');
   const [gst, setGst] = useState('');
   const [taxInclusive, setTaxInclusive] = useState(true);
+  /* A bundle (design §3.5): its stock comes from the items it contains (set on the details page). */
+  const [isBundle, setIsBundle] = useState(false);
+  /* "+ Add pack" open on one item: quantity, pack price, optional SKU. */
+  const [packDraft, setPackDraft] = useState<null | { rowId: string; quantity: string; price: string; sku: string; note: string | null }>(null);
+  /* Variant popup (form): new packs typed in its Packs card, and its "More" card. */
+  const [popupPacks, setPopupPacks] = useState<{ key: number; quantity: string; price: string; sku: string }[]>([]);
+  const [popupPackNote, setPopupPackNote] = useState<string | null>(null);
+
   const [axes, setAxes] = useState<VariantAxis[]>([]);
   /* Measured sizes (R45): at most one per product, e.g. Net quantity 500 ml / 1 l. */
   const [sizeAxis, setSizeAxis] = useState<MeasuredVariantAxis | null>(null);
@@ -620,6 +667,8 @@ export default function AddEditProductV2Page() {
     setFulfilment(p.effective.fulfilment);
     /* Not goods: show the Advanced option open, so the setting is not hidden. */
     if (p.effective.fulfilment !== 'goods') setFulfilmentOpen(true);
+    setIsBundle(Boolean(p.is_bundle));
+    if (p.is_bundle) setFulfilmentOpen(true);
     setTrackInventory(p.track_inventory);
     setTracking(p.track_inventory ? p.effective.tracking : (t?.tracking ?? 'none'));
     setCategoryIds(p.category_ids);
@@ -745,7 +794,17 @@ export default function AddEditProductV2Page() {
   /* Item tax columns (Incl. GST · GST · HSN) only once tax is configured — a GST rate or an
      HSN / SAC code on the product — or when an item already has its own override (never hidden). */
   const showItemTax = gst !== '' || Boolean((fulfilment === 'service' ? sac : hsn).trim()) || rows.some((r) => r.gst !== '' || r.hsn.trim() !== '');
-  const effectiveTrack = (r: ItemRow) => (r.track === 'same' ? trackInventory : r.track === 'on');
+  /** A pack's base row: the saved item (by id) or the row it was made from. */
+  const baseOf = (r: ItemRow): ItemRow | undefined =>
+    r.pack ? rows.find((x) => (r.pack!.baseItemId && x.id === r.pack!.baseItemId) || (r.pack!.baseRowId && x.rowId === r.pack!.baseRowId)) : undefined;
+  /* A pack follows its base item's Track inventory (R48). */
+  const effectiveTrack = (r: ItemRow): boolean => {
+    const base = baseOf(r);
+    if (r.pack) return base ? effectiveTrack(base) : trackInventory;
+    return r.track === 'same' ? trackInventory : r.track === 'on';
+  };
+  /* Serial tracking: units drive stock (Phase 4) — no initial stock is typed or sent. */
+  const serialTracked = trackInventory && tracking === 'serial';
 
   const duplicateSkus = useMemo(() => {
     const seen = new Map<string, number>();
@@ -1054,11 +1113,34 @@ export default function AddEditProductV2Page() {
   const perUnitText = (r: ItemRow): string | null => {
     const p = parseRupees(r.price);
     if ('error' in p) return null;
-    const u = pricePerUnitOf(p.minor, rowMeasure(r), fulfilment === 'rental' ? r.priceUnit : 'each');
+    /* A pack of 4 × 500 ml is priced per 2 l. */
+    const base = baseOf(r);
+    const m = r.pack ? (base ? rowMeasure(base) : null) : rowMeasure(r);
+    const measure = m && r.pack ? { ...m, base_amount: m.base_amount * r.pack.quantity } : m;
+    const u = pricePerUnitOf(p.minor, measure, fulfilment === 'rental' ? r.priceUnit : 'each');
     return u ? `${formatMoney(u.amount_minor, currency)} / ${u.per}` : null;
   };
+  /** "₹21,999 > ₹19,999" when the price is above the MRP (both filled in); null otherwise. */
+  const priceOverMrp = (r: ItemRow): string | null => {
+    const p = parseRupees(r.price);
+    const m = parseRupees(r.mrp);
+    if ('error' in p || 'error' in m || p.minor === null || m.minor === null || p.minor <= m.minor) return null;
+    return `${formatMoney(p.minor, currency)} > ${formatMoney(m.minor, currency)}`;
+  };
+  /** "Save 10 %" against buying the singles (R49) — both priced, same tax-inclusive. */
+  const packSavingText = (r: ItemRow): string | null => {
+    const base = baseOf(r);
+    if (!r.pack || !base || r.taxInclusive !== base.taxInclusive) return null;
+    const pp = parseRupees(r.price);
+    const bp = parseRupees(base.price);
+    if ('error' in pp || 'error' in bp || pp.minor === null || !bp.minor) return null;
+    const percent = Math.round((1 - pp.minor / (bp.minor * r.pack.quantity)) * 1000) / 10;
+    return percent > 0 ? `Save ${percent} %` : percent < 0 ? `${-percent} % dearer than ${r.pack.quantity} singles` : null;
+  };
   /** "Petrol · Red" for a variant; the product name for a single item. */
-  const itemTitle = (r: ItemRow) => (r.attributes.length ? r.attributes.map((a) => valueLabel(a.key, a.value)).join(' · ') : nameEn.trim() || 'Item');
+  const plainTitle = (r: ItemRow) => (r.attributes.length ? r.attributes.map((a) => valueLabel(a.key, a.value)).join(' · ') : nameEn.trim() || 'Item');
+  /** "Petrol · Red", or "Petrol · Red · Pack of 4" for a pack. */
+  const itemTitle = (r: ItemRow) => (r.pack ? `${plainTitle(r)} · Pack of ${r.pack.quantity}` : plainTitle(r));
   /** The picture a customer would see: the item's own → its option's (e.g. Red) → the product's. */
   const itemThumb = (r: ItemRow): { url?: string; from: string | null } => {
     if (r.media[0]) return { url: resolveAssetUrl(r.media[0].url), from: null };
@@ -1076,6 +1158,9 @@ export default function AddEditProductV2Page() {
   };
   const itemStock = (r: ItemRow) => {
     if (!effectiveTrack(r)) return 'Not tracked';
+    /* A pack's stock is its base's (R48); a bundle's is its components'. */
+    if (r.pack) return r.original?.availability.status === 'tracked' ? `${r.original.availability.available} available (from base)` : 'From the base item';
+    if (isBundle) return 'From its components';
     if (!r.id) return `${r.stock.trim() || 0} in stock`;
     return r.original?.availability.status === 'tracked' ? `${r.original.availability.on_hand} in stock` : '0 in stock';
   };
@@ -1084,7 +1169,7 @@ export default function AddEditProductV2Page() {
   const itemsSummary = (() => {
     const prices = liveRows.map((r) => parseRupees(r.price)).map((p) => ('minor' in p ? p.minor : null)).filter((m): m is number => m !== null);
     const range = prices.length ? (Math.min(...prices) === Math.max(...prices) ? formatMoney(Math.min(...prices), currency) : `${formatMoney(Math.min(...prices), currency)} – ${formatMoney(Math.max(...prices), currency)}`) : null;
-    const stock = liveRows.filter(effectiveTrack).reduce((n, r) => n + (r.id ? (r.original?.availability.status === 'tracked' ? r.original.availability.on_hand : 0) : Number(r.stock) || 0), 0);
+    const stock = liveRows.filter((r) => !r.pack && effectiveTrack(r)).reduce((n, r) => n + (r.id ? (r.original?.availability.status === 'tracked' ? r.original.availability.on_hand : 0) : Number(r.stock) || 0), 0);
     return [`${liveRows.length} ${liveRows.length === 1 ? 'variant' : 'variants'}`, range, `${stock} in stock`].filter(Boolean).join(' · ');
   })();
 
@@ -1107,7 +1192,7 @@ export default function AddEditProductV2Page() {
     } else if (bulk.field === 'stock') {
       if (!/^\d+$/.test(bulk.value.trim())) return setBulk({ ...bulk, note: 'Stock must be a whole number' });
       /* Initial stock only for new, tracked items; existing stock changes through adjustments. */
-      chosen.filter((r) => !r.id && effectiveTrack(r)).forEach((r) => updateRow(r.rowId, { stock: bulk.value.trim() }));
+      chosen.filter((r) => !r.id && !r.pack && !isBundle && effectiveTrack(r) && !serialTracked).forEach((r) => updateRow(r.rowId, { stock: bulk.value.trim() }));
     } else {
       chosen.forEach((r) => updateRow(r.rowId, { status: bulk.value === 'inactive' ? 'inactive' : 'active' }));
     }
@@ -1127,22 +1212,49 @@ export default function AddEditProductV2Page() {
           {duplicateSkus.has(r.sku.trim()) && <span className="text-[11px] text-error">Used twice</span>}
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-on-surface-variant">Price ₹</label>
+          <label className="text-xs font-medium text-on-surface-variant">Price (₹)</label>
           <input aria-label={`Price ${name}`} inputMode="decimal" className={`${smallInput} ${'error' in parseRupees(r.price) ? 'border-error' : ''}`} placeholder="Not priced" value={r.price} disabled={off} onChange={(e) => updateRow(r.rowId, { price: e.target.value })} />
           {perUnitText(r) && (
             <span className="text-[11px] text-on-surface-variant" data-testid={`per-unit-${name}`}>
               {perUnitText(r)}
             </span>
           )}
+          {packSavingText(r) && (
+            <span className="text-[11px] font-medium text-secondary" data-testid={`saving-${name}`}>
+              {packSavingText(r)}
+            </span>
+          )}
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-on-surface-variant">MRP ₹</label>
-          <input aria-label={`MRP ${name}`} inputMode="decimal" className={smallInput} value={r.mrp} disabled={off} onChange={(e) => updateRow(r.rowId, { mrp: e.target.value })} />
+          <label className="text-xs font-medium text-on-surface-variant">MRP (₹)</label>
+          <input aria-label={`MRP ${name}`} inputMode="decimal" className={`${smallInput} ${priceOverMrp(r) ? 'border-amber-400' : ''}`} value={r.mrp} disabled={off} onChange={(e) => updateRow(r.rowId, { mrp: e.target.value })} />
+          {/* A warning only — saving is still allowed. */}
+          {priceOverMrp(r) && (
+            <span className="text-[11px] text-amber-700" data-testid={`price-over-mrp-${name}`}>
+              ⚠ Price is above MRP ({priceOverMrp(r)})
+            </span>
+          )}
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-on-surface-variant">{!r.id && tracked ? 'Initial stock' : 'Stock'}</label>
-          {/* Stock is entered once, for new tracked items; later changes are stock adjustments (Phase 4). */}
-          {!r.id && tracked ? (
+          <label className="text-xs font-medium text-on-surface-variant">{!r.id && tracked && !serialTracked && !r.pack && !isBundle ? 'Initial stock' : 'Stock'}</label>
+          {/* Stock is entered once, for new tracked items; later changes are stock adjustments (Phase 4).
+              Serial tracking: the units are the stock — added after saving, never typed here. */}
+          {r.pack ? (
+            /* A pack has no stock of its own: it is worked out from the base (R48). */
+            <span className="h-9 flex items-center text-xs text-on-surface-variant" data-testid={`pack-stock-${name}`}>
+              {!tracked
+                ? 'Not tracked'
+                : r.original?.availability.status === 'tracked'
+                  ? `${r.original.availability.available} from ${baseOf(r)?.sku || 'the base'}`
+                  : `From ${baseOf(r)?.sku || 'the base item'}`}
+            </span>
+          ) : isBundle && tracked ? (
+            <span className="h-9 flex items-center text-xs text-on-surface-variant">From its components</span>
+          ) : !r.id && tracked && serialTracked ? (
+            <span className="h-9 flex items-center text-xs text-on-surface-variant" data-testid={`units-note-${name}`}>
+              Add units after saving
+            </span>
+          ) : !r.id && tracked ? (
             <input aria-label={`Initial stock ${name}`} inputMode="numeric" className={smallInput} value={r.stock} onChange={(e) => updateRow(r.rowId, { stock: e.target.value })} />
           ) : (
             <span className="h-9 flex items-center text-xs text-on-surface-variant">{itemStock(r)}</span>
@@ -1166,8 +1278,8 @@ export default function AddEditProductV2Page() {
     return (
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* A single item follows the product's Always available / Track inventory choice. */}
-          {allAxes.length > 0 && (
+          {/* A single item follows the product's Always available / Track inventory choice; a pack its base's. */}
+          {allAxes.length > 0 && !r.pack && (
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-on-surface-variant">Track inventory</label>
             <select aria-label={`Track inventory ${name}`} className={smallInput} value={r.track} disabled={off} onChange={(e) => updateRow(r.rowId, { track: e.target.value as ItemRow['track'] })}>
@@ -1236,7 +1348,6 @@ export default function AddEditProductV2Page() {
             {r.limitsOpen && (
               <div className="px-3 pb-3">
                 <LimitsFields name={`Limit ${name}`} value={r.limits} inherited={limits} disabled={off} onChange={(next) => updateRow(r.rowId, { limits: next })} />
-                <p className="text-[11px] text-on-surface-variant mt-2">Empty = the {label.lowerSingular('allProducts')}'s value.</p>
               </div>
             )}
           </div>
@@ -1249,12 +1360,86 @@ export default function AddEditProductV2Page() {
     );
   };
 
-  const itemActions = (r: ItemRow) => {
+  /** Packs (R47–R49) are not offered on serial-tracked or bundle products. */
+  const canAddPack = (r: ItemRow) => !r.pack && !r.deleted && !r.remove && !isBundle && !serialTracked;
+
+  const addPack = () => {
+    if (!packDraft) return;
+    const base = rows.find((x) => x.rowId === packDraft.rowId);
+    if (!base) return setPackDraft(null);
+    const q = packDraft.quantity.trim();
+    if (!/^\d+$/.test(q) || Number(q) < 2) return setPackDraft({ ...packDraft, note: 'A pack holds a whole number of 2 or more' });
+    const quantity = Number(q);
+    const same = rows.find((x) => !x.deleted && !x.remove && x.pack?.quantity === quantity && baseOf(x)?.rowId === base.rowId);
+    if (same) return setPackDraft({ ...packDraft, note: `${itemTitle(same)} already exists` });
+    const price = parseRupees(packDraft.price);
+    if ('error' in price) return setPackDraft({ ...packDraft, note: price.error });
+    const row = newRow(
+      { sku: packDraft.sku.trim(), attributes: base.attributes, price: packDraft.price.trim(), pack: { baseItemId: base.id, baseRowId: base.rowId, quantity } },
+      base.taxInclusive
+    );
+    /* Placed after its base (and the base's other packs). */
+    setRows((cur) => {
+      const at = cur.findIndex((x) => x.rowId === base.rowId);
+      let end = at + 1;
+      while (end < cur.length && cur[end].pack && (cur[end].pack!.baseRowId === base.rowId || (base.id && cur[end].pack!.baseItemId === base.id))) end++;
+      return [...cur.slice(0, end), row, ...cur.slice(end)];
+    });
+    setPackDraft(null);
+  };
+
+  const packForm = (r: ItemRow) => {
+    if (packDraft?.rowId !== r.rowId) return null;
     const name = r.sku || 'item';
     return (
+      <div className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/[0.03] p-3" data-testid={`pack-form-${name}`}>
+        <p className="text-xs font-semibold text-on-surface">New pack of {itemTitle(r)}</p>
+        <div className="grid grid-cols-3 gap-2">
+          <input aria-label={`Pack quantity ${name}`} inputMode="numeric" placeholder="Qty, e.g. 4" className={smallInput} value={packDraft.quantity} onChange={(e) => setPackDraft({ ...packDraft, quantity: e.target.value, note: null })} />
+          <input aria-label={`Pack price ${name}`} inputMode="decimal" placeholder="Pack price ₹" className={smallInput} value={packDraft.price} onChange={(e) => setPackDraft({ ...packDraft, price: e.target.value, note: null })} />
+          <input aria-label={`Pack SKU ${name}`} placeholder="SKU (optional)" className={smallInput} value={packDraft.sku} onChange={(e) => setPackDraft({ ...packDraft, sku: e.target.value, note: null })} />
+        </div>
+        {packDraft.note && (
+          <p className="text-xs text-error" role="alert">
+            {packDraft.note}
+          </p>
+        )}
+        <p className="text-[11px] text-on-surface-variant">A pack has no stock of its own — it is sold from {itemTitle(r)}'s stock.</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setPackDraft(null)}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="sm" onClick={addPack}>
+            Add pack
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const itemActions = (r: ItemRow, opts: { packs?: boolean } = {}) => {
+    const name = r.sku || 'item';
+    return (
+      <div className="flex flex-col gap-2">
       <div className="flex justify-end gap-3 text-xs">
-        {!r.id && allAxes.length > 0 && (
-          <button type="button" className="text-error font-medium" aria-label={`Remove ${name}`} onClick={() => setRows((cur) => cur.filter((x) => x.rowId !== r.rowId))}>
+        {canAddPack(r) && opts.packs !== false && (
+          <button
+            type="button"
+            className="text-primary font-medium mr-auto"
+            aria-label={`Add pack of ${name}`}
+            onClick={() => setPackDraft({ rowId: r.rowId, quantity: '', price: '', sku: '', note: null })}
+          >
+            + Add pack
+          </button>
+        )}
+        {!r.id && (allAxes.length > 0 || r.pack) && (
+          <button
+            type="button"
+            className="text-error font-medium"
+            aria-label={`Remove ${name}`}
+            /* A new item's packs go with it. */
+            onClick={() => setRows((cur) => cur.filter((x) => x.rowId !== r.rowId && x.pack?.baseRowId !== r.rowId))}
+          >
             Remove
           </button>
         )}
@@ -1268,6 +1453,8 @@ export default function AddEditProductV2Page() {
             {r.remove === false ? 'Undo restore' : 'Restore'}
           </button>
         )}
+      </div>
+      {opts.packs !== false && packForm(r)}
       </div>
     );
   };
@@ -1319,6 +1506,13 @@ export default function AddEditProductV2Page() {
       out.push(...limitsProblems(r.limits, `${r.sku || 'Item'}: `));
     }
     if (duplicateSkus.size) out.push(`SKU used twice: ${[...duplicateSkus].join(', ')}`);
+    /* A new pack names its base by SKU; with several items the base needs one. */
+    const normals = liveRows.filter((r) => !r.pack);
+    for (const r of liveRows.filter((x) => x.pack && !x.id)) {
+      const base = baseOf(r);
+      if (!base || base.deleted || base.remove) out.push(`${itemTitle(r)}: its base item is gone — remove the pack`);
+      else if (!base.id && !base.sku.trim() && normals.length > 1) out.push(`Give ${plainTitle(base)} a SKU so its pack can refer to it`);
+    }
     return out;
   };
 
@@ -1353,6 +1547,7 @@ export default function AddEditProductV2Page() {
       option_media: optionList,
       /* Replaces what is stored; null = no limits. */
       purchase_limits: limitsInput(limits),
+      is_bundle: isBundle,
     };
   };
 
@@ -1409,8 +1604,14 @@ export default function AddEditProductV2Page() {
           ...productBody(),
           items: liveRows.map((r) => {
             const body = itemBody(r) as ItemInput;
+            if (r.pack) {
+              /* A pack names its base by SKU (it has no id yet) and takes its values. */
+              const sku = baseOf(r)?.sku.trim();
+              body.pack_of = { ...(sku ? { base_sku: sku } : {}), quantity: r.pack.quantity };
+              return body;
+            }
             if (allAxes.length) body.attributes = r.attributes;
-            if (r.stock.trim() && effectiveTrack(r)) body.initial_stock = Number(r.stock);
+            if (r.stock.trim() && effectiveTrack(r) && !serialTracked && !isBundle) body.initial_stock = Number(r.stock);
             return body;
           }),
         });
@@ -1419,10 +1620,16 @@ export default function AddEditProductV2Page() {
         /* Product first (so newly ticked option values exist), then items by id:
            adds before deletes, so the last active item is never removed first. */
         await productV2Service.update(existing.id, productBody());
-        for (const r of rows.filter((x) => !x.id && !x.deleted && !x.remove)) {
+        for (const r of rows.filter((x) => !x.id && !x.deleted && !x.remove && !x.pack)) {
           const body = { ...(itemBody(r) as ItemInput), attributes: r.attributes };
-          if (r.stock.trim() && effectiveTrack(r)) body.initial_stock = Number(r.stock);
+          if (r.stock.trim() && effectiveTrack(r) && !serialTracked && !isBundle) body.initial_stock = Number(r.stock);
           await productV2Service.addItem(existing.id, body);
+        }
+        /* New packs after their bases exist: by the base's id, or its SKU when the base is new too. */
+        for (const r of rows.filter((x) => !x.id && !x.deleted && !x.remove && x.pack)) {
+          const base = baseOf(r);
+          const pack_of = base?.id ? { base_item_id: base.id, quantity: r.pack!.quantity } : { base_sku: base?.sku.trim(), quantity: r.pack!.quantity };
+          await productV2Service.addItem(existing.id, { ...(itemBody(r) as ItemInput), pack_of });
         }
         for (const r of rows.filter((x) => x.id && !x.deleted && !x.remove)) {
           const patch = itemChanges(r);
@@ -1746,6 +1953,7 @@ export default function AddEditProductV2Page() {
                   {fulfilmentOpen ? 'expand_more' : 'chevron_right'}
                 </span>
                 Advanced · {FULFILMENT_LABELS[fulfilment]}
+                {isBundle ? ' · Bundle' : ''}
               </button>
               {fulfilmentOpen && (
                 <div id="fulfilment-advanced" className="flex flex-col gap-1 sm:max-w-xs">
@@ -1758,6 +1966,25 @@ export default function AddEditProductV2Page() {
                     ))}
                   </select>
                 </div>
+              )}
+              {fulfilmentOpen && (
+                <label className="flex items-start gap-2 sm:max-w-md cursor-pointer">
+                  <input
+                    type="checkbox"
+                    aria-label="Sold as a bundle"
+                    className="mt-0.5 w-4 h-4 accent-primary"
+                    checked={isBundle}
+                    disabled={rows.some((r) => r.pack && !r.deleted)}
+                    onChange={(e) => setIsBundle(e.target.checked)}
+                  />
+                  <span className="flex flex-col">
+                    <span className={labelClass}>Sold as a bundle</span>
+                    <span className="text-xs text-on-surface-variant">
+                      Its stock comes from the items it contains — choose them on the {label.lowerSingular('allProducts')} page after saving.
+                      {rows.some((r) => r.pack && !r.deleted) ? ' (Not with packs.)' : ''}
+                    </span>
+                  </span>
+                </label>
               )}
             </div>
           </div>
@@ -2173,7 +2400,7 @@ export default function AddEditProductV2Page() {
           {/* No variants: one item, shown as a plain form with its picture. */}
           {allAxes.length === 0 &&
             rows
-              .filter((r) => !r.deleted)
+              .filter((r) => !r.deleted && !r.pack)
               .slice(0, 1)
               .map((r) => (
                 <div key={r.rowId} className="flex flex-col md:flex-row gap-6" data-testid={`row-${r.sku || r.rowId}`}>
@@ -2187,6 +2414,25 @@ export default function AddEditProductV2Page() {
                   </div>
                 </div>
               ))}
+
+          {/* A product without variants: its packs (e.g. Box of 4) under the single item. */}
+          {allAxes.length === 0 && rows.some((r) => r.pack && !r.deleted) && (
+            <div className="flex flex-col gap-3 border-t border-surface-container-low pt-3" data-testid="packs">
+              <h3 className="text-sm font-semibold text-on-surface">Packs</h3>
+              {rows
+                .filter((r) => r.pack && !r.deleted)
+                .map((r) => (
+                  <div key={r.rowId} className={`flex flex-col gap-2 rounded-xl border border-surface-container-high p-3 ${r.remove ? 'opacity-60' : ''}`} data-testid={`row-${r.sku || r.rowId}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-on-surface">{itemTitle(r)}</span>
+                      {statusBadge(r)}
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{itemMainFields(r)}</div>
+                    {itemActions(r)}
+                  </div>
+                ))}
+            </div>
+          )}
 
           {allAxes.length > 0 && rows.length === 0 && (
             <p className="text-sm text-on-surface-variant">No items yet — create them from the combinations in Variants.</p>
@@ -2530,7 +2776,8 @@ export default function AddEditProductV2Page() {
         </aside>
       </div>
 
-      {/* Grid: the open item in a popup. Changes apply to the form straight away; Save draft / Publish saves them. */}
+      {/* Grid: the open item in a popup (design Oct 2026): Basic Information · Purchase Limits · Packs · More.
+          Changes apply to the form straight away; Save draft / Publish saves them. */}
       {itemsView === 'grid' &&
         allAxes.length > 0 &&
         (() => {
@@ -2539,6 +2786,59 @@ export default function AddEditProductV2Page() {
           const r = rows[at];
           const prev = rows[at - 1];
           const next = rows[at + 1];
+          const name = r.sku || 'item';
+          const off = r.deleted || r.remove;
+          const packsOfThis = rows.filter((x) => x.pack && !x.deleted && baseOf(x)?.rowId === r.rowId);
+
+          /** Typed packs become items when leaving the popup; an invalid one keeps it open. */
+          const commitPacks = (): boolean => {
+            const filled = popupPacks.filter((d) => d.quantity.trim() || d.price.trim() || d.sku.trim());
+            const made: ItemRow[] = [];
+            const taken = new Set(packsOfThis.filter((x) => !x.remove).map((x) => x.pack!.quantity));
+            for (const d of filled) {
+              const q = d.quantity.trim();
+              if (!/^\d+$/.test(q) || Number(q) < 2) return setPopupPackNote('Each pack needs a whole number of 2 or more'), false;
+              if (taken.has(Number(q))) return setPopupPackNote(`A pack of ${q} already exists`), false;
+              const price = parseRupees(d.price);
+              if ('error' in price) return setPopupPackNote(price.error), false;
+              taken.add(Number(q));
+              made.push(
+                newRow(
+                  { sku: d.sku.trim(), attributes: r.attributes, price: d.price.trim(), pack: { baseItemId: r.id, baseRowId: r.rowId, quantity: Number(q) } },
+                  r.taxInclusive
+                )
+              );
+            }
+            if (made.length) {
+              setRows((cur) => {
+                const i = cur.findIndex((x) => x.rowId === r.rowId);
+                let end = i + 1;
+                while (end < cur.length && cur[end].pack && baseOf(cur[end])?.rowId === r.rowId) end++;
+                return [...cur.slice(0, end), ...made, ...cur.slice(end)];
+              });
+            }
+            setPopupPacks([]);
+            setPopupPackNote(null);
+            return true;
+          };
+          const leave = (target: string | null) => {
+            if (!commitPacks()) return;
+            setOpenItem(target);
+          };
+
+          const card = 'rounded-xl border border-surface-container-high p-4 flex flex-col gap-3';
+          const head = (icon: string, text: string, right?: React.ReactNode) => (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Icon name={icon} size="sm" />
+                </div>
+                <h3 className="text-sm font-semibold text-on-surface">{text}</h3>
+              </div>
+              {right}
+            </div>
+          );
+
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm"
@@ -2546,36 +2846,261 @@ export default function AddEditProductV2Page() {
               aria-modal="true"
               aria-label={itemTitle(r)}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setOpenItem(null);
+                if (e.key === 'Escape') leave(null);
               }}
             >
-              <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-surface-container-high flex flex-col" data-testid="item-popup">
+              <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto border border-surface-container-high flex flex-col" data-testid="item-popup">
                 <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-surface-container-low">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
                     <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold truncate">{itemTitle(r)}</h2>
                     {statusBadge(r)}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-xs text-on-surface-variant mr-1">
+                    <span className="text-sm text-on-surface-variant mr-2">
                       {at + 1} of {rows.length}
                     </span>
-                    <Button variant="ghost" size="icon-sm" startIcon="chevron_left" disabled={!prev} onClick={() => prev && setOpenItem(prev.rowId)} aria-label="Previous variant" title="Previous" />
-                    <Button variant="ghost" size="icon-sm" startIcon="chevron_right" disabled={!next} onClick={() => next && setOpenItem(next.rowId)} aria-label="Next variant" title="Next" />
-                    <Button variant="ghost" size="icon-sm" startIcon="close" onClick={() => setOpenItem(null)} aria-label="Close" />
+                    <Button variant="outline" size="icon-sm" startIcon="chevron_left" disabled={!prev} onClick={() => prev && leave(prev.rowId)} aria-label="Previous variant" title="Previous" />
+                    <Button variant="outline" size="icon-sm" startIcon="chevron_right" disabled={!next} onClick={() => next && leave(next.rowId)} aria-label="Next variant" title="Next" />
+                    <Button variant="ghost" size="icon-sm" startIcon="close" onClick={() => leave(null)} aria-label="Close" />
                   </div>
                 </div>
-                <div className="px-6 py-5 flex flex-col md:flex-row gap-6">
-                  <div className="md:w-64 shrink-0">
-                    <ImageGallery label="Images for this variant" value={r.media} onChange={(next) => updateRow(r.rowId, { media: next })} />
+
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,22rem)_1fr]">
+                  <div className="p-6 md:border-r border-surface-container-low">
+                    <ImageGallery label="Images for this variant" value={r.media} onChange={(m) => updateRow(r.rowId, { media: m })} />
                   </div>
-                  <div className="flex-1 flex flex-col gap-4">
-                    <div className="grid grid-cols-2 gap-3">{itemMainFields(r)}</div>
-                    {itemMoreFields(r, { images: false })}
+
+                  <div className="p-6 flex flex-col gap-4">
+                    {/* Basic Information */}
+                    <section className={card} aria-label="Basic Information">
+                      {head('inventory_2', 'Basic Information')}
+                      <div className="grid grid-cols-2 gap-3">
+                        {itemMainFields(r)}
+                        {!r.pack && (
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-on-surface-variant">Track inventory</label>
+                            <select aria-label={`Track inventory ${name}`} className={smallInput} value={r.track} disabled={off} onChange={(e) => updateRow(r.rowId, { track: e.target.value as ItemRow['track'] })}>
+                              <option value="same">Same as {label.lowerSingular('allProducts')} ({trackInventory ? 'On' : 'Off'})</option>
+                              <option value="on">On</option>
+                              <option value="off">Off</option>
+                            </select>
+                          </div>
+                        )}
+                        {/* Rental price unit and the tax overrides (only once tax is set). */}
+                              {fulfilment === 'rental' && (
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs font-medium text-on-surface-variant">Price per</label>
+                                  <select aria-label={`Price per ${name}`} className={smallInput} value={r.priceUnit} disabled={off} onChange={(e) => updateRow(r.rowId, { priceUnit: e.target.value as PriceUnit })}>
+                                    {PRICE_UNITS.map((u) => (
+                                      <option key={u} value={u}>
+                                        {u}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                              {showItemTax && (
+                                <>
+                                  <label className="flex items-center gap-2 text-xs font-medium text-on-surface-variant pt-5">
+                                    <input type="checkbox" aria-label={`Includes GST ${name}`} className="w-4 h-4 accent-primary" checked={r.taxInclusive} disabled={off} onChange={(e) => updateRow(r.rowId, { taxInclusive: e.target.checked })} />
+                                    Incl. GST
+                                  </label>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-medium text-on-surface-variant">GST</label>
+                                    <select aria-label={`GST ${name}`} className={smallInput} value={r.gst} disabled={off} onChange={(e) => updateRow(r.rowId, { gst: e.target.value })}>
+                                      <option value="">Same</option>
+                                      {GST_RATES.map((g) => (
+                                        <option key={g} value={String(g)}>
+                                          {g}%
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  {fulfilment !== 'service' && (
+                                    <div className="flex flex-col gap-1">
+                                      <label className="text-xs font-medium text-on-surface-variant">HSN</label>
+                                      <input aria-label={`HSN ${name}`} className={smallInput} placeholder="Same" value={r.hsn} disabled={off} onChange={(e) => updateRow(r.rowId, { hsn: e.target.value })} />
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                      </div>
+                    </section>
+
+                    {/* Purchase Limits (min / max per order) */}
+                    <section className={card} aria-label="Purchase Limits">
+                      <button
+                        type="button"
+                        aria-expanded={Boolean(r.limitsOpen)}
+                        onClick={() => updateRow(r.rowId, { limitsOpen: !r.limitsOpen })}
+                        className="w-full text-left"
+                      >
+                        {head(
+                          'shopping_cart',
+                          'Purchase Limits',
+                          <span className="flex items-center gap-2 text-xs text-on-surface-variant">
+                            {limitsSummaryText(limitsInput(r.limits)) || (limitsSummaryText(limitsInput(limits)) ? `Same as ${label.lowerSingular('allProducts')}` : 'None')}
+                            <span className="material-symbols-outlined text-base" aria-hidden="true">
+                              {r.limitsOpen ? 'expand_less' : 'expand_more'}
+                            </span>
+                          </span>
+                        )}
+                      </button>
+                      {r.limitsOpen && <LimitsFields name={`Limit ${name}`} value={r.limits} inherited={limits} disabled={off} onChange={(nextLimits) => updateRow(r.rowId, { limits: nextLimits })} />}
+                    </section>
+
+                    {/* Packs of this variant (R47–R49) */}
+                    {r.pack ? (
+                      <section className={card} aria-label="Packs">
+                        {head('inventory', 'Pack')}
+                        <p className="text-sm text-on-surface-variant">
+                          A pack of {r.pack.quantity} × {baseOf(r) ? plainTitle(baseOf(r)!) : 'its base item'} — sold from that item's stock.
+                        </p>
+                      </section>
+                    ) : (
+                      canAddPack(r) && (
+                        <section className={card} aria-label="Packs">
+                          {head(
+                            'inventory',
+                            'Packs',
+                            <Button variant="outline" size="sm" startIcon="add" onClick={() => setPopupPacks((cur) => [...cur, { key: Date.now(), quantity: '', price: '', sku: '' }])}>
+                              Add pack
+                            </Button>
+                          )}
+                          {packsOfThis.length === 0 && popupPacks.length === 0 && (
+                            <p className="text-xs text-on-surface-variant">No packs. Sell this item in bigger quantities (e.g. a box of 4) with "Add pack".</p>
+                          )}
+                          {packsOfThis.map((x) => {
+                            const xn = x.sku || 'pack';
+                            return (
+                              <div key={x.rowId} className={`rounded-lg bg-surface-container-low/60 p-3 flex flex-col gap-2 ${x.remove ? 'opacity-60' : ''}`} data-testid={`popup-pack-${xn}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold text-on-surface">
+                                    Pack of {x.pack!.quantity}
+                                    {packSavingText(x) && <span className="ml-2 text-xs font-medium text-secondary">{packSavingText(x)}</span>}
+                                  </span>
+                                  {!x.id ? (
+                                    <button type="button" className="text-xs font-medium text-error flex items-center gap-1" aria-label={`Remove ${xn}`} onClick={() => setRows((cur) => cur.filter((y) => y.rowId !== x.rowId))}>
+                                      <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                                        delete
+                                      </span>
+                                      Remove
+                                    </button>
+                                  ) : (
+                                    isAdmin && (
+                                      <button type="button" className="text-xs font-medium text-error" aria-label={x.remove ? `Keep ${xn}` : `Delete ${xn}`} onClick={() => updateRow(x.rowId, { remove: !x.remove })}>
+                                        {x.remove ? 'Keep' : 'Delete'}
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input aria-label={`Price ${xn}`} inputMode="decimal" placeholder="Pack price ₹" className={smallInput} value={x.price} disabled={x.remove} onChange={(e) => updateRow(x.rowId, { price: e.target.value })} />
+                                  <input aria-label={`SKU ${xn}`} placeholder="SKU (optional)" className={smallInput} value={x.sku} disabled={x.remove} onChange={(e) => updateRow(x.rowId, { sku: e.target.value })} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {popupPacks.map((d, i) => (
+                            <div key={d.key} className="rounded-lg border border-primary/30 bg-primary/[0.03] p-3 flex flex-col gap-2" data-testid="popup-pack-draft">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-semibold text-on-surface">New pack of {itemTitle(r)}</span>
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-error flex items-center gap-1"
+                                  aria-label="Remove new pack"
+                                  onClick={() => setPopupPacks((cur) => cur.filter((y) => y.key !== d.key))}
+                                >
+                                  <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                                    delete
+                                  </span>
+                                  Remove
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                {(
+                                  [
+                                    ['quantity', 'Quantity', 'e.g. 4', 'numeric'],
+                                    ['price', 'Pack price (₹)', 'e.g. 10000', 'decimal'],
+                                    ['sku', 'SKU (optional)', 'e.g. PACK-001', 'text'],
+                                  ] as const
+                                ).map(([k, text, ph, mode]) => (
+                                  <div key={k} className="flex flex-col gap-1">
+                                    <label className="text-xs font-medium text-on-surface-variant">{text}</label>
+                                    <input
+                                      aria-label={`New pack ${text} ${i + 1}`}
+                                      inputMode={mode}
+                                      placeholder={ph}
+                                      className={smallInput}
+                                      value={d[k]}
+                                      onChange={(e) => {
+                                        setPopupPackNote(null);
+                                        setPopupPacks((cur) => cur.map((y) => (y.key === d.key ? { ...y, [k]: e.target.value } : y)));
+                                      }}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {popupPackNote && (
+                            <p className="text-xs text-error" role="alert">
+                              {popupPackNote}
+                            </p>
+                          )}
+                        </section>
+                      )
+                    )}
+
                   </div>
                 </div>
-                <div className="flex justify-between items-center gap-2 px-6 py-4 border-t border-surface-container-low">
-                  <span className="text-xs text-on-surface-variant">Changes are kept in the form — Save draft or Publish to save them.</span>
-                  <Button variant="primary" size="md" onClick={() => setOpenItem(null)} autoFocus>
+
+                <div className="flex justify-between items-center gap-3 px-6 py-4 border-t border-surface-container-low">
+                  <div className="flex items-center gap-4 min-w-0">
+                    {/* This variant: a new one is removed now (with its new packs); a saved one is marked, and
+                        deleted on Save draft / Publish (Admins); a deleted one can be restored. */}
+                    {!r.id ? (
+                      <Button
+                        variant="danger"
+                        size="md"
+                        startIcon="delete"
+                        aria-label={`Remove variant ${itemTitle(r)}`}
+                        onClick={() => {
+                          setPopupPacks([]);
+                          setPopupPackNote(null);
+                          setRows((cur) => cur.filter((x) => x.rowId !== r.rowId && x.pack?.baseRowId !== r.rowId));
+                          setOpenItem(next?.rowId ?? prev?.rowId ?? null);
+                        }}
+                      >
+                        Remove variant
+                      </Button>
+                    ) : r.deleted ? (
+                      isAdmin && (
+                        <Button variant="ghost" size="md" startIcon="restore_from_trash" onClick={() => updateRow(r.rowId, { remove: r.remove === false ? undefined : false })}>
+                          {r.remove === false ? 'Undo restore' : 'Restore'}
+                        </Button>
+                      )
+                    ) : (
+                      isAdmin && (
+                        <Button
+                          variant={r.remove ? 'outline' : 'danger'}
+                          size="md"
+                          startIcon={r.remove ? 'undo' : 'delete'}
+                          aria-label={r.remove ? `Keep variant ${itemTitle(r)}` : `Delete variant ${itemTitle(r)}`}
+                          onClick={() => updateRow(r.rowId, { remove: !r.remove })}
+                        >
+                          {r.remove ? 'Keep' : 'Delete variant'}
+                        </Button>
+                      )
+                    )}
+                    <span className="hidden sm:flex text-xs text-on-surface-variant items-center gap-1.5 truncate">
+                      <span className="material-symbols-outlined text-base" aria-hidden="true">
+                        info
+                      </span>
+                      {r.remove && r.id && !r.deleted ? 'Deleted when you Save draft or Publish.' : 'Changes are kept in the form — Save draft or Publish to save them.'}
+                    </span>
+                  </div>
+                  <Button variant="primary" size="md" onClick={() => leave(null)} autoFocus>
                     Done
                   </Button>
                 </div>

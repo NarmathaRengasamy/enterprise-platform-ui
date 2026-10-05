@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useLabels } from '../context/SiteSettingsContext';
 import {
   Button,
   Icon,
+  MetricsCard,
   Pagination,
   SearchInput,
   Table,
@@ -25,6 +26,7 @@ import type { ProductType } from '../types/productType.types';
 import {
   availabilityLabel,
   ProductSearchResult,
+  ProductStats,
   ProductSort,
   ProductStatus,
   ProductSummary,
@@ -68,6 +70,10 @@ const categoryOptions = (nodes: CategoryNode[], depth = 0): { id: string; label:
 
 const flatCategories = (nodes: CategoryNode[]): CategoryNode[] => nodes.flatMap((n) => [n, ...flatCategories(n.children)]);
 
+/** Tax set on the product (HSN / SAC or a GST rate) — only then is "from · incl. GST" shown. */
+const hasTax = (p: { hsn_code?: string | null; sac_code?: string | null; gst_rate?: number | null }) =>
+  Boolean(p.hsn_code || p.sac_code || (p.gst_rate !== null && p.gst_rate !== undefined));
+
 export default function ProductsV2Page() {
   const label = useLabels();
   const navigate = useNavigate();
@@ -78,6 +84,18 @@ export default function ProductsV2Page() {
   const singular = label.singular('allProducts');
 
   const [result, setResult] = useState<ProductSearchResult | null>(null);
+  /* KPI cards: the whole catalogue, not the current page / filter. */
+  const [stats, setStats] = useState<ProductStats | null>(null);
+  const loadStats = useCallback(async () => {
+    try {
+      setStats(await productV2Service.stats());
+    } catch {
+      setStats(null); // the cards show "—"; the list still works
+    }
+  }, []);
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
   const [type, setType] = useState<ProductType | null>(null);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,24 +135,40 @@ export default function ProductsV2Page() {
       .catch(() => undefined); // the list still works without the filter options
   }, []);
 
+  /** The list's filters as they are now — shared by the search and the CSV export. */
+  const filtersNow = () => ({
+    ...(search ? { search } : {}),
+    ...(categoryId ? { category_id: categoryId } : {}),
+    ...(canEdit ? { status } : {}),
+    ...(Object.keys(attrFilters).length ? { attributes: attrFilters } : {}),
+    ...(sort ? { sort } : {}),
+  });
+  const [isExporting, setIsExporting] = useState(false);
+  const exportCsv = async () => {
+    setIsExporting(true);
+    try {
+      await productV2Service.exportCsv(filtersNow());
+      setToast({ text: `${plural} exported.`, type: 'success' });
+    } catch (e: any) {
+      setToast({ text: `Export failed: ${e?.message || 'Unknown error'}`, type: 'error' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  /* Only the newest request may show its result: a slower, older one (e.g. the
+     reload after a restore, sent with the filters of that moment) never overwrites it. */
+  const requestSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoadError(null);
     try {
-      setResult(
-        await productV2Service.search({
-          ...(search ? { search } : {}),
-          ...(categoryId ? { category_id: categoryId } : {}),
-          ...(canEdit ? { status } : {}),
-          ...(Object.keys(attrFilters).length ? { attributes: attrFilters } : {}),
-          ...(sort ? { sort } : {}),
-          page,
-          limit,
-        })
-      );
+      const next = await productV2Service.search({ ...filtersNow(), page, limit });
+      if (seq === requestSeq.current) setResult(next);
     } catch (e: any) {
-      setLoadError(e.message || `Could not load the ${label.lower('allProducts')}`);
+      if (seq === requestSeq.current) setLoadError(e.message || `Could not load the ${label.lower('allProducts')}`);
     } finally {
-      setIsLoading(false);
+      if (seq === requestSeq.current) setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, categoryId, status, attrFilters, sort, page, limit, canEdit]);
@@ -142,6 +176,9 @@ export default function ProductsV2Page() {
   useEffect(() => {
     void load();
   }, [load]);
+  /* After a delete / restore, reload with the filters in force THEN, not those of the click. */
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
 
   const fields = useMemo(() => new Map((type?.fields ?? []).map((f) => [f.key, f])), [type]);
   const categoryById = useMemo(() => new Map(flatCategories(categories).map((c) => [c.id, c])), [categories]);
@@ -178,7 +215,8 @@ export default function ProductsV2Page() {
       await productV2Service.remove(deleteConfirm.id);
       setToast({ text: `${singular} “${deleteConfirm.name.en}” deleted — it can be restored from Status → Deleted.`, type: 'success' });
       setDeleteConfirm(null);
-      await load();
+      await latestLoad.current();
+      void loadStats();
     } catch (e) {
       setDeleteConfirm(null);
       setToast({ text: `Cannot delete: ${serverText(e)}`, type: 'error' });
@@ -191,7 +229,8 @@ export default function ProductsV2Page() {
     try {
       await productV2Service.restore(p.id);
       setToast({ text: `${singular} “${p.name.en}” restored`, type: 'success' });
-      await load();
+      await latestLoad.current();
+      void loadStats();
     } catch (e) {
       setToast({ text: `Cannot restore: ${serverText(e)}`, type: 'error' });
     }
@@ -214,12 +253,64 @@ export default function ProductsV2Page() {
           </p>
         </div>
         <div className="flex items-center gap-space-xs flex-wrap">
+          {/* What the list matches (all pages), one row per variant. Admin / Editor. */}
+          {canEdit && (
+            <Button variant="outline" size="md" startIcon="download" onClick={() => void exportCsv()} disabled={isExporting}>
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+          )}
           {canEdit && (
             <Button variant="primary" size="md" startIcon="add" onClick={() => navigate('/v2/products/add')}>
               Add {singular}
             </Button>
           )}
         </div>
+      </div>
+
+      {/* KPIs — laid out like the category screen's. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md mb-space-lg" data-testid="product-kpis">
+        <MetricsCard
+          title={`Total ${plural}`}
+          value={stats?.products.total ?? '—'}
+          subtitle={
+            stats
+              ? canEdit
+                ? `${stats.products.active} active · ${stats.products.draft} draft · ${stats.products.archived} archived`
+                : 'Active'
+              : 'Figures unavailable'
+          }
+          icon="inventory_2"
+          variant="primary"
+        />
+        <MetricsCard
+          title="Variants"
+          value={stats?.variants.total ?? '—'}
+          subtitle={stats ? [`${stats.variants.active} active`, stats.variants.packs ? `${stats.variants.packs} ${stats.variants.packs === 1 ? 'pack' : 'packs'}` : null].filter(Boolean).join(' · ') : '—'}
+          icon="style"
+          variant="secondary"
+        />
+        <MetricsCard
+          title="Stock Alerts"
+          value={stats ? stats.stock.low + stats.stock.out : '—'}
+          subtitle={
+            !stats
+              ? '—'
+              : stats.stock.low + stats.stock.out === 0
+                ? stats.stock.tracked
+                  ? 'All stocked'
+                  : 'Nothing tracked'
+                : `${stats.stock.low} low · ${stats.stock.out} out of stock`
+          }
+          icon="warning"
+          variant="tertiary"
+        />
+        <MetricsCard
+          title="Not Priced"
+          value={stats?.not_priced ?? '—'}
+          subtitle={!stats ? '—' : stats.not_priced ? 'Need a price before customers see one' : 'All priced'}
+          icon="sell"
+          variant="neutral"
+        />
       </div>
 
       {loadError && (
@@ -372,8 +463,9 @@ export default function ProductsV2Page() {
                     </TableCell>
                     <TableCell>
                       <span className="font-semibold text-on-surface">{formatMoney(p.from_price?.amount_minor ?? null, p.from_price?.currency ?? p.currency)}</span>
-                      {p.item_count > 1 && p.from_price && <span className="text-xs text-outline"> from</span>}
-                      {p.from_price?.tax_inclusive && (
+                      {/* Tax is optional: a product without it shows just the price. */}
+                      {hasTax(p) && p.item_count > 1 && p.from_price && <span className="text-xs text-outline"> from</span>}
+                      {hasTax(p) && p.from_price?.tax_inclusive && (
                         <span className="ml-2 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">incl. GST</span>
                       )}
                     </TableCell>

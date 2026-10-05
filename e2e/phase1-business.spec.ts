@@ -68,7 +68,7 @@ test('Attributes shows the 3 basic fields; an extra attribute can be added, reti
   const dialog = page.getByRole('dialog', { name: 'Add attribute' });
   await dialog.getByLabel('Name (English)').fill('Warranty (months)');
   await dialog.getByLabel('Type').selectOption('number');
-  await dialog.getByLabel('Unit').fill('months');
+  await dialog.getByLabel('Unit', { exact: true }).fill('months');
   await dialog.getByRole('button', { name: 'Add attribute' }).click();
 
   const row = page.getByTestId('attr-warranty_months');
@@ -100,7 +100,11 @@ test('Phase 1b: Admin adds Colour for variants; an Editor adds an option from th
   await dialog.getByLabel('Name (English)').fill('Colour');
   await dialog.getByLabel('Type').selectOption('enum');
   await expect(dialog.getByLabel('Can be used for variants')).toBeChecked();
-  await dialog.getByLabel('New options').fill('Red\nBlue');
+  /* Options are added one at a time (type + Enter), shown as chips. */
+  await dialog.getByLabel('New option', { exact: true }).fill('Red');
+  await dialog.getByLabel('New option', { exact: true }).press('Enter');
+  await dialog.getByLabel('New option', { exact: true }).fill('Blue');
+  await dialog.getByLabel('New option', { exact: true }).press('Enter');
   await dialog.getByRole('button', { name: 'Add attribute' }).click();
   await expect(page.getByTestId('attr-colour')).toContainText('Red, Blue');
   await expect(page.getByTestId('attr-colour')).toContainText('Variants');

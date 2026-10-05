@@ -100,6 +100,18 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
         : null;
 
   const selected = useMemo(() => templates.find((t) => t.code === category), [templates, category]);
+  /* Accordions (Oct 2026): closed by default, the header shows the current value.
+     With no business category chosen yet, that one starts open. */
+  const [bizOpen, setBizOpen] = useState<boolean | null>(null);
+  const [catOpen, setCatOpen] = useState(false);
+  /* Region & languages: open on first set-up (it holds "Create the starter categories"). */
+  const [regionOpen, setRegionOpen] = useState<boolean | null>(null);
+  const regionIsOpen = regionOpen ?? !saved?.business_category;
+  /* Business category starts open (Oct 2026); it can be closed. */
+  const bizIsOpen = bizOpen ?? true;
+  const savedTemplate = templates.find((t) => t.code === saved?.business_category);
+  /* Once chosen, the business category is locked (Oct 2026; the server refuses a change, 409). */
+  const categoryLocked = Boolean(saved?.business_category);
 
   const toggleLanguage = (lang: Language) => {
     if (lang === 'en') return;
@@ -171,14 +183,34 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
 
   return (
     <div className="space-y-5 mt-5 pb-8" data-testid="business-settings">
-      <section className="bg-white rounded-xl border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold text-on-surface">Business category</h2>
-            <p className="text-sm text-outline mt-0.5">
-              Decides which product fields you start with. You can add your own attributes afterwards.
-            </p>
-          </div>
+      <section className="bg-white rounded-xl border border-slate-200" aria-label="Business category">
+        <div className={`px-6 py-4 flex items-center justify-between gap-4 ${bizIsOpen ? 'border-b border-slate-100' : ''}`}>
+          <button
+            type="button"
+            aria-expanded={bizIsOpen}
+            aria-controls="business-category-body"
+            onClick={() => setBizOpen(!bizIsOpen)}
+            className="flex items-center gap-2 text-left min-w-0 flex-1"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">
+              {bizIsOpen ? 'expand_more' : 'chevron_right'}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-base font-semibold text-on-surface">
+                Business category
+                <span className="font-normal text-on-surface-variant"> · {savedTemplate?.name.en ?? 'Not chosen yet'}</span>
+                {categoryLocked && (
+                  <span className="material-symbols-outlined text-sm text-on-surface-variant align-middle ml-1" title="Locked" aria-label="Locked">
+                    lock
+                  </span>
+                )}
+                {category && category !== saved.business_category && (
+                  <span className="ml-2 text-xs font-medium text-amber-700">changing to {selected?.name.en ?? category} — save to apply</span>
+                )}
+              </span>
+              <span className="block text-sm text-outline mt-0.5">Decides which product fields you start with. You can add your own attributes afterwards.</span>
+            </span>
+          </button>
           {productType && (
             <Button variant="outline" size="sm" onClick={() => navigate('/attributes')}>
               Open Attributes
@@ -186,8 +218,19 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
           )}
         </div>
 
+        {bizIsOpen && (
+        <div id="business-category-body">
+        {categoryLocked && (
+          <p className="mx-6 mt-5 flex items-center gap-2 text-sm text-on-surface-variant" data-testid="business-category-locked">
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              lock
+            </span>
+            The business category can't be changed once chosen. Add or retire fields in Attributes.
+          </p>
+        )}
         <div className="px-6 py-5 grid grid-cols-1 md:grid-cols-3 gap-4" role="radiogroup" aria-label="Business category">
-          {templates.map((t) => {
+          {/* Locked: only the chosen one is shown. */}
+          {templates.filter((t) => !categoryLocked || t.code === saved.business_category).map((t) => {
             const on = category === t.code;
             return (
               <button
@@ -195,7 +238,7 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
                 type="button"
                 role="radio"
                 aria-checked={on}
-                disabled={!isAdmin}
+                disabled={!isAdmin || categoryLocked}
                 onClick={() => {
                   setCategory(t.code);
                   setConfirming(false);
@@ -207,7 +250,14 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-on-surface">{t.name.en}</span>
                   {saved.business_category === t.code && (
-                    <span className="text-[10px] font-semibold uppercase text-primary">Current</span>
+                    <span className="text-[10px] font-semibold uppercase text-primary flex items-center gap-1">
+                      {categoryLocked && (
+                        <span className="material-symbols-outlined text-xs" aria-hidden="true">
+                          lock
+                        </span>
+                      )}
+                      {categoryLocked ? 'Locked' : 'Current'}
+                    </span>
                   )}
                 </div>
                 <p className="text-xs text-outline mt-1">{t.field_count} fields</p>
@@ -236,12 +286,36 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
             </ul>
           </details>
         )}
+        </div>
+        )}
       </section>
 
-      <section className="bg-white rounded-xl border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-on-surface">Region & languages</h2>
+      <section className="bg-white rounded-xl border border-slate-200" aria-label="Region & languages">
+        <div className={`px-6 py-4 ${regionIsOpen ? 'border-b border-slate-100' : ''}`}>
+          <button
+            type="button"
+            aria-expanded={regionIsOpen}
+            aria-controls="region-body"
+            onClick={() => setRegionOpen(!regionIsOpen)}
+            className="flex items-center gap-2 text-left w-full"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">
+              {regionIsOpen ? 'expand_more' : 'chevron_right'}
+            </span>
+            <span className="text-base font-semibold text-on-surface">
+              Region & languages
+              <span className="font-normal text-on-surface-variant">
+                {' '}
+                · {saved.timezone} · {saved.default_currency} · {(saved.languages ?? ['en']).map((l: Language) => LANGUAGE_LABELS[l]).join(', ')}
+              </span>
+              {(timezone !== saved.timezone || currency !== saved.default_currency || [...languages].sort().join() !== [...(saved.languages ?? ['en'])].sort().join()) && (
+                <span className="ml-2 text-xs font-medium text-amber-700">changed — save to apply</span>
+              )}
+            </span>
+          </button>
         </div>
+        {regionIsOpen && (
+        <div id="region-body">
         <div className="px-6 py-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
           <label className="block text-sm">
             <span className="block font-medium text-on-surface mb-1.5">Time zone</span>
@@ -292,21 +366,40 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
             Create the starter categories for this business (shown on the Category Tree)
           </label>
         )}
+        </div>
+        )}
       </section>
 
-      <section className="bg-white rounded-xl border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold text-on-surface">Categories</h2>
-            <p className="text-sm text-outline mt-0.5">
-              A flat list by default. Switch the tree on to nest sub-categories, up to 5 levels deep.
-            </p>
-          </div>
+      <section className="bg-white rounded-xl border border-slate-200" aria-label="Categories">
+        <div className={`px-6 py-4 flex items-center justify-between gap-4 ${catOpen || modeError ? 'border-b border-slate-100' : ''}`}>
+          <button
+            type="button"
+            aria-expanded={catOpen || Boolean(modeError)}
+            aria-controls="categories-body"
+            onClick={() => setCatOpen((o) => !o)}
+            className="flex items-center gap-2 text-left min-w-0 flex-1"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">
+              {catOpen || modeError ? 'expand_more' : 'chevron_right'}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-base font-semibold text-on-surface">
+                Categories
+                <span className="font-normal text-on-surface-variant"> · {savedMode === 'tree' ? 'Tree' : 'Flat list'}</span>
+                {categoryMode !== savedMode && (
+                  <span className="ml-2 text-xs font-medium text-amber-700">changing to {categoryMode === 'tree' ? 'Tree' : 'Flat list'} — save to apply</span>
+                )}
+              </span>
+              <span className="block text-sm text-outline mt-0.5">A flat list by default. Switch the tree on to nest sub-categories, up to 5 levels deep.</span>
+            </span>
+          </button>
           <Button variant="outline" size="sm" onClick={() => navigate('/category-tree')}>
             Open Category Tree
           </Button>
         </div>
-        <div className="px-6 py-5">
+        {/* A refusal (e.g. switching the tree off while sub-categories exist) keeps it open. */}
+        {(catOpen || modeError) && (
+        <div className="px-6 py-5" id="categories-body">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -343,6 +436,7 @@ export const BusinessSettingsTab: React.FC<Props> = ({ isAdmin, onMessage }) => 
             </div>
           )}
         </div>
+        )}
       </section>
 
       {confirming && (

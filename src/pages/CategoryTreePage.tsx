@@ -17,6 +17,8 @@ import {
   Toast,
   ToastMessage,
 } from '../components/common';
+import { IconPicker } from '../components/common/IconPicker';
+import { CategoryIcon } from '../components/common/CategoryIcon';
 import { catalogCategoryService } from '../services/catalogCategory.service';
 import { productTypeService } from '../services/productType.service';
 import type { ProductType, Translated } from '../types/productType.types';
@@ -255,6 +257,10 @@ const CategoryEditor: React.FC<{
   parentChoices: { id: string; label: string }[];
 }> = ({ title, saveLabel, state, onChange, onCancel, onSave, saving, error, treeMode, attributes, inherited, parentChoices }) => {
   const set = (patch: Partial<EditorState>) => onChange({ ...state, ...patch });
+  /* Tamil / Hindi as an Advanced option (like the product form): closed by default,
+     open when the category already has one, the count shows what is filled. */
+  const [langOpen, setLangOpen] = React.useState(Boolean(state.ta.trim() || state.hi.trim()));
+  const langFilled = [state.ta, state.hi].filter((t) => t.trim()).length;
   const code = state.code.trim().toLowerCase();
   const codeInvalid = state.mode === 'add' && code !== '' && !CATEGORY_CODE_PATTERN.test(code);
   const canSave =
@@ -300,19 +306,35 @@ const CategoryEditor: React.FC<{
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
             <label className={labelClass} htmlFor="cat-en">Name (English) *</label>
             <input id="cat-en" aria-label="Name (English)" className={inputClass} value={state.en} maxLength={120} onChange={(e) => set({ en: e.target.value })} />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className={labelClass} htmlFor="cat-ta">Tamil</label>
-            <input id="cat-ta" aria-label="Name (Tamil)" className={inputClass} value={state.ta} maxLength={120} onChange={(e) => set({ ta: e.target.value })} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className={labelClass} htmlFor="cat-hi">Hindi</label>
-            <input id="cat-hi" aria-label="Name (Hindi)" className={inputClass} value={state.hi} maxLength={120} onChange={(e) => set({ hi: e.target.value })} />
-          </div>
+          <button
+            type="button"
+            aria-expanded={langOpen}
+            aria-controls="cat-other-languages"
+            onClick={() => setLangOpen((o) => !o)}
+            className="flex items-center gap-1 text-sm font-medium text-primary self-start"
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              {langOpen ? 'expand_more' : 'chevron_right'}
+            </span>
+            Advanced · Other languages{langFilled ? ` (${langFilled})` : ''}
+          </button>
+          {langOpen && (
+            <div id="cat-other-languages" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className={labelClass} htmlFor="cat-ta">Tamil</label>
+                <input id="cat-ta" aria-label="Name (Tamil)" className={inputClass} value={state.ta} maxLength={120} onChange={(e) => set({ ta: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className={labelClass} htmlFor="cat-hi">Hindi</label>
+                <input id="cat-hi" aria-label="Name (Hindi)" className={inputClass} value={state.hi} maxLength={120} onChange={(e) => set({ hi: e.target.value })} />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-1">
@@ -350,16 +372,9 @@ const CategoryEditor: React.FC<{
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1">
-            <label className={labelClass} htmlFor="cat-icon">Icon</label>
-            <input
-              id="cat-icon"
-              aria-label="Icon"
-              className={inputClass}
-              placeholder="category"
-              value={state.icon}
-              maxLength={60}
-              onChange={(e) => set({ icon: e.target.value })}
-            />
+            <span className={labelClass}>Icon</span>
+            {/* Picked from lucide-react (saved as "lucide:<name>"); older typed names still show. */}
+            <IconPicker value={state.icon} color={/^#[0-9a-f]{6}$/i.test(state.color) ? state.color : undefined} onChange={(icon) => set({ icon })} />
           </div>
           <div className="flex flex-col gap-1">
             <label className={labelClass} htmlFor="cat-color">Colour</label>
@@ -917,7 +932,7 @@ export default function CategoryTreePage() {
               className="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shrink-0"
               style={node.color ? { color: node.color } : undefined}
             >
-              <Icon name={node.icon || 'category'} size="lg" />
+              <CategoryIcon value={node.icon === 'category' ? '' : node.icon} size={20} />
             </div>
             <div className="flex flex-col min-w-0">
               <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors truncate">
@@ -1061,7 +1076,7 @@ export default function CategoryTreePage() {
           </p>
         </div>
         <div className="flex items-center gap-space-xs flex-wrap">
-          <Button variant="hover" size="md" startIcon="arrow_back" onClick={() => navigate('/products')}>
+          <Button variant="hover" size="md" startIcon="arrow_back" onClick={() => navigate('/v2/products')}>
             Back to {label.plural('allProducts')}
           </Button>
           {canEdit && (
@@ -1138,21 +1153,7 @@ export default function CategoryTreePage() {
         </div>
       )}
 
-      {list && !treeMode && (
-        <div className="mb-4 p-4 rounded-xl bg-primary-container/10 border border-primary/20 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-sm text-on-surface">
-            <Icon name="account_tree" size="md" color="primary" />
-            <span>
-              {plural} are a flat list. To add sub-categories, switch on <strong>Use category tree</strong> in Settings → Business & Products.
-            </span>
-          </div>
-          {isAdmin && (
-            <Button variant="soft" size="sm" onClick={() => navigate('/settings')}>
-              Go to Settings
-            </Button>
-          )}
-        </div>
-      )}
+      {/* The flat-list hint ("… are a flat list. To add sub-categories …") is not shown (Oct 2026); the tree is switched on in Settings → Business & Products. */}
 
       <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-low/60 flex flex-col relative">
         {/* Toolbar */}

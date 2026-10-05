@@ -95,6 +95,7 @@ const renderPage = () =>
 
 beforeEach(() => {
   role.current = 'Admin';
+  localStorage.clear();
   Object.values(api).forEach((f) => f.mockReset());
   api.get.mockResolvedValue(PRODUCT);
   types.get.mockResolvedValue(TYPE);
@@ -125,22 +126,92 @@ describe('ProductV2DetailsPage', () => {
     expect(screen.getByTestId('product-audit')).toHaveTextContent('by editor-1');
   });
 
-  it('lists the items with values, price, MRP, tax and availability or "Not tracked"', async () => {
+  it('shows the items as cards by default: picture, values, price and availability or "Not tracked"', async () => {
     renderPage();
-    const petrol = await screen.findByTestId('item-CRETA-P');
+    const grid = await screen.findByTestId('items-grid');
+    const petrol = within(grid).getByTestId('item-CRETA-P');
     expect(petrol).toHaveTextContent('Petrol');
     expect(petrol).toHaveTextContent('₹15,49,999.50');
-    expect(petrol).toHaveTextContent('₹16,00,000'); // MRP
-    expect(petrol).toHaveTextContent('GST 28% · HSN 8703');
     expect(petrol).toHaveTextContent('2 in stock');
-    expect(screen.getByTestId('item-CRETA-D')).toHaveTextContent('Not tracked');
+    /* No photos of its own: the product's, faded, and said so. */
+    expect(petrol).toHaveTextContent('uses product photos');
+    const diesel = within(grid).getByTestId('item-CRETA-D');
+    expect(diesel).toHaveTextContent('Not tracked');
+    expect(diesel).toHaveTextContent('uses Diesel photos');
   });
 
-  it('shows product and per-option media', async () => {
+  it('switches to a table (remembered) with MRP and tax', async () => {
+    renderPage();
+    await screen.findByTestId('items-grid');
+    await userEvent.click(screen.getByRole('button', { name: 'Table view' }));
+    const table = screen.getByRole('table', { name: 'Items' });
+    const petrol = within(table).getByTestId('item-CRETA-P');
+    expect(petrol).toHaveTextContent('₹16,00,000'); // MRP
+    expect(petrol).toHaveTextContent('GST 28% · HSN 8703');
+    expect(localStorage.getItem('v2_details_items_view')).toBe('table');
+  });
+
+  it('opens a variant in a popup with its pictures and details; Previous / Next; Edit', async () => {
+    api.get.mockResolvedValue({
+      ...PRODUCT,
+      items: [
+        item('CRETA-P', { media: [{ url: '/uploads/p1.png', kind: 'image' }, { url: '/uploads/p2.png', kind: 'image' }], limits_summary: 'Max 1 per order', purchase_limits: { max_per_order: 1 } }),
+        PRODUCT.items[1],
+      ],
+    });
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Petrol' }));
+    const dialog = screen.getByRole('dialog', { name: 'Petrol' });
+    expect(within(dialog).getByText('1 of 2')).toBeInTheDocument();
+    const details = within(dialog).getByTestId('item-view-details');
+    expect(details).toHaveTextContent('CRETA-P');
+    expect(details).toHaveTextContent('₹16,00,000');
+    expect(details).toHaveTextContent('On · Serial numbers');
+    expect(details).toHaveTextContent('Max 1 per order');
+    expect(details).toHaveTextContent('This item has its own limits');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Show image 2' }));
+    expect(within(dialog).getByRole('img', { name: 'Petrol' })).toHaveAttribute('src', expect.stringContaining('/uploads/p2.png'));
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Next variant' }));
+    const next = screen.getByRole('dialog', { name: 'Diesel' });
+    expect(within(next).getByText('2 of 2')).toBeInTheDocument();
+    expect(next).toHaveTextContent('No photos of its own — uses Diesel photos');
+    expect(within(next).getByRole('button', { name: 'Next variant' })).toBeDisabled();
+    await userEvent.click(within(next).getByRole('button', { name: 'Edit' }));
+    expect(await screen.findByText('edit page')).toBeInTheDocument();
+  });
+
+  it("shows sizes, the price per unit and each item's limits (Phase 3b)", async () => {
+    api.get.mockResolvedValue({
+      ...PRODUCT,
+      variant_axes: [{ key: 'net_quantity', values: [{ amount: 500, unit: 'ml' }, { amount: 1, unit: 'l' }] }],
+      purchase_limits: { min_per_order: null, max_per_order: 2, per_customer: { day: null, week: null, month: 4, year: null, lifetime: null } },
+      items: [
+        item('OIL-500', {
+          attributes: [{ key: 'net_quantity', value: 500 }],
+          measure: { amount: 500, unit: 'ml', base_amount: 500 },
+          price_per_unit: { amount_minor: 3600, currency: 'INR', tax_inclusive: true, per: '100 ml' },
+          limits_summary: 'Max 2 per order · 4 per customer every 30 days',
+        }),
+      ],
+    });
+    renderPage();
+    const attrs = await screen.findByTestId('product-attributes');
+    expect(attrs).toHaveTextContent('500 ml, 1 l');
+    expect(screen.getByTestId('product-limits')).toHaveTextContent('Max 2 per order · 4 per customer every 30 days');
+    await userEvent.click(screen.getByRole('button', { name: 'Table view' }));
+    expect(screen.getByTestId('item-OIL-500')).toHaveTextContent('500 ml');
+    expect(screen.getByTestId('per-unit-OIL-500')).toHaveTextContent('₹36 / 100 ml');
+    expect(screen.getByTestId('limits-OIL-500')).toHaveTextContent('Max 2 per order');
+  });
+
+  it("shows the common media only: product and per-option (a variant's own photos are in its popup)", async () => {
+    api.get.mockResolvedValue({ ...PRODUCT, items: [item('CRETA-P', { media: [{ url: '/uploads/own.png', kind: 'image' }] }), PRODUCT.items[1]] });
     renderPage();
     const media = await screen.findByTestId('product-media');
     expect(media.querySelectorAll('img')).toHaveLength(2);
     expect(media).toHaveTextContent('Fuel = Diesel');
+    expect(media.innerHTML).not.toContain('own.png');
   });
 
   it('publishes, or lists the reasons the server gives', async () => {

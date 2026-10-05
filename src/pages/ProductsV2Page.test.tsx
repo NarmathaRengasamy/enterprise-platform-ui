@@ -107,7 +107,7 @@ describe('ProductsV2Page', () => {
     expect(lastSearch()).toEqual({ status: 'all', page: 1, limit: 20 });
   });
 
-  it('sends search, category (by id, tree indented), status, brand and a ₹ price range as paise', async () => {
+  it('sends search, category (by id, tree indented) and status; no Brand, price range or Show deleted (1 Oct 2026)', async () => {
     renderPage();
     await screen.findByTestId('product-creta');
     await userEvent.type(screen.getByLabelText('Search All Products'), 'creta');
@@ -115,39 +115,29 @@ describe('ProductsV2Page', () => {
     expect(within(screen.getByLabelText('Category')).getAllByRole('option').map((o) => o.textContent)).toEqual(['All categories', 'Cars', '— SUV']);
     await userEvent.selectOptions(screen.getByLabelText('Category'), 'c-suv');
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'active');
-    await userEvent.type(screen.getByLabelText('Brand'), 'Hyundai');
-    await userEvent.type(screen.getByLabelText('Lowest price (₹)'), '1000');
-    await userEvent.type(screen.getByLabelText('Highest price (₹)'), '1549999.50');
-    await waitFor(() =>
-      expect(lastSearch()).toMatchObject({
-        search: 'creta',
-        category_id: 'c-suv',
-        status: 'active',
-        brand: 'Hyundai',
-        price_min_minor: 100000,
-        price_max_minor: 154999950,
-      })
-    );
+    await waitFor(() => expect(lastSearch()).toMatchObject({ search: 'creta', category_id: 'c-suv', status: 'active' }));
+    expect(lastSearch()).not.toHaveProperty('brand');
+    expect(lastSearch()).not.toHaveProperty('price_min_minor');
+    for (const gone of ['Brand', 'Lowest price (₹)', 'Highest price (₹)', 'Show deleted']) expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
+    /* Search, every filter and the sort sit in one row. */
+    const row = screen.getByTestId('product-filters');
+    for (const name of ['Search All Products', 'Category', 'Status', 'Colour', 'Sort']) expect(within(row).getByLabelText(name)).toBeInTheDocument();
   });
 
-  it('holds back an unusable price range', async () => {
+  it('filters by attribute from a dropdown with counts, and sorts (incl. by size)', async () => {
     renderPage();
     await screen.findByTestId('product-creta');
-    const calls = api.search.mock.calls.length;
-    await userEvent.type(screen.getByLabelText('Lowest price (₹)'), 'abc');
-    expect(await screen.findByText(/Enter prices in ₹/)).toBeInTheDocument();
-    expect(api.search.mock.calls.length).toBe(calls);
-  });
-
-  it('filters by attribute from the facets and sorts', async () => {
-    renderPage();
-    await screen.findByTestId('product-creta');
-    const facets = screen.getByTestId('facets');
-    expect(facets).toHaveTextContent('Colour');
-    await userEvent.click(within(facets).getByRole('button', { name: /Red/ }));
+    const colour = screen.getByLabelText('Colour');
+    expect(within(colour).getAllByRole('option').map((o) => o.textContent)).toEqual(['All colour', 'Red (1)', 'White (1)']);
+    await userEvent.selectOptions(colour, 'red');
     await waitFor(() => expect(lastSearch()).toMatchObject({ attributes: { colour: ['red'] } }));
+    expect(within(screen.getByLabelText('Sort')).getAllByRole('option').map((o) => o.textContent)).toEqual(
+      expect.arrayContaining(['Size: small to large', 'Size: large to small'])
+    );
     await userEvent.selectOptions(screen.getByLabelText('Sort'), 'price_asc');
     await waitFor(() => expect(lastSearch()).toMatchObject({ sort: 'price_asc', attributes: { colour: ['red'] } }));
+    await userEvent.selectOptions(colour, '');
+    await waitFor(() => expect(lastSearch()).not.toHaveProperty('attributes'));
     await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
     await waitFor(() => expect(lastSearch()).toEqual({ status: 'all', page: 1, limit: 20 }));
   });
@@ -160,20 +150,22 @@ describe('ProductsV2Page', () => {
     await waitFor(() => expect(lastSearch()).toMatchObject({ limit: 50, page: 1 }));
   });
 
-  it('deletes after confirmation and restores from Show deleted', async () => {
+  it('deletes after confirmation and restores from Status → Deleted', async () => {
     api.remove.mockResolvedValue(undefined);
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Delete Creta' }));
     const dialog = screen.getByRole('dialog', { name: 'Delete Creta' });
     expect(dialog).toHaveTextContent('3 items');
+    expect(dialog).toHaveTextContent('Status → Deleted');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete Product' }));
     await waitFor(() => expect(api.remove).toHaveBeenCalledWith('id-creta'));
-    expect(await screen.findByText(/deleted — it can be restored/)).toBeInTheDocument();
+    expect(await screen.findByText(/deleted — it can be restored from Status → Deleted/)).toBeInTheDocument();
 
     api.search.mockResolvedValue({ ...RESULT, items: [summary('creta', { is_deleted: true })], total: 1 });
     api.restore.mockRejectedValue(Object.assign(new Error('Another live item now uses the SKU "X"'), { status: 409 }));
-    await userEvent.click(screen.getByLabelText('Show deleted'));
-    await waitFor(() => expect(lastSearch()).toMatchObject({ include_deleted: true }));
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'deleted');
+    await waitFor(() => expect(lastSearch()).toMatchObject({ status: 'deleted' }));
+    expect(lastSearch()).not.toHaveProperty('include_deleted');
     await userEvent.click(await screen.findByRole('button', { name: 'Restore Creta' }));
     expect(await screen.findByText('Cannot restore: Another live item now uses the SKU "X"')).toBeInTheDocument();
   });

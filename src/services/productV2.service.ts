@@ -1,4 +1,4 @@
-import { API_V2_BASE_URL, client } from './client';
+import { API_V2_BASE_URL, client, getToken } from './client';
 import {
   ItemInput,
   ItemPatch,
@@ -6,6 +6,7 @@ import {
   ProductPatch,
   ProductSearchFilters,
   ProductSearchResult,
+  ProductStats,
   ProductV2,
   AnyVariantAxis,
   VariantCombination,
@@ -28,6 +29,42 @@ const need = <T>(value: T | undefined, what: string): T => {
 export const productV2Service = {
   async search(filters: ProductSearchFilters): Promise<ProductSearchResult> {
     return need((await client.post<ProductSearchResult>('/products/search', filters, v2)).data, 'products');
+  },
+
+  /**
+   * What the list matches (its filters, every page) as a CSV, one row per
+   * variant — downloaded as products-YYYY-MM-DD.csv. Admin / Editor.
+   */
+  async exportCsv(filters: Omit<ProductSearchFilters, 'page' | 'limit'>): Promise<void> {
+    const token = getToken();
+    const res = await fetch(`${API_V2_BASE_URL}/products/export`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(filters),
+    });
+    if (!res.ok) {
+      let message = `Export failed (${res.status})`;
+      try {
+        message = (await res.json())?.message || message;
+      } catch {
+        /* not JSON */
+      }
+      throw new Error(message);
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'products.csv';
+    const url = window.URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /** The products list KPIs (whole catalogue). */
+  async stats(): Promise<ProductStats> {
+    return need((await client.get<ProductStats>('/products/stats', v2)).data, 'figures');
   },
 
   async get(id: string, includeDeleted = false): Promise<ProductV2> {

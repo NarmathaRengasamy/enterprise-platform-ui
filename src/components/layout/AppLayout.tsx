@@ -39,7 +39,8 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
     if (path.startsWith('/v2/products')) return 'products-v2';
     if (path.startsWith('/conversations')) return 'conversations';
     if (path.startsWith('/categories')) return 'categories';
-    if (path.startsWith('/attributes')) return 'attributes';
+    /* No sidebar entry (temporary clean-up): reached from Settings → Business & Products. */
+    if (path.startsWith('/attributes')) return 'settings';
     if (path.startsWith('/category-tree')) return 'category-tree';
     if (path.startsWith('/products/new') || path.startsWith('/products/add')) return 'add-product';
     if (path.startsWith('/products/edit') || path.includes('/edit')) return 'edit-product';
@@ -308,7 +309,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                   type="button"
                   onClick={() => {
                     if (!isSidebarOpen) {
-                      handleNav('products', '/products');
+                      handleNav('products-v2', '/v2/products');
                     } else {
                       setProductsSubmenuOpen(!productsSubmenuOpen);
                     }
@@ -341,28 +342,8 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
 
                 {isSidebarOpen && productsSubmenuOpen && (
                   <div className="flex flex-col gap-1 pl-6 ml-2 animate-fadeIn">
-                    {/* 3.1 All Products */}
-                    <button
-                      type="button"
-                      onClick={() => handleNav('products', '/products')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
-                        activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
-                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
-                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          activeModule === 'products' || activeModule === 'add-product' || activeModule === 'product-details' || activeModule === 'edit-product'
-                            ? 'bg-primary-fixed-dim'
-                            : 'bg-outline/40'
-                        }`}
-                      />
-                      <span>{label.plural('allProducts')}</span>
-                    </button>
-
-                    {/* 3.1b The new products (Phase 3): "(new)" tells them apart
-                        from 3.1 until the Phase 5 cut-over. */}
+                    {/* All Products — the new products (Phase 3). The old list (/products)
+                        is hidden from the sidebar (temporary clean-up); its URLs still work. */}
                     <button
                       type="button"
                       onClick={() => handleNav('products-v2', '/v2/products')}
@@ -377,49 +358,12 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                           activeModule === 'products-v2' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
                         }`}
                       />
-                      <span>{label.plural('allProducts')} (new)</span>
+                      <span>{label.plural('allProducts')}</span>
                     </button>
 
-                    {/* 3.2 Categories */}
-                    <button
-                      type="button"
-                      onClick={() => handleNav('categories', '/categories')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
-                        activeModule === 'categories'
-                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
-                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          activeModule === 'categories' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
-                        }`}
-                      />
-                      <span>{label.plural('categories')}</span>
-                    </button>
-
-                    {/* 3.3 Attributes — the product fields pre-loaded from the
-                        business category, plus the admin's own. */}
-                    <button
-                      type="button"
-                      onClick={() => handleNav('attributes', '/attributes')}
-                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm transition-all text-left cursor-pointer ${
-                        activeModule === 'attributes'
-                          ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
-                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          activeModule === 'attributes' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
-                        }`}
-                      />
-                      <span>Attributes</span>
-                    </button>
-
-                    {/* 3.4 The new categories (flat list, or a tree once switched
-                        on). "(new)" tells it apart from 3.2 until the Phase 5
-                        cut-over, when only one labelled entry remains. */}
+                    {/* Categories — the new categories (flat list, or a tree once switched on).
+                        The old screen (/categories) is hidden from the sidebar; its URL still works.
+                        Attributes are reached from Settings → Business & Products. */}
                     <button
                       type="button"
                       onClick={() => handleNav('category-tree', '/category-tree')}
@@ -434,7 +378,7 @@ export default function AppLayout({ activeModule: activeModuleProp, setActiveMod
                           activeModule === 'category-tree' ? 'bg-primary-fixed-dim' : 'bg-outline/40'
                         }`}
                       />
-                      <span>{label.plural('categories')} (new)</span>
+                      <span>{label.plural('categories')}</span>
                     </button>
                   </div>
                 )}

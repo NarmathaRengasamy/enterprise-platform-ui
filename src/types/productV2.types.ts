@@ -153,7 +153,32 @@ export interface Price {
 
 export type Availability =
   | { status: 'not_tracked' }
-  | { status: 'tracked'; on_hand: number; reserved: number; available: number };
+  | {
+      status: 'tracked';
+      on_hand: number;
+      reserved: number;
+      available: number;
+      /* Phase 4 (optional: older responses and fixtures leave them out) */
+      reorder_point?: number;
+      /** available ≤ reorder point (and a reorder point is set). */
+      low_stock?: boolean;
+      /** Worked out from another item's stock: a pack's base, or a bundle's components. */
+      from?: 'pack' | 'bundle';
+    };
+
+/** A pack (R47): `quantity` × its base item of the same product. */
+export interface PackOf {
+  base_item_id: string;
+  quantity: number;
+}
+
+/** What a pack saves against buying the singles (R49), display only. */
+export interface PackSaving {
+  /** 0.1 = 10 % cheaper; negative when the pack costs more. */
+  fraction: number;
+  percent: number;
+  amount_minor: number;
+}
 
 export interface ProductItem {
   id: string;
@@ -186,6 +211,11 @@ export interface ProductItem {
   effective_limits?: PurchaseLimits;
   /** "Max 2 per order · 4 per customer every 30 days"; "" when none. */
   limits_summary?: string;
+  /* Phase 4 — optional here so older fixtures still type-check. */
+  /** Set for a pack; null for a normal item. */
+  pack_of?: PackOf | null;
+  /** null unless the pack and its base are both priced with the same tax_inclusive. */
+  pack_saving?: PackSaving | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -257,6 +287,17 @@ export interface ProductSearchFilters {
   limit?: number;
 }
 
+/** GET /v2/products/stats — the products list KPIs, for the whole catalogue (a Viewer: active only). */
+export interface ProductStats {
+  products: { total: number; active: number; draft: number; archived: number };
+  /** Normal items; packs counted apart. */
+  variants: { total: number; active: number; packs: number };
+  /** Active, tracked items holding stock: out = available ≤ 0; low = at or below the reorder point. */
+  stock: { tracked: number; low: number; out: number };
+  /** Active items (packs included) with no price. */
+  not_priced: number;
+}
+
 export interface ProductSearchResult {
   items: ProductSummary[];
   total: number;
@@ -288,9 +329,15 @@ export interface ItemInput {
   initial_stock?: number;
   /** Each null value = the product's value; null clears the override. */
   purchase_limits?: PurchaseLimitsInput | null;
+  /**
+   * Make this item a pack (R47) of a base item of the same product: by SKU in
+   * the create body (the base has no id yet), by id or SKU when adding an item.
+   * A pack takes no attributes, no Track inventory and no initial stock.
+   */
+  pack_of?: { base_item_id?: string; base_sku?: string; quantity: number } | null;
 }
 
-export type ItemPatch = Omit<ItemInput, 'attributes' | 'initial_stock'>;
+export type ItemPatch = Omit<ItemInput, 'attributes' | 'initial_stock' | 'pack_of'>;
 
 export interface ProductInput {
   name: Translated;
