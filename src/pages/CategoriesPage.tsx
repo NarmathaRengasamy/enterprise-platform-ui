@@ -9,6 +9,7 @@ import {
   TableRow,
   TableCell,
   TableEmptyState,
+  Pagination,
   SearchInput,
   Icon,
 } from '../components/common';
@@ -44,12 +45,16 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
-  // Search & Filter states
+  // Search, Filter & Pagination states
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'with-products' | 'empty'>('all');
   const [sortBy, setSortBy] = useState<'default' | 'name-asc' | 'products-desc'>('default');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 8;
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -132,8 +137,10 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
         sortOrderParam = 'desc';
       }
 
-      const [data] = await Promise.all([
-        categoryService.getCategories({
+      const [res] = await Promise.all([
+        categoryService.getPaginatedCategories({
+          page: currentPage,
+          limit: itemsPerPage,
           search: debouncedSearch.trim() || undefined,
           hasProducts: hasProductsParam,
           sortBy: sortByParam,
@@ -142,14 +149,21 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
         loadStats(),
       ]);
 
-      setCategories(data || []);
+      setCategories(res.data || []);
+      setTotalPages(res.totalPages || 1);
+      setTotalItems(res.total || 0);
     } catch (err: any) {
       setError(err?.message || 'Failed to load categories from server.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [debouncedSearch, filterType, sortBy, loadStats]);
+  }, [currentPage, debouncedSearch, filterType, sortBy, loadStats]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, filterType, sortBy]);
 
   useEffect(() => {
     loadCategories();
@@ -756,6 +770,16 @@ export default function CategoriesPage({ setActiveModule }: CategoriesPageProps)
             )}
           </TableBody>
         </Table>
+
+        {/* Standardized Reusable Pagination */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          itemLabel={label.lower('categories')}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Add / Edit Category Modal */}

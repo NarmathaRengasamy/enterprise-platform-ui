@@ -96,7 +96,9 @@ export default function DashboardPage({
         <div className="flex items-center flex-wrap gap-2.5 self-start md:self-auto">
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
             <Icon name="calendar_today" size="sm" color="primary" />
-            <span className="font-label-md text-label-md text-on-surface font-semibold">Today: 12 Sep 2026</span>
+            <span className="font-label-md text-label-md text-on-surface font-semibold">
+              Today: {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date())}
+            </span>
           </div>
 
           <Button
