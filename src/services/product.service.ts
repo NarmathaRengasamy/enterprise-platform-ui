@@ -35,10 +35,10 @@ export interface CreateProductInput {
   shortName?: string;
   sku: string;
   categoryId: string;
-  price?: number;
-  originalPrice?: number;
-  stock?: number;
-  stockStatus?: 'In Stock' | 'Low Stock' | 'Out of Stock' | string;
+  price?: number | null;
+  originalPrice?: number | null;
+  stock?: number | null;
+  stockStatus?: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Unspecified' | string;
   committed?: number;
   reorderPoint?: number;
   margin?: string;

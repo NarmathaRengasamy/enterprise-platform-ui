@@ -72,7 +72,10 @@ export default function AddEditProductPage({
   const [sku, setSku] = useState(selectedProduct?.sku || '');
   const [category, setCategory] = useState(selectedProduct?.categoryId || selectedProduct?.categoryCode || selectedProduct?.category || '');
   const [description, setDescription] = useState(selectedProduct?.description || '');
-  const initialHasVariants = Boolean(selectedProductProp?.variants && selectedProductProp.variants.length > 0);
+  const initialHasVariants = Boolean(
+    (selectedProductProp?.variants && selectedProductProp.variants.length > 0) ||
+    (selectedProduct?.variants && selectedProduct.variants.length > 0)
+  );
   const [basePrice, setBasePrice] = useState<string | number>(initialHasVariants ? '' : (selectedProduct?.price ?? ''));
   const [flatStock, setFlatStock] = useState<number | string>(initialHasVariants ? '' : (selectedProduct?.stock ?? ''));
   const [flatStockStatus, setFlatStockStatus] = useState(selectedProduct?.stockStatus || 'In Stock');
@@ -322,8 +325,13 @@ export default function AddEditProductPage({
     variants.forEach((v, i) => {
       if (indicesSet.has(i)) releaseVariantMedia(v);
     });
-    setVariants((prev) => prev.filter((_, i) => !indicesSet.has(i)));
+    const nextVariants = variants.filter((_, i) => !indicesSet.has(i));
+    setVariants(nextVariants);
     setSelectedVariantIndices([]);
+    if (nextVariants.length === 0) {
+      setBasePrice('');
+      setFlatStock('');
+    }
   };
 
   // Inline row editing straight from the combinations table
@@ -388,10 +396,15 @@ export default function AddEditProductPage({
 
   const handleDeleteVariant = (index) => {
     releaseVariantMedia(variants[index]);
-    setVariants(variants.filter((_, idx) => idx !== index));
+    const nextVariants = variants.filter((_, idx) => idx !== index);
+    setVariants(nextVariants);
     setSelectedVariantIndices((prev) =>
       prev.filter((idx) => idx !== index).map((idx) => (idx > index ? idx - 1 : idx))
     );
+    if (nextVariants.length === 0) {
+      setBasePrice('');
+      setFlatStock('');
+    }
   };
 
   const VARIANT_STATUS_OPTIONS = [
@@ -792,16 +805,16 @@ export default function AddEditProductPage({
         .filter((n) => !isNaN(n) && n > 0);
 
       const computedPrice = hasVariants
-        ? (pricedVariants.length > 0 ? Math.min(...pricedVariants) : undefined)
-        : (basePrice !== '' && basePrice !== null && basePrice !== undefined && isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : undefined);
+        ? (pricedVariants.length > 0 ? Math.min(...pricedVariants) : null)
+        : (basePrice !== '' && basePrice !== null && basePrice !== undefined && isFinite(Number(basePrice)) && Number(basePrice) >= 0 ? Number(basePrice) : null);
 
       const countedStocks = formattedVariants
         .map((v) => Number(v.stock ?? v.capacity))
         .filter((n) => !isNaN(n) && isFinite(n));
 
       const computedStock = hasVariants
-        ? (countedStocks.length > 0 ? countedStocks.reduce((sum, n) => sum + n, 0) : undefined)
-        : (flatStock !== '' && flatStock !== null && flatStock !== undefined && isFinite(Number(flatStock)) && Number(flatStock) >= 0 ? Number(flatStock) : undefined);
+        ? (countedStocks.length > 0 ? countedStocks.reduce((sum, n) => sum + n, 0) : null)
+        : (flatStock !== '' && flatStock !== null && flatStock !== undefined && isFinite(Number(flatStock)) && Number(flatStock) >= 0 ? Number(flatStock) : null);
 
       const payload: CreateProductInput = {
         name: productName.trim(),
@@ -809,10 +822,9 @@ export default function AddEditProductPage({
         categoryId: category,
         description: description.trim(),
         variants: formattedVariants,
+        price: computedPrice,
+        stock: computedStock,
       };
-
-      if (computedPrice !== undefined) payload.price = computedPrice;
-      if (computedStock !== undefined) payload.stock = computedStock;
       if (!hasVariants && flatStockStatus) payload.stockStatus = flatStockStatus;
       if (reorderPoint !== '' && reorderPoint !== undefined && reorderPoint !== null && !isNaN(Number(reorderPoint))) {
         payload.reorderPoint = Number(reorderPoint);
