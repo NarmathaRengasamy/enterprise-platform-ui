@@ -77,7 +77,10 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
         return `₹${min.toLocaleString()}`;
       }
     }
-    return `₹${(p.price || 0).toLocaleString()}`;
+    if (p.price !== undefined && p.price !== null && !isNaN(Number(p.price)) && Number(p.price) > 0) {
+      return `₹${Number(p.price).toLocaleString()}`;
+    }
+    return '—';
   };
 
   // Load stats and categories on mount
@@ -311,7 +314,7 @@ export default function ProductsPage({ setActiveModule, setSelectedProduct }: Pr
                     onClick={() => setStatusMenuOpen(false)}
                   />
                   <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-2xl z-50 py-1.5 border border-surface-container-high max-h-60 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95">
-                    {['All', 'In Stock', 'Low Stock', 'Out of Stock'].map((st) => (
+                    {['All', 'In Stock', 'Low Stock', 'Out of Stock', 'Unspecified'].map((st) => (
                       <button
                         key={st}
                         type="button"
