@@ -56,13 +56,19 @@ export interface GenerateCatalogInput {
   includeProducts?: boolean;
   includeCategories?: boolean;
   template?: 'qa' | 'reference';
+  /** Language of names and labels in the document (default English). */
+  language?: 'en' | 'ta' | 'hi';
   replaceExisting?: boolean;
 }
 
 export interface GenerateCatalogResult {
   file: KbFile;
+  /** Published products included (product module v2). */
   productCount: number;
   categoryCount: number;
+  /** Products left out: drafts, archived, and published ones with no active variant. */
+  skipped?: { drafts: number; archived: number; no_active_variants: number };
+  replaced?: number;
   sizeBytes: number;
 }
 

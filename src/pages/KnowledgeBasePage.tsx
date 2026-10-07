@@ -11,8 +11,8 @@ import {
   KbFolder,
   KnowledgeStats,
 } from '../services/knowledge.service';
-import { productService } from '../services/product.service';
-import { categoryService } from '../services/category.service';
+import { productV2Service } from '../services/productV2.service';
+import { catalogCategoryService } from '../services/catalogCategory.service';
 import { useLabels } from '../context/SiteSettingsContext';
 
 const renderInline = (str: string): React.ReactNode => {
@@ -213,8 +213,9 @@ export default function KnowledgeBasePage() {
   const [files, setFiles] = useState<KbFile[]>([]);
   const [folders, setFolders] = useState<KbFolder[]>([]);
   const [stats, setStats] = useState<KnowledgeStats | null>(null);
-  const [productCount, setProductCount] = useState<number>(0);
-  const [categoryCount, setCategoryCount] = useState<number>(0);
+  /* null = not loaded (shown as "—"), never a made-up number. */
+  const [productCount, setProductCount] = useState<number | null>(null);
+  const [categoryCount, setCategoryCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [platformWarning, setPlatformWarning] = useState<string | null>(null);
@@ -316,8 +317,9 @@ export default function KnowledgeBasePage() {
           };
         }),
         knowledgeService.getFolders().catch(() => []),
-        productService.getProductStats().catch(() => ({ total: 0 })),
-        categoryService.getCategoryStats().catch(() => ({ totalCategories: 0 })),
+        /* The catalogue document is built from PUBLISHED products (product module v2). */
+        productV2Service.stats().catch(() => null),
+        catalogCategoryService.stats().catch(() => null),
       ]);
 
       let filesData: KbFile[] = [];
@@ -341,8 +343,8 @@ export default function KnowledgeBasePage() {
       setStats(statsData);
       setFolders(foldersData);
       setFiles(filesData);
-      setProductCount(prodStats?.total || 0);
-      setCategoryCount(catStats?.totalCategories || 0);
+      setProductCount(prodStats ? prodStats.products.active : null);
+      setCategoryCount(catStats ? catStats.total_categories : null);
     } catch (err: any) {
       console.error('Failed to load Knowledge Base data:', err);
       if (err.message?.includes('409') || err.message?.includes('Configure the Perfox')) {
@@ -478,7 +480,11 @@ export default function KnowledgeBasePage() {
       });
 
       setToastMessage({
-        text: `Compiled ${result.productCount} ${label.lowerSingular('allProducts')} and ${result.categoryCount} category(ies) into "${result.file.name}"!`,
+        text:
+          `Compiled ${result.productCount} published ${label.lowerSingular('allProducts')} and ${result.categoryCount} category(ies) into "${result.file.name}"` +
+          (result.skipped && result.skipped.drafts + result.skipped.archived > 0
+            ? ` — left out ${result.skipped.drafts} draft(s) and ${result.skipped.archived} archived.`
+            : '.'),
         type: 'success',
       });
       setIsImportModalOpen(false);
@@ -1661,7 +1667,7 @@ export default function KnowledgeBasePage() {
                           className="rounded text-primary focus:ring-primary h-4 w-4"
                         />
                         <span>
-                          Include all {label.lower('allProducts')} ({productCount || 11})
+                          Include all published {label.lower('allProducts')} ({productCount ?? '—'})
                         </span>
                       </label>
 
@@ -1676,13 +1682,16 @@ export default function KnowledgeBasePage() {
                           className="rounded text-primary focus:ring-primary h-4 w-4"
                         />
                         <span>
-                          Include {label.lower('categories')} ({categoryCount || 7})
+                          Include {label.lower('categories')} ({categoryCount ?? '—'})
                         </span>
                       </label>
 
                       <div className="flex items-start gap-1.5 text-[11px] text-slate-400 italic pt-1">
                         <Icon name="info" size="sm" className="shrink-0 mt-0.5 text-slate-400" />
-                        <span>Price and stock are left out — they change, and an indexed document would keep answering with the old value.</span>
+                        <span>
+                          Only published {label.lower('allProducts')} and their active variants are included; drafts and archived ones are left out.
+                          Price, tax and stock are left out too — they change, and the AI agent reads them live.
+                        </span>
                       </div>
                     </div>
 
@@ -1708,8 +1717,8 @@ export default function KnowledgeBasePage() {
                     <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-2.5 flex items-center gap-2 text-xs text-emerald-800 font-medium">
                       <Icon name="check_circle" size="sm" className="text-emerald-600 shrink-0" />
                       <span>
-                        Generates one markdown file covering {productCount || 11}{' '}
-                        {label.lower('allProducts')} and {categoryCount || 7} {label.lower('categories')}, ready to publish
+                        Generates one markdown file covering {productCount ?? '—'} published{' '}
+                        {label.lower('allProducts')} and {categoryCount ?? '—'} {label.lower('categories')}, ready to publish
                         into the {label.plural('knowledgeBase')}
                       </span>
                     </div>
