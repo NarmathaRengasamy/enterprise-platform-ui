@@ -89,4 +89,13 @@ export const teamService = {
       params: hard ? { hard: 'true' } : undefined,
     });
   },
+
+  /**
+   * Permanently delete a team member from workspace and database
+   */
+  async deleteTeamMember(memberId: string): Promise<void> {
+    await client.delete(`/team/members/${memberId}`, {
+      params: { hard: 'true' },
+    });
+  },
 };

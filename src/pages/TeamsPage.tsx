@@ -37,10 +37,14 @@ export default function TeamsPage() {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMemberItem | null>(null);
   const [revokeConfirmMember, setRevokeConfirmMember] = useState<TeamMemberItem | null>(null);
+  const [deleteConfirmMember, setDeleteConfirmMember] = useState<TeamMemberItem | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   // Add Member Form State
   const [newName, setNewName] = useState('');
@@ -236,6 +240,7 @@ export default function TeamsPage() {
   const handleConfirmRevokeAccess = async () => {
     if (!revokeConfirmMember) return;
     const memberToRevoke = revokeConfirmMember;
+    setRevokeError(null);
     setIsRevoking(true);
     try {
       await teamService.revokeTeamMember(memberToRevoke.id, false);
@@ -244,11 +249,36 @@ export default function TeamsPage() {
       );
       setSuccessMessage(`Access revoked for ${memberToRevoke.name}`);
       setRevokeConfirmMember(null);
+      setRevokeError(null);
       teamService.getTeamStats().then(setStats).catch(() => {});
     } catch (err: any) {
-      setError(err.message || 'Could not revoke access');
+      const msg = err.message || 'Could not revoke access';
+      setRevokeError(msg);
+      setError(msg);
     } finally {
       setIsRevoking(false);
+    }
+  };
+
+  // Delete Member Handler (invoked from confirmation modal)
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmMember) return;
+    const target = deleteConfirmMember;
+    setDeleteError(null);
+    setIsDeleting(true);
+    try {
+      await teamService.deleteTeamMember(target.id);
+      setTeam((prev) => prev.filter((m) => m.id !== target.id));
+      setSuccessMessage(`${label.singular('teams')} "${target.name}" was permanently deleted.`);
+      setDeleteConfirmMember(null);
+      setDeleteError(null);
+      teamService.getTeamStats().then(setStats).catch(() => {});
+    } catch (err: any) {
+      const msg = err.message || 'Could not delete team member';
+      setDeleteError(msg);
+      setError(msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -256,7 +286,7 @@ export default function TeamsPage() {
     <div className="flex flex-col gap-y-space-lg w-full pt-space-xs">
       {/* Floating Sticky Toast Notification Container (Always visible even when scrolled down) */}
       {(successMessage || error) && (
-        <div className="fixed top-6 right-6 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none px-4 sm:px-0">
+        <div className="fixed top-6 right-6 z-[100] flex flex-col gap-2 max-w-md w-full pointer-events-none px-4 sm:px-0">
           {successMessage && (
             <div className="p-4 bg-white/95 backdrop-blur-md border border-emerald-500/30 text-on-surface rounded-2xl shadow-2xl flex items-center justify-between gap-3 pointer-events-auto animate-in slide-in-from-top-3 fade-in duration-300 border-l-4 border-l-emerald-500">
               <div className="flex items-center gap-3 min-w-0">
@@ -511,6 +541,7 @@ export default function TeamsPage() {
                     .slice(0, 2)
                     .toUpperCase() || 'TM';
                   const isBottomRows = idx >= Math.max(0, paginatedTeam.length - 2);
+                  const isSelf = user?.id === m.id || (Boolean(user?.email) && user?.email.toLowerCase() === m.email.toLowerCase());
 
                   return (
                     <tr key={m.id} className="h-16 hover:bg-surface-container-low/60 transition-colors group">
@@ -524,9 +555,16 @@ export default function TeamsPage() {
                             )}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <span className="font-title-sm text-title-sm text-on-surface font-semibold truncate group-hover:text-primary transition-colors">
-                              {m.name}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-title-sm text-title-sm text-on-surface font-semibold truncate group-hover:text-primary transition-colors">
+                                {m.name}
+                              </span>
+                              {isSelf && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase tracking-wide">
+                                  You
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -630,21 +668,44 @@ export default function TeamsPage() {
                                           <span>Restore Access</span>
                                         </button>
                                       </>
-                                    ) : (
+                                    ) : !isSelf ? (
                                       <>
                                         <div className="my-1 h-px bg-slate-100" />
                                         <button
                                           type="button"
                                           onClick={() => {
                                             setOpenMenuId(null);
+                                            setRevokeError(null);
                                             setRevokeConfirmMember(m);
                                           }}
-                                          className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2 cursor-pointer font-semibold"
+                                          className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer font-semibold"
                                         >
-                                          <span className="material-symbols-outlined text-base text-error">person_remove</span>
+                                          <span className="material-symbols-outlined text-base text-amber-600">person_remove</span>
                                           <span>Revoke Access</span>
                                         </button>
                                       </>
+                                    ) : null}
+
+                                    {!isSelf ? (
+                                      <>
+                                        <div className="my-1 h-px bg-slate-100" />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            setDeleteError(null);
+                                            setDeleteConfirmMember(m);
+                                          }}
+                                          className="w-full px-space-sm py-2 text-left font-body-sm text-xs text-error hover:bg-red-50 flex items-center gap-2 cursor-pointer font-semibold"
+                                        >
+                                          <span className="material-symbols-outlined text-base text-error">delete</span>
+                                          <span>Delete {label.singular('teams')}</span>
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <div className="px-3 py-1.5 text-[11px] text-outline italic border-t border-slate-100 mt-1">
+                                        Cannot revoke or delete your own account
+                                      </div>
                                     )}
                                   </>
                                 ) : (
@@ -818,23 +879,43 @@ export default function TeamsPage() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-surface-container-low mt-2">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  type="button"
-                  onClick={() => setEditingMember(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Saving...' : 'Save Changes'}
-                </Button>
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-surface-container-low mt-2">
+                {isAdmin && editingMember && !(user?.id === editingMember.id || (Boolean(user?.email) && user?.email.toLowerCase() === editingMember.email.toLowerCase())) ? (
+                  <Button
+                    variant="danger"
+                    size="md"
+                    type="button"
+                    startIcon="delete"
+                    onClick={() => {
+                      const memberToDelete = editingMember;
+                      setEditingMember(null);
+                      setDeleteError(null);
+                      setDeleteConfirmMember(memberToDelete);
+                    }}
+                  >
+                    Delete Member
+                  </Button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    type="button"
+                    onClick={() => setEditingMember(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    type="submit"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
@@ -842,21 +923,51 @@ export default function TeamsPage() {
       )}
       {/* Revoke Access Confirmation Modal */}
       {revokeConfirmMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isRevoking) {
+              setRevokeConfirmMember(null);
+              setRevokeError(null);
+            }
+          }}
+        >
           <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-surface-container-high p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-3 text-error">
-              <div className="w-10 h-10 rounded-xl bg-error-container/50 flex items-center justify-center shrink-0">
-                <Icon name="person_remove" size="lg" color="error" />
+            <div className="flex items-center justify-between pb-1 border-b border-surface-container-low">
+              <div className="flex items-center gap-3 text-amber-600">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0 text-amber-600">
+                  <Icon name="person_remove" size="lg" />
+                </div>
+                <div className="flex flex-col">
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                    Revoke Access
+                  </h3>
+                  <span className="text-xs text-on-surface-variant">
+                    Deactivate team member permissions
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
-                  Revoke Access
-                </h3>
-                <span className="text-xs text-on-surface-variant">
-                  Deactivate team member permissions
-                </span>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
+                onClick={() => {
+                  setRevokeConfirmMember(null);
+                  setRevokeError(null);
+                }}
+                disabled={isRevoking}
+                aria-label="Close modal"
+              />
             </div>
+
+            {revokeError && (
+              <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs flex items-center gap-2.5 border border-rose-200 animate-in fade-in">
+                <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center shrink-0 text-error">
+                  <Icon name="error" size="xs" color="error" />
+                </div>
+                <span className="font-semibold text-rose-800 flex-1 leading-snug">{revokeError}</span>
+              </div>
+            )}
 
             <p className="text-sm text-on-surface leading-relaxed">
               Are you sure you want to revoke access for{' '}
@@ -869,7 +980,10 @@ export default function TeamsPage() {
                 variant="ghost"
                 size="md"
                 type="button"
-                onClick={() => setRevokeConfirmMember(null)}
+                onClick={() => {
+                  setRevokeConfirmMember(null);
+                  setRevokeError(null);
+                }}
                 disabled={isRevoking}
               >
                 Cancel
@@ -883,6 +997,95 @@ export default function TeamsPage() {
                 startIcon={isRevoking ? <Icon name="sync" spin size="sm" /> : 'person_remove'}
               >
                 {isRevoking ? 'Revoking...' : 'Revoke Access'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Member Confirmation Modal */}
+      {deleteConfirmMember && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeleting) {
+              setDeleteConfirmMember(null);
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-surface-container-high p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-1 border-b border-surface-container-low">
+              <div className="flex items-center gap-3 text-error">
+                <div className="w-10 h-10 rounded-xl bg-error-container/50 flex items-center justify-center shrink-0">
+                  <Icon name="delete" size="lg" color="error" />
+                </div>
+                <div className="flex flex-col">
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                    Delete {label.singular('teams')}
+                  </h3>
+                  <span className="text-xs text-on-surface-variant">
+                    Permanently remove team member
+                  </span>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                startIcon="close"
+                onClick={() => {
+                  setDeleteConfirmMember(null);
+                  setDeleteError(null);
+                }}
+                disabled={isDeleting}
+                aria-label="Close modal"
+              />
+            </div>
+
+            {deleteError && (
+              <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs flex items-center gap-2.5 border border-rose-200 animate-in fade-in">
+                <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center shrink-0 text-error">
+                  <Icon name="error" size="xs" color="error" />
+                </div>
+                <span className="font-semibold text-rose-800 flex-1 leading-snug">{deleteError}</span>
+              </div>
+            )}
+
+            <div className="text-sm text-on-surface leading-relaxed flex flex-col gap-2.5">
+              <p>
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-on-surface font-semibold">{deleteConfirmMember.name}</strong> ({deleteConfirmMember.email})?
+              </p>
+              <div className="p-3 bg-error-container/20 rounded-xl border border-error/20 text-xs text-on-surface flex items-start gap-2">
+                <Icon name="warning" size="xs" color="error" className="shrink-0 mt-0.5" />
+                <span>
+                  <strong>Warning:</strong> This action cannot be undone. All assigned permissions and workspace access will be permanently revoked, and the seat will be released.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-surface-container-low mt-1">
+              <Button
+                variant="ghost"
+                size="md"
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmMember(null);
+                  setDeleteError(null);
+                }}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                startIcon={isDeleting ? <Icon name="sync" spin size="sm" /> : 'delete'}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Member'}
               </Button>
             </div>
           </div>
