@@ -1340,14 +1340,15 @@ export default function KnowledgeBasePage() {
                             : '—'}
                         </td>
 
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-3">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => setDeleteConfirmFile(file)}
-                              className="text-xs text-rose-600 hover:text-rose-700 font-semibold hover:underline transition-colors cursor-pointer"
+                              className="text-xs text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete file"
                             >
-                              Delete
+                              <Icon name="delete" size="xs" />
                             </button>
                           </div>
                         </td>
