@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   MetricsCard,
   Icon,
@@ -322,23 +322,17 @@ export default function KnowledgeBasePage() {
         catalogCategoryService.stats().catch(() => null),
       ]);
 
-      let filesData: KbFile[] = [];
-      if (folderFilter === 'ALL') {
-        const fileLists = await Promise.all([
-          knowledgeService.getFiles().catch(() => []),
-          ...foldersData.map((f) => knowledgeService.getFiles(f.id).catch(() => [])),
-        ]);
-        const seen = new Set<string>();
-        filesData = fileLists.flat().filter((file) => {
-          if (!file?.id || seen.has(file.id)) return false;
-          seen.add(file.id);
-          return true;
-        });
-      } else if (folderFilter === 'ROOT') {
-        filesData = await knowledgeService.getFiles().catch(() => []);
-      } else {
-        filesData = await knowledgeService.getFiles(folderFilter).catch(() => []);
-      }
+      // Always fetch all files across root and folders so nested folder content is known for searching & navigation
+      const fileLists = await Promise.all([
+        knowledgeService.getFiles().catch(() => []),
+        ...foldersData.map((f) => knowledgeService.getFiles(f.id).catch(() => [])),
+      ]);
+      const seen = new Set<string>();
+      const filesData = fileLists.flat().filter((file) => {
+        if (!file?.id || seen.has(file.id)) return false;
+        seen.add(file.id);
+        return true;
+      });
 
       setStats(statsData);
       setFolders(foldersData);
@@ -385,13 +379,12 @@ export default function KnowledgeBasePage() {
         return false;
       }
 
-      // Search query filter
+      // Search query filter (only match actual file properties, not parent folder name)
       if (debouncedSearch.trim()) {
-        const query = debouncedSearch.toLowerCase();
+        const query = debouncedSearch.trim().toLowerCase();
         const matchesName = file.name.toLowerCase().includes(query);
-        const matchesFolder = (file.folderName || '').toLowerCase().includes(query);
         const matchesMime = (file.mimeType || '').toLowerCase().includes(query);
-        return matchesName || matchesFolder || matchesMime;
+        return matchesName || matchesMime;
       }
 
       return true;
@@ -731,12 +724,65 @@ export default function KnowledgeBasePage() {
     return [{ id: 'ROOT', name: 'Root' }, ...crumbs];
   }, [selectedFolderId, folders]);
 
-  // Child folders in active view
+  // Helper to get all descendant folder IDs (inclusive)
+  const getFolderAndDescendantIds = useCallback(
+    (folderId: string): Set<string> => {
+      const ids = new Set<string>([folderId]);
+      const queue = [folderId];
+      while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        const children = folders.filter((f) => f.parentId === currentId);
+        for (const child of children) {
+          if (!ids.has(child.id)) {
+            ids.add(child.id);
+            queue.push(child.id);
+          }
+        }
+      }
+      return ids;
+    },
+    [folders]
+  );
+
+  // Child folders in active view, filtered by search query if present
   const currentChildFolders = useMemo(() => {
     if (selectedFolderId === 'ALL') return [];
-    if (selectedFolderId === 'ROOT') return folders.filter((f) => !f.parentId);
-    return folders.filter((f) => f.parentId === selectedFolderId);
-  }, [selectedFolderId, folders]);
+    const immediate =
+      selectedFolderId === 'ROOT'
+        ? folders.filter((f) => !f.parentId)
+        : folders.filter((f) => f.parentId === selectedFolderId);
+
+    const query = debouncedSearch.trim().toLowerCase();
+    if (!query) return immediate;
+
+    return immediate.filter((subfolder) => {
+      // 1. Subfolder itself matches the search query
+      if (subfolder.name.toLowerCase().includes(query)) {
+        return true;
+      }
+
+      const descendantIds = getFolderAndDescendantIds(subfolder.id);
+
+      // 2. Any descendant folder matches the search query
+      const hasMatchingDescendantFolder = folders.some((f) => {
+        if (f.id === subfolder.id) return false;
+        return descendantIds.has(f.id) && f.name.toLowerCase().includes(query);
+      });
+      if (hasMatchingDescendantFolder) {
+        return true;
+      }
+
+      // 3. Subfolder or any descendant contains matching files
+      const hasMatchingFiles = files.some((file) => {
+        if (!descendantIds.has(file.folderId)) return false;
+        const matchesName = file.name.toLowerCase().includes(query);
+        const matchesMime = (file.mimeType || '').toLowerCase().includes(query);
+        return matchesName || matchesMime;
+      });
+
+      return hasMatchingFiles;
+    });
+  }, [selectedFolderId, folders, files, debouncedSearch, getFolderAndDescendantIds]);
 
   // Test Knowledge Search
   const handleTestSearch = () => {
@@ -1294,14 +1340,15 @@ export default function KnowledgeBasePage() {
                             : '—'}
                         </td>
 
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-3">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => setDeleteConfirmFile(file)}
-                              className="text-xs text-rose-600 hover:text-rose-700 font-semibold hover:underline transition-colors cursor-pointer"
+                              className="text-xs text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete file"
                             >
-                              Delete
+                              <Icon name="delete" size="xs" />
                             </button>
                           </div>
                         </td>
@@ -1318,8 +1365,14 @@ export default function KnowledgeBasePage() {
                           <Icon name="folder_open" size="lg" />
                         </div>
                         <div className="space-y-0.5">
-                          <p className="font-semibold text-slate-800 text-sm">No documents or subfolders</p>
-                          <p className="text-xs text-slate-400">Upload files or create folders to organize your {label.plural('knowledgeBase')}.</p>
+                          <p className="font-semibold text-slate-800 text-sm">
+                            {debouncedSearch ? 'No matching documents or folders' : 'No documents or subfolders'}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {debouncedSearch
+                              ? `No files or subfolders match "${debouncedSearch}". Try a different search term.`
+                              : `Upload files or create folders to organize your ${label.plural('knowledgeBase')}.`}
+                          </p>
                         </div>
                       </div>
                     </td>
