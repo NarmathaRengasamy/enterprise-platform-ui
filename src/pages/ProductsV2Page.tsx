@@ -99,6 +99,7 @@ export default function ProductsV2Page() {
   const [type, setType] = useState<ProductType | null>(null);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
@@ -169,6 +170,7 @@ export default function ProductsV2Page() {
   const load = useCallback(async () => {
     const seq = ++requestSeq.current;
     setLoadError(null);
+    setIsLoading(true);
     try {
       const next = await productV2Service.search({ ...filtersNow(), page, limit });
       if (seq === requestSeq.current) setResult(next);
@@ -186,6 +188,23 @@ export default function ProductsV2Page() {
   /* After a delete / restore, reload with the filters in force THEN, not those of the click. */
   const latestLoad = useRef(load);
   latestLoad.current = load;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        load(),
+        loadStats(),
+        productTypeService.get().then(setType).catch(() => undefined),
+        catalogCategoryService.list(false).then((c) => setCategories(c.categories)).catch(() => undefined),
+      ]);
+      setToast({ text: `${plural} refreshed.`, type: 'success' });
+    } catch {
+      setToast({ text: `Failed to refresh ${label.lower('allProducts')}.`, type: 'error' });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const fields = useMemo(() => new Map((type?.fields ?? []).map((f) => [f.key, f])), [type]);
   const categoryById = useMemo(() => new Map(flatCategories(categories).map((c) => [c.id, c])), [categories]);
@@ -291,16 +310,16 @@ export default function ProductsV2Page() {
         />
         <MetricsCard
           title="Variants"
-          value={stats?.variants.total ?? '—'}
-          subtitle={stats ? [`${stats.variants.active} active`, stats.variants.packs ? `${stats.variants.packs} ${stats.variants.packs === 1 ? 'pack' : 'packs'}` : null].filter(Boolean).join(' · ') : '—'}
+          value={stats?.variants?.total ?? '—'}
+          subtitle={stats?.variants ? [`${stats.variants.active} active`, stats.variants.packs ? `${stats.variants.packs} ${stats.variants.packs === 1 ? 'pack' : 'packs'}` : null].filter(Boolean).join(' · ') : '—'}
           icon="style"
           variant="secondary"
         />
         <MetricsCard
           title="Stock Alerts"
-          value={stats ? stats.stock.low + stats.stock.out : '—'}
+          value={stats?.stock ? stats.stock.low + stats.stock.out : '—'}
           subtitle={
-            !stats
+            !stats?.stock
               ? '—'
               : stats.stock.low + stats.stock.out === 0
                 ? stats.stock.tracked
@@ -406,7 +425,16 @@ export default function ProductsV2Page() {
                   </option>
                 ))}
             </select>
-            <Button variant="hover" size="icon" startIcon="refresh" onClick={() => void load()} title="Reload" aria-label={`Reload ${label.lower('allProducts')}`} />
+            <Button
+              variant="outline"
+              size="icon"
+              title="Refresh"
+              aria-label={`Refresh ${label.lower('allProducts')}`}
+              startIcon={isRefreshing ? <Icon name="refresh" spin color="primary" size="md" /> : 'refresh'}
+              onClick={() => void handleRefresh()}
+              disabled={isRefreshing}
+              className="h-10 w-10 shrink-0"
+            />
           </div>
           {hasFilters && (
             <div>
