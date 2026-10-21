@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { authService } from '../services/auth.service';
-import { getToken } from '../services/client';
+import { getToken, setToken } from '../services/client';
 import {
   AuthContextType,
   LoginCredentials,
@@ -83,6 +83,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
   }, []);
 
+  const updateCurrentUser = useCallback((userData: Partial<User>, newToken?: string) => {
+    setUser((prev) => (prev ? { ...prev, ...userData } : null));
+    if (newToken) {
+      setToken(newToken, true);
+      setTokenState(newToken);
+    }
+  }, []);
+
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    try {
+      const currentUser = await authService.getCurrentUser();
+      setUser(currentUser);
+      return currentUser;
+    } catch (err: any) {
+      console.warn('⚠️ [AuthContext] Failed to refresh user profile:', err.message);
+      return null;
+    }
+  }, []);
+
+  // Listen for permission denial across the app to refresh user role if changed by an admin
+  useEffect(() => {
+    const handleForbidden = () => {
+      refreshUser();
+    };
+    window.addEventListener('auth:forbidden', handleForbidden);
+    return () => window.removeEventListener('auth:forbidden', handleForbidden);
+  }, [refreshUser]);
+
   const value = useMemo(
     () => ({
       user,
@@ -94,8 +122,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       register,
       logout,
       clearError,
+      updateCurrentUser,
+      refreshUser,
     }),
-    [user, token, isLoading, error, login, register, logout, clearError]
+    [user, token, isLoading, error, login, register, logout, clearError, updateCurrentUser, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

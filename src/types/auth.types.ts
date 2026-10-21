@@ -60,4 +60,6 @@ export interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  updateCurrentUser: (userData: Partial<User>, newToken?: string) => void;
+  refreshUser: () => Promise<User | null>;
 }

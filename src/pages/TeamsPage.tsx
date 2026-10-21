@@ -8,7 +8,7 @@ import { useLabels } from '../context/SiteSettingsContext';
 
 export default function TeamsPage() {
   const label = useLabels();
-  const { user } = useAuth();
+  const { user, updateCurrentUser } = useAuth();
   const isAdmin = user?.role === 'Admin';
 
   const [team, setTeam] = useState<TeamMemberItem[]>([]);
@@ -189,7 +189,23 @@ export default function TeamsPage() {
       });
 
       setTeam((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setSuccessMessage(`Role updated to ${updated.role} for ${updated.name}`);
+
+      const isSelf =
+        user?.id === editingMember.id ||
+        (Boolean(user?.email) && user?.email.toLowerCase() === editingMember.email.toLowerCase());
+
+      if (isSelf) {
+        updateCurrentUser(
+          { role: updated.role, name: updated.name },
+          updated.token
+        );
+      }
+
+      setSuccessMessage(
+        isSelf && updated.role !== 'Admin'
+          ? `Your role was updated to ${updated.role}. Administrative permissions are now restricted.`
+          : `Role updated to ${updated.role} for ${updated.name}`
+      );
       setEditingMember(null);
       // Refresh stats
       teamService.getTeamStats().then(setStats).catch(() => {});
