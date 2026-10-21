@@ -14,6 +14,7 @@ import {
 import { productV2Service } from '../services/productV2.service';
 import { catalogCategoryService } from '../services/catalogCategory.service';
 import { useLabels } from '../context/SiteSettingsContext';
+import { useAuth } from '../hooks/useAuth';
 
 const renderInline = (str: string): React.ReactNode => {
   const parts = str.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
@@ -209,6 +210,10 @@ const renderSimpleMarkdown = (text: string, noun = 'article') => {
 
 export default function KnowledgeBasePage() {
   const label = useLabels();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  const canEdit = isAdmin || user?.role === 'Editor';
+
   // Data state
   const [files, setFiles] = useState<KbFile[]>([]);
   const [folders, setFolders] = useState<KbFolder[]>([]);
@@ -420,6 +425,7 @@ export default function KnowledgeBasePage() {
 
   // Option A: Upload File from PC
   const handleUploadSubmit = async () => {
+    if (!canEdit) return;
     if (!selectedUploadFile) {
       setUploadError('Please choose a file from your computer.');
       return;
@@ -455,6 +461,7 @@ export default function KnowledgeBasePage() {
 
   // Option B: Generate .md from Catalog
   const handleGenerateCatalogSubmit = async () => {
+    if (!canEdit) return;
     if (!includeProducts && !includeCategories) {
       setCatalogError(`Please select at least ${label.lower('allProducts')} or ${label.lower('categories')}.`);
       return;
@@ -502,6 +509,7 @@ export default function KnowledgeBasePage() {
   // Create Article Submit Handler
   const handleCreateArticleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
     const title = articleTitle.trim();
     const content = articleContent.trim();
 
@@ -567,6 +575,7 @@ export default function KnowledgeBasePage() {
   // Create Folder
   const handleCreateFolderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
     if (!newFolderName.trim()) {
       setCreateFolderError('Folder name is required.');
       return;
@@ -607,7 +616,7 @@ export default function KnowledgeBasePage() {
   };
 
   const handleConfirmDeleteFolder = async () => {
-    if (!deleteConfirmFolder) return;
+    if (!canEdit || !deleteConfirmFolder) return;
     setIsDeletingFolder(true);
 
     try {
@@ -686,14 +695,16 @@ export default function KnowledgeBasePage() {
           </div>
 
           {/* Hover Delete Action for Folder */}
-          <button
-            type="button"
-            onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
-            className="opacity-0 group-hover/folder:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1 cursor-pointer"
-            title={`Delete folder "${folder.name}"`}
-          >
-            <Icon name="delete" size="xs" />
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+              className="opacity-0 group-hover/folder:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all shrink-0 ml-1 cursor-pointer"
+              title={`Delete folder "${folder.name}"`}
+            >
+              <Icon name="delete" size="xs" />
+            </button>
+          )}
         </div>
 
         {/* Nested child folders if expanded */}
@@ -803,7 +814,7 @@ export default function KnowledgeBasePage() {
 
   // Delete Single File
   const handleDeleteFile = async () => {
-    if (!deleteConfirmFile) return;
+    if (!canEdit || !deleteConfirmFile) return;
     setIsDeleting(true);
 
     try {
@@ -828,12 +839,12 @@ export default function KnowledgeBasePage() {
 
   // Bulk Delete
   const handleBulkDelete = () => {
-    if (selectedFileIds.length === 0) return;
+    if (!canEdit || selectedFileIds.length === 0) return;
     setIsBulkDeleteModalOpen(true);
   };
 
   const handleConfirmBulkDelete = async () => {
-    if (selectedFileIds.length === 0) return;
+    if (!canEdit || selectedFileIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
       await Promise.all(
@@ -963,14 +974,21 @@ export default function KnowledgeBasePage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            disabled={!canEdit}
             onClick={() => {
+              if (!canEdit) return;
               setArticleTitle('');
               setArticleContent('');
               setArticleCategory(selectedFolderId !== 'ALL' && selectedFolderId !== 'ROOT' ? selectedFolderId : 'Orders & Checkout');
               setCreateArticleError(null);
               setIsCreateArticleOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-label-md text-label-md font-semibold transition-all shadow-xs cursor-pointer"
+            title={!canEdit ? 'Viewer role has view-only access' : undefined}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-label-md text-label-md font-semibold transition-all shadow-xs ${
+              !canEdit
+                ? 'bg-slate-200 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+                : 'bg-primary hover:bg-primary/90 text-on-primary cursor-pointer'
+            }`}
           >
             <Icon name="add" size="sm" />
             <span>Create {label.singular('knowledgeBase')}</span>
@@ -1136,7 +1154,7 @@ export default function KnowledgeBasePage() {
             {/* Right: New Folder + Delete Folder + Upload Action Buttons */}
             <div className="flex items-center gap-2.5 flex-wrap">
               {/* If an actual folder is opened, provide Delete Folder button */}
-              {selectedFolderId !== 'ALL' && selectedFolderId !== 'ROOT' && (
+              {canEdit && selectedFolderId !== 'ALL' && selectedFolderId !== 'ROOT' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1155,28 +1173,42 @@ export default function KnowledgeBasePage() {
 
               <button
                 type="button"
+                disabled={!canEdit}
                 onClick={() => {
+                  if (!canEdit) return;
                   setNewFolderParentId(selectedFolderId !== 'ALL' && selectedFolderId !== 'ROOT' ? selectedFolderId : '');
                   setNewFolderName('');
                   setCreateFolderError(null);
                   setIsCreateFolderOpen(true);
                 }}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                title={!canEdit ? 'Viewer role has view-only access' : undefined}
+                className={`px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors ${
+                  !canEdit
+                    ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer'
+                }`}
               >
-                <Icon name="create_new_folder" size="xs" className="text-slate-500" />
+                <Icon name="create_new_folder" size="xs" className={!canEdit ? 'text-slate-400' : 'text-slate-500'} />
                 <span>New Folder</span>
               </button>
 
               <button
                 type="button"
+                disabled={!canEdit}
                 onClick={() => {
+                  if (!canEdit) return;
                   setModalDestinationFolder(selectedFolderId === 'ALL' || selectedFolderId === 'ROOT' ? '' : selectedFolderId);
                   setSelectedUploadFile(null);
                   setUploadError(null);
                   setCatalogError(null);
                   setIsImportModalOpen(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                title={!canEdit ? 'Viewer role has view-only access' : undefined}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all ${
+                  !canEdit
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                    : 'bg-primary hover:bg-primary/90 text-white cursor-pointer'
+                }`}
               >
                 <Icon name="upload" size="xs" />
                 <span>Upload</span>
@@ -1218,8 +1250,12 @@ export default function KnowledgeBasePage() {
                       type="checkbox"
                       checked={isAllSelected}
                       ref={(el) => el && (el.indeterminate = isSomeSelected)}
-                      onChange={handleToggleSelectAll}
-                      className="rounded text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                      disabled={!canEdit}
+                      onChange={canEdit ? handleToggleSelectAll : undefined}
+                      className={`rounded text-primary focus:ring-primary h-3.5 w-3.5 ${
+                        !canEdit ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                      title={!canEdit ? 'Viewer role has view-only access' : undefined}
                     />
                   </th>
                   <th className="py-3.5 px-4">NAME</th>
@@ -1274,14 +1310,16 @@ export default function KnowledgeBasePage() {
                       </td>
                       <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteFolder(subfolder.id, subfolder.name, e)}
-                            className="text-xs text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Delete folder"
-                          >
-                            <Icon name="delete" size="xs" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteFolder(subfolder.id, subfolder.name, e)}
+                              className="text-xs text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete folder"
+                            >
+                              <Icon name="delete" size="xs" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1304,8 +1342,12 @@ export default function KnowledgeBasePage() {
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={() => handleToggleSelectFile(file.id)}
-                            className="rounded text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                            disabled={!canEdit}
+                            onChange={canEdit ? () => handleToggleSelectFile(file.id) : undefined}
+                            className={`rounded text-primary focus:ring-primary h-3.5 w-3.5 ${
+                              !canEdit ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                            }`}
+                            title={!canEdit ? 'Viewer role has view-only access' : undefined}
                           />
                         </td>
 
@@ -1342,14 +1384,16 @@ export default function KnowledgeBasePage() {
 
                         <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirmFile(file)}
-                              className="text-xs text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Delete file"
-                            >
-                              <Icon name="delete" size="xs" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmFile(file)}
+                                className="text-xs text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Delete file"
+                              >
+                                <Icon name="delete" size="xs" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1385,7 +1429,7 @@ export default function KnowledgeBasePage() {
           {/* Bottom Explorer Bar: Showing Info, Bulk Actions & Pagination */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-3">
-              {selectedFileIds.length > 0 ? (
+              {selectedFileIds.length > 0 && canEdit ? (
                 <div className="flex items-center gap-2.5">
                   <span className="font-semibold text-primary text-xs">
                     {selectedFileIds.length} item{selectedFileIds.length === 1 ? '' : 's'} selected
@@ -1510,13 +1554,20 @@ export default function KnowledgeBasePage() {
 
                   <button
                     type="button"
+                    disabled={!canEdit}
                     onClick={() => {
+                      if (!canEdit) return;
                       setNewFolderParentId(modalDestinationFolder || '');
                       setNewFolderName('');
                       setCreateFolderError(null);
                       setIsCreateFolderOpen(true);
                     }}
-                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors"
+                    title={!canEdit ? 'Viewer role has view-only access' : undefined}
+                    className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors ${
+                      !canEdit
+                        ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer'
+                    }`}
                   >
                     <Icon name="create_new_folder" size="sm" />
                     New folder
@@ -1805,6 +1856,7 @@ export default function KnowledgeBasePage() {
                     type="submit"
                     variant="primary"
                     disabled={
+                      !canEdit ||
                       (activeImportTab === 'pc' && (!selectedUploadFile || isUploading)) ||
                       (activeImportTab === 'catalog' && isGeneratingCatalog)
                     }
@@ -2066,7 +2118,7 @@ export default function KnowledgeBasePage() {
                   <Button
                     type="submit"
                     variant="primary"
-                    disabled={!articleTitle.trim() || !articleContent.trim() || isPublishingArticle}
+                    disabled={!canEdit || !articleTitle.trim() || !articleContent.trim() || isPublishingArticle}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl px-5 py-2.5 shadow-sm text-xs flex items-center gap-2"
                   >
                     {isPublishingArticle ? (
@@ -2170,7 +2222,7 @@ export default function KnowledgeBasePage() {
                 <Button
                   type="submit"
                   variant="primary"
-                  disabled={!newFolderName.trim() || isCreatingFolder}
+                  disabled={!canEdit || !newFolderName.trim() || isCreatingFolder}
                   className="bg-primary hover:bg-primary/90 text-white"
                 >
                   {isCreatingFolder ? 'Creating...' : 'Create Folder'}
@@ -2208,7 +2260,7 @@ export default function KnowledgeBasePage() {
               <Button
                 variant="primary"
                 onClick={handleDeleteFile}
-                disabled={isDeleting}
+                disabled={!canEdit || isDeleting}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white"
               >
                 {isDeleting ? 'Deleting...' : 'Confirm Delete'}
@@ -2245,7 +2297,7 @@ export default function KnowledgeBasePage() {
               <Button
                 variant="primary"
                 onClick={handleConfirmDeleteFolder}
-                disabled={isDeletingFolder}
+                disabled={!canEdit || isDeletingFolder}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white"
               >
                 {isDeletingFolder ? 'Deleting...' : 'Confirm Delete'}
@@ -2282,7 +2334,7 @@ export default function KnowledgeBasePage() {
               <Button
                 variant="primary"
                 onClick={handleConfirmBulkDelete}
-                disabled={isBulkDeleting}
+                disabled={!canEdit || isBulkDeleting}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white"
               >
                 {isBulkDeleting ? 'Deleting...' : 'Confirm Delete'}
