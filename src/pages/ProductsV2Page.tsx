@@ -126,6 +126,13 @@ export default function ProductsV2Page() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
+  /* If search is cleared while sorted by newest, reset sort to default '' */
+  useEffect(() => {
+    if (!search && sort === 'newest') {
+      setSort('');
+    }
+  }, [search, sort]);
+
   useEffect(() => {
     Promise.all([productTypeService.get(), catalogCategoryService.list(false)])
       .then(([t, c]) => {
@@ -381,13 +388,23 @@ export default function ProductsV2Page() {
                 </select>
               );
             })}
-            <select aria-label="Sort" className={filterClass} value={sort} onChange={(e) => { setSort(e.target.value as ProductSort | ''); setPage(1); }}>
+            <select
+              aria-label="Sort"
+              className={filterClass}
+              value={!search && sort === 'newest' ? '' : sort}
+              onChange={(e) => {
+                setSort(e.target.value as ProductSort | '');
+                setPage(1);
+              }}
+            >
               <option value="">{search ? SORT_LABELS.relevance : SORT_LABELS.newest}</option>
-              {(['newest', 'name', 'price_asc', 'price_desc', 'size_asc', 'size_desc'] as ProductSort[]).map((s) => (
-                <option key={s} value={s}>
-                  {SORT_LABELS[s]}
-                </option>
-              ))}
+              {(['newest', 'name', 'price_asc', 'price_desc', 'size_asc', 'size_desc'] as ProductSort[])
+                .filter((s) => (search ? true : s !== 'newest'))
+                .map((s) => (
+                  <option key={s} value={s}>
+                    {SORT_LABELS[s]}
+                  </option>
+                ))}
             </select>
             <Button variant="hover" size="icon" startIcon="refresh" onClick={() => void load()} title="Reload" aria-label={`Reload ${label.lower('allProducts')}`} />
           </div>

@@ -142,6 +142,30 @@ describe('ProductsV2Page', () => {
     await waitFor(() => expect(lastSearch()).toEqual({ status: 'all', page: 1, limit: 20 }));
   });
 
+  it('renders sort dropdown with "Newest first" only once when not searching, and with "Best match" when searching', async () => {
+    renderPage();
+    await screen.findByTestId('product-creta');
+    const sortSelect = screen.getByLabelText('Sort');
+    const defaultOptions = within(sortSelect).getAllByRole('option').map((o) => o.textContent);
+    expect(defaultOptions).toEqual([
+      'Newest first',
+      'Name (A to Z)',
+      'Price: low to high',
+      'Price: high to low',
+      'Size: small to large',
+      'Size: large to small',
+    ]);
+    expect(defaultOptions.filter((text) => text === 'Newest first')).toHaveLength(1);
+
+    // When searching, 'Best match' becomes the default option and 'Newest first' is still present only once
+    await userEvent.type(screen.getByLabelText('Search All Products'), 'creta');
+    await waitFor(() => {
+      const searchOptions = within(sortSelect).getAllByRole('option').map((o) => o.textContent);
+      expect(searchOptions[0]).toBe('Best match');
+      expect(searchOptions.filter((text) => text === 'Newest first')).toHaveLength(1);
+    });
+  });
+
   it('pages through the results with a page size', async () => {
     api.search.mockResolvedValue({ ...RESULT, total: 45, pages: 3 });
     renderPage();
