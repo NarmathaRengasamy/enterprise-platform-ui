@@ -8,6 +8,7 @@ export interface TeamMemberItem {
   role: UserRole;
   status: 'Active' | 'Pending' | 'Inactive';
   avatar?: string;
+  token?: string;
 }
 
 export interface TeamStats {

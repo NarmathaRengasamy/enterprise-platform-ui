@@ -201,6 +201,12 @@ export async function request<T = any>(
 
       if (response.status === 401) {
         clearToken();
+      } else if (response.status === 403) {
+        try {
+          window.dispatchEvent(new CustomEvent('auth:forbidden'));
+        } catch {
+          // ignore non-browser environments
+        }
       }
 
       const error: ApiError = new Error(errorMessage);
