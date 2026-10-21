@@ -21,7 +21,7 @@ vi.mock('../context/SiteSettingsContext', () => ({
   },
 }));
 
-const api = vi.hoisted(() => ({ search: vi.fn(), remove: vi.fn(), restore: vi.fn() }));
+const api = vi.hoisted(() => ({ search: vi.fn(), remove: vi.fn(), restore: vi.fn(), stats: vi.fn() }));
 vi.mock('../services/productV2.service', () => ({ productV2Service: api }));
 const cats = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock('../services/catalogCategory.service', () => ({ catalogCategoryService: cats }));
@@ -81,6 +81,12 @@ beforeEach(() => {
   role.current = 'Admin';
   Object.values(api).forEach((f) => f.mockReset());
   api.search.mockResolvedValue(RESULT);
+  api.stats.mockResolvedValue({
+    products: { total: 2, active: 1, draft: 1, archived: 0 },
+    variants: { total: 3, active: 3, packs: 0 },
+    stock: { tracked: 1, low: 0, out: 0 },
+    not_priced: 0,
+  });
   cats.list.mockResolvedValue({ mode: 'tree', categories: [{ id: 'c-cars', name: { en: 'Cars' }, children: [{ id: 'c-suv', name: { en: 'SUV' }, children: [] }] }] });
   types.get.mockResolvedValue(TYPE);
 });
@@ -163,6 +169,25 @@ describe('ProductsV2Page', () => {
       const searchOptions = within(sortSelect).getAllByRole('option').map((o) => o.textContent);
       expect(searchOptions[0]).toBe('Best match');
       expect(searchOptions.filter((text) => text === 'Newest first')).toHaveLength(1);
+    });
+  });
+
+  it('refreshes products, stats, and metadata when the refresh button is clicked', async () => {
+    renderPage();
+    await screen.findByTestId('product-creta');
+
+    const refreshBtn = screen.getByRole('button', { name: /Refresh/i });
+    expect(refreshBtn).toBeInTheDocument();
+
+    const initialSearchCalls = api.search.mock.calls.length;
+    const initialStatsCalls = api.stats.mock.calls.length;
+
+    await userEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(api.search.mock.calls.length).toBeGreaterThan(initialSearchCalls);
+      expect(api.stats.mock.calls.length).toBeGreaterThan(initialStatsCalls);
+      expect(screen.getByText(/All Products refreshed/i)).toBeInTheDocument();
     });
   });
 
