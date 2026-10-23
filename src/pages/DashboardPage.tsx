@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  INITIAL_CONVERSATIONS,
-  INITIAL_SCHEDULE_EVENTS,
-  INITIAL_TEAM
+  INITIAL_SCHEDULE_EVENTS
 } from '../data/mockData';
 import { Button, MetricsCard, Icon, StatusBadge } from '../components/common';
-import { productService, ProductStats } from '../services/product.service';
-import { categoryService, CategoryItem, CategoryStats } from '../services/category.service';
-import { Product } from '../types';
+import { productV2Service } from '../services/productV2.service';
+import { catalogCategoryService } from '../services/catalogCategory.service';
+import { conversationService } from '../services/conversation.service';
+import { teamService } from '../services/team.service';
+import type { ProductSummary, ProductStats } from '../types/productV2.types';
+import type { CategoryNode, CategoryStats } from '../types/catalogCategory.types';
+import type { ConversationItem } from '../types/conversation.types';
+import type { TeamStats } from '../types/team.types';
 import { useLabels } from '../context/SiteSettingsContext';
+import { formatMoney } from '../utils/money';
+import { resolveAssetUrl } from '../utils/assetUrl';
+import { CategoryIcon } from '../components/common/CategoryIcon';
 
 interface DashboardPageProps {
   setActiveModule?: (module: string) => void;
@@ -19,59 +26,114 @@ interface DashboardPageProps {
 
 export default function DashboardPage({
   setActiveModule,
-  setSelectedProduct,
   setSelectedScheduleEvent,
   setSelectedConversationId
 }: DashboardPageProps) {
+  const navigate = useNavigate();
   const label = useLabels();
-  const [recentProducts, setRecentProducts] = useState<Product[]>([]);
+
+  // V2 Products State
+  const [recentProducts, setRecentProducts] = useState<ProductSummary[]>([]);
   const [productStats, setProductStats] = useState<ProductStats | null>(null);
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
+
+  // V2 Categories State
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStats | null>(null);
+  const [categoryMap, setCategoryMap] = useState<Map<string, CategoryNode>>(new Map());
+
+  // Live Conversations State
+  const [recentConversations, setRecentConversations] = useState<ConversationItem[]>([]);
+  const [totalConversations, setTotalConversations] = useState<number>(0);
+
+  // Team State
+  const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
 
   useEffect(() => {
-    productService
-      .getProducts({ page: 1, limit: 4 })
-      .then((res) => {
-        if (res.data) setRecentProducts(res.data);
-      })
-      .catch((err) => console.warn('Could not load dashboard products:', err));
+    let cancelled = false;
 
-    productService
-      .getProductStats()
+    // 1. Fetch V2 Products & Stats
+    productV2Service
+      .search({ page: 1, limit: 4, sort: 'newest' })
+      .then((res) => {
+        if (!cancelled && res?.items) setRecentProducts(res.items);
+      })
+      .catch((err) => console.warn('Could not load dashboard products v2:', err));
+
+    productV2Service
+      .stats()
       .then((stats) => {
-        if (stats) setProductStats(stats);
+        if (!cancelled && stats) setProductStats(stats);
       })
       .catch((err) => console.warn('Could not load dashboard product stats:', err));
 
-    categoryService
-      .getCategories({ limit: 4 })
-      .then((data) => {
-        if (data) setCategories(data.slice(0, 4));
+    // 2. Fetch V2 Catalog Categories & Stats
+    catalogCategoryService
+      .list()
+      .then((res) => {
+        if (!cancelled && res?.categories) {
+          setCategories(res.categories.slice(0, 4));
+          const map = new Map<string, CategoryNode>();
+          const indexTree = (nodes: CategoryNode[]) => {
+            nodes.forEach((n) => {
+              map.set(n.id, n);
+              if (n.children?.length) indexTree(n.children);
+            });
+          };
+          indexTree(res.categories);
+          setCategoryMap(map);
+        }
       })
-      .catch((err) => console.warn('Could not load dashboard categories:', err));
+      .catch((err) => console.warn('Could not load dashboard categories v2:', err));
 
-    categoryService
-      .getCategoryStats()
+    catalogCategoryService
+      .stats()
       .then((stats) => {
-        if (stats) setCategoryStats(stats);
+        if (!cancelled && stats) setCategoryStats(stats);
       })
       .catch((err) => console.warn('Could not load dashboard category stats:', err));
+
+    // 3. Fetch Live Conversations
+    conversationService
+      .getConversations()
+      .then((res) => {
+        if (!cancelled && res?.conversations) {
+          setRecentConversations(res.conversations.slice(0, 3));
+          setTotalConversations(res.total ?? res.conversations.length);
+        }
+      })
+      .catch((err) => console.warn('Could not load dashboard conversations:', err));
+
+    // 4. Fetch Workspace Team Stats
+    teamService
+      .getTeamStats()
+      .then((stats) => {
+        if (!cancelled && stats) setTeamStats(stats);
+      })
+      .catch((err) => console.warn('Could not load dashboard team stats:', err));
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const recentAppointments = INITIAL_SCHEDULE_EVENTS.slice(0, 3);
-  const recentConversations = INITIAL_CONVERSATIONS.slice(0, 3);
-
-  const totalProducts = productStats?.total ?? recentProducts.length;
-  const inStockProducts = productStats?.inStock ?? recentProducts.filter((p) => p.stockStatus === 'In Stock').length;
-
-  const totalCategories = categoryStats?.totalCategories ?? categories.length;
-
   const totalAppointments = INITIAL_SCHEDULE_EVENTS.length;
   const confirmedAppointments = INITIAL_SCHEDULE_EVENTS.filter((e) => e.status === 'Confirmed').length;
 
-  const totalTeamMembers = INITIAL_TEAM.length;
-  const activeTeamMembers = INITIAL_TEAM.filter((m) => m.status === 'Active').length;
+  const totalProducts = productStats?.products?.total ?? recentProducts.length;
+  const activeProducts = productStats?.products?.active ?? totalProducts;
+  const totalVariants = productStats?.variants?.total ?? 0;
+
+  const totalCategories = categoryStats?.total_categories ?? categories.length;
+  const assignedSkus = categoryStats?.assigned_skus ?? 0;
+
+  const totalTeamMembers = teamStats?.seatsUsed ?? 3;
+  const activeTeamMembers = teamStats?.active ?? totalTeamMembers;
+
+  const handleNav = (module: string, path: string) => {
+    if (setActiveModule) setActiveModule(module);
+    navigate(path);
+  };
 
   return (
     <div className="flex flex-col gap-space-lg w-full pt-space-xs pb-10">
@@ -105,9 +167,7 @@ export default function DashboardPage({
             variant="primary"
             size="md"
             startIcon="add"
-            onClick={() => {
-              if (setActiveModule) setActiveModule('add-product');
-            }}
+            onClick={() => handleNav('products-v2', '/v2/products/add')}
           >
             Add {label.singular('allProducts')}
           </Button>
@@ -119,21 +179,21 @@ export default function DashboardPage({
         <MetricsCard
           title={`Total ${label.plural('allProducts')}`}
           value={totalProducts}
-          trend={`${inStockProducts} In Stock`}
+          trend={totalVariants > 0 ? `${totalVariants} Variants (${activeProducts} Active)` : `${activeProducts} Active`}
           trendType="positive"
           icon="inventory_2"
           variant="primary"
-          onClick={() => setActiveModule && setActiveModule('products')}
+          onClick={() => handleNav('products-v2', '/v2/products')}
         />
 
         <MetricsCard
           title={`Total ${label.plural('categories')}`}
           value={totalCategories}
-          trend={categoryStats?.assignedSkus !== undefined ? `${categoryStats.assignedSkus} SKUs Assigned` : 'All operational'}
+          trend={assignedSkus > 0 ? `${assignedSkus} SKUs Assigned` : 'All operational'}
           trendType="positive"
           icon="category"
           variant="secondary"
-          onClick={() => setActiveModule && setActiveModule('categories')}
+          onClick={() => handleNav('category-tree', '/category-tree')}
         />
 
         <MetricsCard
@@ -143,7 +203,7 @@ export default function DashboardPage({
           trendType="warning"
           icon="event"
           variant="tertiary"
-          onClick={() => setActiveModule && setActiveModule('schedule')}
+          onClick={() => handleNav('schedule', '/schedule')}
         />
 
         <MetricsCard
@@ -153,7 +213,7 @@ export default function DashboardPage({
           trendType="positive"
           icon="groups"
           variant="neutral"
-          onClick={() => setActiveModule && setActiveModule('teams')}
+          onClick={() => handleNav('teams', '/teams')}
         />
       </div>
 
@@ -174,7 +234,7 @@ export default function DashboardPage({
                 variant="ghost"
                 size="sm"
                 endIcon="arrow_forward"
-                onClick={() => setActiveModule && setActiveModule('products')}
+                onClick={() => handleNav('products-v2', '/v2/products')}
               >
                 View all {label.lower('allProducts')}
               </Button>
@@ -199,49 +259,61 @@ export default function DashboardPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm">
-                  {recentProducts.map((p) => (
-                    <tr
-                      key={p.id}
-                      onClick={() => {
-                        if (setSelectedProduct) setSelectedProduct(p);
-                        if (setActiveModule) setActiveModule('product-details');
-                      }}
-                      className="hover:bg-surface-container-low/60 transition-colors cursor-pointer group"
-                    >
-                      <td className="py-3 px-space-md">
-                        <div className="flex items-center gap-space-xs">
-                          <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0 overflow-hidden shadow-xs">
-                            <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          </div>
-                          <span
-                            title={p.name}
-                            className="font-title-sm text-title-sm text-on-surface group-hover:text-primary transition-colors truncate max-w-[180px]"
-                          >
-                            {p.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-space-md text-on-surface-variant">
-                        {p.category}
-                      </td>
-                      {/* `price` is optional on a product: an offering can
-                          exist before anyone has decided what it costs. An
-                          unguarded `p.price.toLocaleString()` throws on the
-                          first unpriced row and takes the whole dashboard down
-                          with it. Absent is rendered quietly — it is missing
-                          information, not an error, and not a price of 0. */}
-                      <td className="py-3 px-space-md font-title-sm text-title-sm font-semibold">
-                        {typeof p.price === 'number' ? (
-                          `₹${p.price.toLocaleString()}`
-                        ) : (
-                          <span className="text-on-surface-variant font-normal">Not priced</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-space-md text-right">
-                        <StatusBadge status={p.stockStatus} />
+                  {recentProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-on-surface-variant">
+                        No {label.lower('allProducts')} found.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    recentProducts.map((p) => {
+                      const image = resolveAssetUrl(p.media?.[0]?.url);
+                      const primaryCat = p.primary_category_id ? categoryMap.get(p.primary_category_id) : (p.category_ids?.length ? categoryMap.get(p.category_ids[0]) : undefined);
+                      const catName = primaryCat?.name?.en ?? '—';
+
+                      return (
+                        <tr
+                          key={p.id}
+                          onClick={() => handleNav('products-v2', `/v2/products/${p.id}`)}
+                          className="hover:bg-surface-container-low/60 transition-colors cursor-pointer group"
+                        >
+                          <td className="py-3 px-space-md">
+                            <div className="flex items-center gap-space-xs">
+                              <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0 overflow-hidden shadow-xs">
+                                {image ? (
+                                  <img src={image} alt={p.name.en} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                ) : (
+                                  <Icon name="inventory_2" size="sm" />
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span
+                                  title={p.name.en}
+                                  className="font-title-sm text-title-sm text-on-surface group-hover:text-primary transition-colors truncate max-w-[180px]"
+                                >
+                                  {p.name.en}
+                                </span>
+                                {p.slug && (
+                                  <span className="font-caption text-caption text-on-surface-variant truncate max-w-[180px]">
+                                    {p.slug}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-space-md text-on-surface-variant">
+                            {catName}
+                          </td>
+                          <td className="py-3 px-space-md font-title-sm text-title-sm font-semibold">
+                            {formatMoney(p.from_price?.amount_minor ?? null, p.from_price?.currency ?? p.currency)}
+                          </td>
+                          <td className="py-3 px-space-md text-right">
+                            <StatusBadge status={p.status} />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -255,12 +327,17 @@ export default function DashboardPage({
                 <h2 className="font-title-lg text-title-lg text-on-surface font-bold tracking-tight">
                   Categories &amp; Catalog
                 </h2>
+                {categoryStats?.assigned_skus !== undefined && (
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-surface-container-high text-on-surface-variant ml-2">
+                    {categoryStats.assigned_skus} SKUs in catalogue
+                  </span>
+                )}
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 endIcon="arrow_forward"
-                onClick={() => setActiveModule && setActiveModule('categories')}
+                onClick={() => handleNav('category-tree', '/category-tree')}
               >
                 Manage {label.lower('categories')}
               </Button>
@@ -278,36 +355,64 @@ export default function DashboardPage({
                     variant="soft"
                     size="sm"
                     startIcon="add"
-                    onClick={() => setActiveModule && setActiveModule('categories')}
+                    onClick={() => handleNav('category-tree', '/category-tree')}
                   >
                     Add {label.singular('categories')}
                   </Button>
                 </div>
               ) : (
-                categories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    onClick={() => setActiveModule && setActiveModule('categories')}
-                    className="p-3.5 rounded-xl border border-surface-container bg-surface-container-low/30 hover:bg-surface-container-low/80 transition-all cursor-pointer flex items-center justify-between group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-on-primary transition-colors shrink-0">
-                        <Icon name={cat.icon || 'category'} size="lg" />
+                <>
+                  {categories.map((cat) => (
+                    <div
+                      key={cat.id}
+                      onClick={() => handleNav('category-tree', '/category-tree')}
+                      className="p-3.5 rounded-xl border border-surface-container bg-surface-container-low/30 hover:bg-surface-container-low/80 hover:border-primary/30 transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs overflow-hidden transition-transform group-hover:scale-105"
+                          style={{
+                            backgroundColor: cat.color ? `${cat.color}18` : 'rgba(9, 65, 144, 0.1)',
+                            color: cat.color || '#094190',
+                          }}
+                        >
+                          <CategoryIcon value={cat.icon} size={20} />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-title-sm text-title-sm text-on-surface font-bold truncate group-hover:text-primary transition-colors">
+                            {cat.name.en}
+                          </span>
+                          <span className="font-caption text-caption text-on-surface-variant truncate" title={cat.description?.en}>
+                            {cat.description?.en || `${cat.code} category`}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-surface-container-lowest border border-surface-container text-primary shrink-0 ml-2 shadow-2xs">
+                        {cat.product_count ?? 0} {cat.product_count === 1 ? 'item' : 'items'}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Balanced quick-action card when only 1 category exists */}
+                  {categories.length === 1 && (
+                    <div
+                      onClick={() => handleNav('category-tree', '/category-tree')}
+                      className="p-3.5 rounded-xl border border-dashed border-surface-container hover:border-primary/50 bg-surface-container-low/20 hover:bg-surface-container-low/60 transition-all cursor-pointer flex items-center gap-3 group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
+                        <Icon name="add" size="md" />
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="font-title-sm text-title-sm text-on-surface font-bold truncate group-hover:text-primary transition-colors">
-                          {cat.name}
+                        <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary transition-colors">
+                          Add new category
                         </span>
                         <span className="font-caption text-caption text-on-surface-variant truncate">
-                          {cat.description || 'General category item'}
+                          Create subcategories or new lines
                         </span>
                       </div>
                     </div>
-                    <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-surface-container-lowest border border-surface-container text-primary shrink-0 ml-2">
-                      {cat.productsCount ?? 0} items
-                    </span>
-                  </div>
-                ))
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -328,40 +433,46 @@ export default function DashboardPage({
                 variant="ghost"
                 size="sm"
                 endIcon="arrow_forward"
-                onClick={() => setActiveModule && setActiveModule('schedule')}
+                onClick={() => handleNav('schedule', '/schedule')}
               >
                 View {label.lower('schedule')}
               </Button>
             </div>
 
             <div className="divide-y divide-surface-container-low">
-              {recentAppointments.map((app) => (
-                <div
-                  key={app.id}
-                  onClick={() => {
-                    if (setSelectedScheduleEvent) setSelectedScheduleEvent(app);
-                    if (setActiveModule) setActiveModule('schedule');
-                  }}
-                  className="p-space-md hover:bg-surface-container-low/60 transition-colors cursor-pointer flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-tertiary-fixed/30 flex items-center justify-center text-tertiary flex-shrink-0 group-hover:scale-105 transition-transform">
-                      <Icon name="calendar_month" size="lg" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-title-sm text-title-sm text-on-surface font-semibold truncate group-hover:text-primary transition-colors">
-                        {app.title}
-                      </span>
-                      <span className="font-caption text-caption text-outline truncate">
-                        {app.time} • {app.client}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-secondary-fixed/40 text-on-secondary-fixed-variant font-semibold shrink-0 ml-2">
-                    {app.status}
-                  </span>
+              {recentAppointments.length === 0 ? (
+                <div className="p-8 text-center text-on-surface-variant text-sm">
+                  No upcoming {label.lower('schedule')} events scheduled.
                 </div>
-              ))}
+              ) : (
+                recentAppointments.map((app) => (
+                  <div
+                    key={app.id}
+                    onClick={() => {
+                      if (setSelectedScheduleEvent) setSelectedScheduleEvent(app);
+                      handleNav('schedule', '/schedule');
+                    }}
+                    className="p-space-md hover:bg-surface-container-low/60 transition-colors cursor-pointer flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-tertiary-fixed/30 flex items-center justify-center text-tertiary flex-shrink-0 group-hover:scale-105 transition-transform">
+                        <Icon name="calendar_month" size="lg" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-title-sm text-title-sm text-on-surface font-semibold truncate group-hover:text-primary transition-colors">
+                          {app.title}
+                        </span>
+                        <span className="font-caption text-caption text-outline truncate">
+                          {app.time} • {app.client}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-secondary-fixed/40 text-on-secondary-fixed-variant font-semibold shrink-0 ml-2">
+                      {app.status}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -378,44 +489,50 @@ export default function DashboardPage({
                 variant="ghost"
                 size="sm"
                 endIcon="arrow_forward"
-                onClick={() => setActiveModule && setActiveModule('conversations')}
+                onClick={() => handleNav('conversations', '/conversations')}
               >
                 Open inbox
               </Button>
             </div>
 
             <div className="divide-y divide-surface-container-low">
-              {recentConversations.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => {
-                    if (setSelectedConversationId) setSelectedConversationId(c.id);
-                    if (setActiveModule) setActiveModule('conversations');
-                  }}
-                  className="p-space-md hover:bg-surface-container-low/60 transition-colors cursor-pointer flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    {c.avatar ? (
-                      <img src={c.avatar} alt={c.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0 group-hover:scale-105 transition-transform" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary font-bold text-xs flex items-center justify-center flex-shrink-0">
-                        {c.initials || 'DM'}
-                      </div>
-                    )}
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-title-sm text-title-sm text-on-surface font-semibold truncate group-hover:text-primary transition-colors">
-                        {c.name}
-                      </span>
-                      <span className="font-body-sm text-body-sm text-on-surface-variant truncate max-w-[240px]">
-                        {c.lastMessage}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full font-label-sm text-caption bg-surface-container-high text-primary font-semibold shrink-0 ml-2">
-                    {c.channelLabel}
-                  </span>
+              {recentConversations.length === 0 ? (
+                <div className="p-8 text-center text-on-surface-variant text-sm">
+                  No active conversations found.
                 </div>
-              ))}
+              ) : (
+                recentConversations.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      if (setSelectedConversationId) setSelectedConversationId(c.id);
+                      handleNav('conversations', `/conversations/${c.id}`);
+                    }}
+                    className="p-space-md hover:bg-surface-container-low/60 transition-colors cursor-pointer flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {c.avatar ? (
+                        <img src={c.avatar} alt={c.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0 group-hover:scale-105 transition-transform" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary font-bold text-xs flex items-center justify-center flex-shrink-0">
+                          {c.initials || 'DM'}
+                        </div>
+                      )}
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-title-sm text-title-sm text-on-surface font-semibold truncate group-hover:text-primary transition-colors">
+                          {c.name}
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant truncate max-w-[240px]">
+                          {c.lastMessage || c.summary || 'No recent messages'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full font-label-sm text-caption bg-surface-container-high text-primary font-semibold shrink-0 ml-2">
+                      {c.channelLabel || c.channel}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
