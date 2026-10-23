@@ -41,10 +41,11 @@ function AppRoutes(): JSX.Element {
         navigate('/conversations');
         break;
       case 'products':
-        navigate('/products');
+      case 'products-v2':
+        navigate('/v2/products');
         break;
       case 'add-product':
-        navigate('/products/add');
+        navigate('/v2/products/add');
         break;
       case 'edit-product':
         if (selectedProduct?.id) {
@@ -61,7 +62,8 @@ function AppRoutes(): JSX.Element {
         }
         break;
       case 'categories':
-        navigate('/categories');
+      case 'category-tree':
+        navigate('/category-tree');
         break;
       case 'schedule':
       case 'calendar':
